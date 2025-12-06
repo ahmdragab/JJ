@@ -78,7 +78,7 @@ export function DesignGenerator({
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
           </div>
         ) : (
           <>
@@ -89,7 +89,7 @@ export function DesignGenerator({
                   onClick={() => setSelectedTemplate(template.id)}
                   className={`bg-white rounded-xl p-6 border-2 transition-all text-left ${
                     selectedTemplate === template.id
-                      ? 'border-blue-600 shadow-lg'
+                      ? 'border-emerald-500 shadow-lg'
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >

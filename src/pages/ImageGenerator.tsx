@@ -79,7 +79,7 @@ export function ImageGenerator({
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-slate-50 to-emerald-50">
       {/* Header */}
       <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -91,7 +91,7 @@ export function ImageGenerator({
             Back to Brand Kit
           </button>
           <div className="flex items-center gap-2 text-slate-900 font-semibold">
-            <Wand2 className="w-5 h-5 text-purple-600" />
+            <Wand2 className="w-5 h-5 text-emerald-500" />
             AI Image Generator
           </div>
           <div className="w-32" /> {/* Spacer for centering */}
@@ -290,14 +290,14 @@ export function ImageGenerator({
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Describe the image you want to create..."
-                className="w-full h-40 px-4 py-3 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none shadow-sm"
+                className="w-full h-40 px-4 py-3 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none shadow-sm"
               />
             </div>
 
             <button
               onClick={handleGenerate}
               disabled={generating || !prompt.trim()}
-              className="w-full py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl"
             >
               {generating ? (
                 <>
@@ -320,7 +320,7 @@ export function ImageGenerator({
                   <button
                     key={i}
                     onClick={() => setPrompt(example)}
-                    className="px-3 py-1.5 text-xs bg-white hover:bg-purple-50 border border-slate-200 rounded-lg text-slate-700 hover:text-purple-700 transition-colors shadow-sm"
+                    className="px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 border border-slate-200 rounded-lg text-slate-700 hover:text-emerald-700 transition-colors shadow-sm"
                   >
                     {example.slice(0, 40)}...
                   </button>
@@ -334,7 +334,7 @@ export function ImageGenerator({
             <div className="aspect-square rounded-xl bg-slate-100 border border-slate-300 shadow-sm overflow-hidden flex items-center justify-center">
               {generating ? (
                 <div className="text-center">
-                  <Loader2 className="w-12 h-12 text-purple-600 animate-spin mx-auto mb-4" />
+                  <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
                   <p className="text-slate-800 font-medium">Creating your on-brand image...</p>
                   <p className="text-slate-600 text-sm mt-2">This may take a few seconds</p>
                 </div>

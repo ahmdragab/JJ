@@ -59,7 +59,7 @@ export function DesignEditor({
             </button>
             <button
               onClick={() => onExport('png')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
               PNG
@@ -96,7 +96,7 @@ export function DesignEditor({
                         </label>
                         <button
                           onClick={() => handleEditSlot(key)}
-                          className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                          className="text-sm text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
                         >
                           <Edit3 className="w-3 h-3" />
                           Edit
@@ -113,7 +113,7 @@ export function DesignEditor({
                           <div className="flex gap-2 mt-2">
                             <button
                               onClick={handleSaveSlot}
-                              className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+                              className="flex-1 px-3 py-1.5 bg-emerald-500 text-white text-sm rounded hover:bg-emerald-600"
                             >
                               Save
                             </button>
@@ -158,11 +158,11 @@ export function DesignEditor({
               </div>
             </div>
 
-            <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
-              <h3 className="font-semibold text-blue-900 mb-2">
+            <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-200">
+              <h3 className="font-semibold text-emerald-900 mb-2">
                 Template: {template.name}
               </h3>
-              <p className="text-sm text-blue-700">
+              <p className="text-sm text-emerald-700">
                 {template.category} • {template.aspect_ratio}
               </p>
             </div>

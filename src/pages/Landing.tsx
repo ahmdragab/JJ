@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, FolderOpen } from 'lucide-react';
+import { ArrowUp, FolderOpen, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import backgroundVideo from '../video.mp4';
 
@@ -68,7 +68,9 @@ export function Landing({
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
+      setIsSignUp(true);
       setShowAuth(true);
+      setError('');
       return;
     }
     if (url.trim()) {
@@ -151,8 +153,7 @@ export function Landing({
             />
             <button
               type="submit"
-              className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90"
-              style={{ backgroundColor: 'rgb(37, 99, 235)' }}
+              className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-emerald-500 hover:bg-emerald-600"
             >
               <ArrowUp className="w-4 h-4" />
             </button>
@@ -183,7 +184,11 @@ export function Landing({
           </>
         ) : (
           <button
-            onClick={() => setShowAuth(true)}
+            onClick={() => {
+              setIsSignUp(false);
+              setShowAuth(true);
+              setError('');
+            }}
             className="text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg"
           >
             Sign In
@@ -193,13 +198,38 @@ export function Landing({
 
       {/* Auth Modal */}
       {showAuth && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h2 className="text-2xl font-bold text-slate-900 mb-6">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowAuth(false);
+            setError('');
+          }}
+        >
+          {/* Backdrop with blur */}
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          
+          {/* Modal */}
+          <div 
+            className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl max-w-md w-full p-8 border border-slate-200/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setShowAuth(false);
+                setError('');
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Title */}
+            <h2 className="text-2xl font-bold text-slate-900 mb-6 pr-8">
               {isSignUp ? 'Create Account' : 'Sign In'}
             </h2>
 
-            <form onSubmit={handleAuth} className="space-y-4">
+            <form onSubmit={handleAuth} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Email
@@ -208,7 +238,7 @@ export function Landing({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white"
                   required
                 />
               </div>
@@ -221,13 +251,13 @@ export function Landing({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white"
                   required
                 />
               </div>
 
               {error && (
-                <div className="text-sm text-red-600 bg-red-50 px-4 py-2 rounded-lg">
+                <div className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-lg border border-red-200">
                   {error}
                 </div>
               )}
@@ -235,7 +265,7 @@ export function Landing({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-all"
+                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
               >
                 {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
               </button>
@@ -247,21 +277,14 @@ export function Landing({
                   setIsSignUp(!isSignUp);
                   setError('');
                 }}
-                className="text-sm text-slate-600 hover:text-slate-900"
+                className="text-sm text-slate-600 hover:text-emerald-600 transition-colors"
               >
-                {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                <span className="font-medium text-emerald-600 hover:text-emerald-700">
+                  {isSignUp ? 'Sign in' : 'Sign up'}
+                </span>
               </button>
             </div>
-
-            <button
-              onClick={() => {
-                setShowAuth(false);
-                setError('');
-              }}
-              className="mt-4 w-full py-2 text-slate-600 hover:text-slate-900"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
