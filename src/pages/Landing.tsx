@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, FolderOpen, X } from 'lucide-react';
+import { ArrowUp, FolderOpen, X, Mail, CheckCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import backgroundVideo from '../video.mp4';
 
@@ -18,6 +18,7 @@ export function Landing({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
 
   // Word slider for "designs"
   const words = ['designs', 'assets', 'ads', 'creatives', 'infographics', 'illustrations', 'posters'];
@@ -50,14 +51,17 @@ export function Landing({
     e.preventDefault();
     setError('');
     setLoading(true);
+    setShowEmailConfirmation(false);
 
     try {
       if (isSignUp) {
         await signUp(email, password);
+        // Show email confirmation message instead of closing modal
+        setShowEmailConfirmation(true);
       } else {
         await signIn(email, password);
+        setShowAuth(false);
       }
-      setShowAuth(false);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
@@ -218,18 +222,63 @@ export function Landing({
               onClick={() => {
                 setShowAuth(false);
                 setError('');
+                setShowEmailConfirmation(false);
+                setEmail('');
+                setPassword('');
               }}
               className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* Title */}
-            <h2 className="text-2xl font-bold text-slate-900 mb-6 pr-8">
-              {isSignUp ? 'Create Account' : 'Sign In'}
-            </h2>
+            {/* Email Confirmation Message */}
+            {showEmailConfirmation ? (
+              <div className="text-center py-4">
+                <div className="flex justify-center mb-4">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <Mail className="w-8 h-8 text-emerald-600" />
+                  </div>
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-3">
+                  Check your email
+                </h2>
+                <p className="text-slate-600 mb-2">
+                  We've sent a confirmation link to
+                </p>
+                <p className="text-slate-900 font-medium mb-6">{email}</p>
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+                    <div className="text-left">
+                      <p className="text-sm text-emerald-900 font-medium mb-1">
+                        Next steps
+                      </p>
+                      <p className="text-sm text-emerald-700">
+                        Click the confirmation link in the email to verify your account and start creating.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAuth(false);
+                    setShowEmailConfirmation(false);
+                    setEmail('');
+                    setPassword('');
+                  }}
+                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
+                >
+                  Got it
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Title */}
+                <h2 className="text-2xl font-bold text-slate-900 mb-6 pr-8">
+                  {isSignUp ? 'Create Account' : 'Sign In'}
+                </h2>
 
-            <form onSubmit={handleAuth} className="space-y-5">
+                <form onSubmit={handleAuth} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Email
@@ -271,20 +320,22 @@ export function Landing({
               </button>
             </form>
 
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setError('');
-                }}
-                className="text-sm text-slate-600 hover:text-emerald-600 transition-colors"
-              >
-                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-                <span className="font-medium text-emerald-600 hover:text-emerald-700">
-                  {isSignUp ? 'Sign in' : 'Sign up'}
-                </span>
-              </button>
-            </div>
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => {
+                      setIsSignUp(!isSignUp);
+                      setError('');
+                    }}
+                    className="text-sm text-slate-600 hover:text-emerald-600 transition-colors"
+                  >
+                    {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                    <span className="font-medium text-emerald-600 hover:text-emerald-700">
+                      {isSignUp ? 'Sign in' : 'Sign up'}
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
