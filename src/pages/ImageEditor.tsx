@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Send, Loader2, Download, RefreshCw, Sparkles, MessageCircle, X } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Download, RefreshCw, Sparkles, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage } from '../lib/supabase';
 
 export function ImageEditor({ brand }: { brand: Brand }) {
@@ -11,9 +11,39 @@ export function ImageEditor({ brand }: { brand: Brand }) {
   const [editPrompt, setEditPrompt] = useState('');
   const [editing, setEditing] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const primaryColor = brand.colors?.primary || '#1a1a1a';
+
+  // Get all versions (history + current)
+  const getAllVersions = (img: GeneratedImage | null): Array<{ image_url: string; edit_prompt?: string; timestamp: string }> => {
+    if (!img) return [];
+    
+    const versions: Array<{ image_url: string; edit_prompt?: string; timestamp: string }> = [];
+    
+    // Add version history (oldest first)
+    if (img.version_history && Array.isArray(img.version_history)) {
+      versions.push(...img.version_history);
+    }
+    
+    // Add current version (newest)
+    if (img.image_url) {
+      versions.push({
+        image_url: img.image_url,
+        timestamp: img.updated_at,
+      });
+    }
+    
+    return versions;
+  };
+
+  const navigateVersion = (direction: number, totalVersions: number) => {
+    setCurrentVersionIndex((prev) => {
+      const newIndex = prev + direction;
+      return Math.max(0, Math.min(totalVersions - 1, newIndex));
+    });
+  };
 
   useEffect(() => {
     if (imageId) {
@@ -34,6 +64,38 @@ export function ImageEditor({ brand }: { brand: Brand }) {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [image?.conversation]);
 
+  useEffect(() => {
+    // Reset to latest version when image loads or updates
+    if (image) {
+      const totalVersions = (image.version_history?.length || 0) + (image.image_url ? 1 : 0);
+      setCurrentVersionIndex(totalVersions - 1);
+    }
+  }, [image?.id, image?.image_url, image?.version_history]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return; // Don't navigate when typing in inputs
+      }
+
+      const versions = getAllVersions(image);
+      if (versions.length <= 1) return;
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateVersion(-1, versions.length);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateVersion(1, versions.length);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [image, currentVersionIndex]);
+
   const loadImage = async (id: string) => {
     const { data, error } = await supabase
       .from('images')
@@ -45,7 +107,12 @@ export function ImageEditor({ brand }: { brand: Brand }) {
       navigate(`/brands/${brand.slug}/gallery`);
       return;
     }
-    setImage(data);
+    // Ensure version_history is always an array
+    const imageData = {
+      ...data,
+      version_history: Array.isArray(data.version_history) ? data.version_history : [],
+    };
+    setImage(imageData);
     setLoading(false);
   };
 
@@ -127,6 +194,11 @@ export function ImageEditor({ brand }: { brand: Brand }) {
     navigate(`/brands/${brand.slug}/create`);
   };
 
+  const versions = getAllVersions(image);
+  const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
+  const canNavigateLeft = currentVersionIndex > 0;
+  const canNavigateRight = currentVersionIndex < versions.length - 1;
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
@@ -193,12 +265,56 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                   <p className="text-sm text-slate-500">This may take a few moments</p>
                 </div>
               </div>
-            ) : image.image_url ? (
-              <div className="relative group">
+            ) : currentVersion?.image_url ? (
+                <div className="relative group">
+                  {/* Navigation Arrows */}
+                  {versions.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => navigateVersion(-1, versions.length)}
+                        disabled={!canNavigateLeft}
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-slate-200 transition-all ${
+                          canNavigateLeft
+                            ? 'hover:bg-slate-50 hover:scale-110 cursor-pointer opacity-100'
+                            : 'opacity-30 cursor-not-allowed'
+                        }`}
+                        aria-label="Previous version"
+                      >
+                        <ChevronLeft className="w-7 h-7 text-slate-700" />
+                      </button>
+                      <button
+                        onClick={() => navigateVersion(1, versions.length)}
+                        disabled={!canNavigateRight}
+                        className={`absolute right-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-slate-200 transition-all ${
+                          canNavigateRight
+                            ? 'hover:bg-slate-50 hover:scale-110 cursor-pointer opacity-100'
+                            : 'opacity-30 cursor-not-allowed'
+                        }`}
+                        aria-label="Next version"
+                      >
+                        <ChevronRight className="w-7 h-7 text-slate-700" />
+                      </button>
+                    </>
+                  )}
+
+                {/* Version Indicator */}
+                {versions.length > 1 && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg">
+                    <span className="text-sm font-medium text-slate-700">
+                      Version {currentVersionIndex + 1} of {versions.length}
+                    </span>
+                    {currentVersion.edit_prompt && (
+                      <span className="text-xs text-slate-500 block mt-1 text-center">
+                        {currentVersion.edit_prompt}
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 <img
-                  src={image.image_url}
-                  alt="Generated"
-                  className="w-full rounded-3xl shadow-2xl"
+                  src={currentVersion.image_url}
+                  alt={`Generated version ${currentVersionIndex + 1}`}
+                  className="w-full rounded-3xl shadow-2xl transition-opacity duration-300"
                 />
                 {editing && (
                   <div className="absolute inset-0 bg-black/30 rounded-3xl flex items-center justify-center">
@@ -236,6 +352,49 @@ export function ImageEditor({ brand }: { brand: Brand }) {
 
           {/* Chat Content */}
           <div className={`flex-1 flex flex-col ${showChat ? 'block' : 'hidden lg:flex'}`}>
+            {/* Version Navigation */}
+            {versions.length > 1 && (
+              <div className="p-4 border-b border-slate-200/50 bg-slate-50/50">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-medium text-slate-600 uppercase tracking-wider">Version History</span>
+                  <span className="text-sm font-medium text-slate-700">
+                    {currentVersionIndex + 1} / {versions.length}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => navigateVersion(-1, versions.length)}
+                    disabled={!canNavigateLeft}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                      canNavigateLeft
+                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
+                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="text-sm font-medium">Previous</span>
+                  </button>
+                  <button
+                    onClick={() => navigateVersion(1, versions.length)}
+                    disabled={!canNavigateRight}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                      canNavigateRight
+                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
+                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <span className="text-sm font-medium">Next</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+                {currentVersion.edit_prompt && (
+                  <p className="mt-2 text-xs text-slate-500 italic">
+                    "{currentVersion.edit_prompt}"
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Edit Limit Banner */}
             <div className="p-4 border-b border-slate-200/50">
               <div className="flex items-center justify-between text-sm">

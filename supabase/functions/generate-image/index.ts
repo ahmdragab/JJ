@@ -451,24 +451,63 @@ Deno.serve(async (req: Request) => {
 
     const geminiData = await geminiResponse.json();
     console.log("Gemini response received");
+    console.log("Gemini response structure:", JSON.stringify(geminiData, null, 2));
+
+    // Check for errors or blocked content
+    if (geminiData.candidates?.[0]?.finishReason) {
+      const finishReason = geminiData.candidates[0].finishReason;
+      if (finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
+        console.error("Gemini finish reason:", finishReason);
+        throw new Error(`Gemini API finished with reason: ${finishReason}`);
+      }
+    }
+
+    // Check for safety ratings
+    if (geminiData.candidates?.[0]?.safetyRatings) {
+      const blocked = geminiData.candidates[0].safetyRatings.some(
+        (rating: { blocked: boolean }) => rating.blocked
+      );
+      if (blocked) {
+        console.error("Content blocked by safety filters");
+        throw new Error("Content was blocked by safety filters");
+      }
+    }
 
     // Extract image data
     let imageBase64: string | null = null;
     let textResponse: string | null = null;
 
     if (geminiData.candidates?.[0]?.content?.parts) {
+      console.log("Number of parts:", geminiData.candidates[0].content.parts.length);
       for (const part of geminiData.candidates[0].content.parts) {
+        console.log("Part type:", part.text ? 'text' : part.inlineData ? 'inlineData' : 'unknown');
         if (part.text) {
           textResponse = part.text;
+          console.log("Text response:", textResponse.substring(0, 100));
         } else if (part.inlineData?.data) {
           imageBase64 = part.inlineData.data;
+          console.log("Image data found, length:", part.inlineData.data.length);
+        } else if (part.inline_data?.data) {
+          // Alternative property name
+          imageBase64 = part.inline_data.data;
+          console.log("Image data found (alt), length:", part.inline_data.data.length);
         }
       }
+    } else {
+      console.error("No candidates or parts in response");
+      console.error("Full response:", JSON.stringify(geminiData, null, 2));
     }
 
     if (!imageBase64) {
-      throw new Error("No image generated from Gemini API");
+      const errorMsg = textResponse 
+        ? `No image generated from Gemini API. Text response: ${textResponse.substring(0, 200)}`
+        : "No image generated from Gemini API. No text response either.";
+      console.error(errorMsg);
+      console.error("Full Gemini response:", JSON.stringify(geminiData, null, 2));
+      throw new Error(errorMsg);
     }
+
+    console.log("Successfully extracted image data, length:", imageBase64.length);
 
     // Upload to storage
     let imageUrl: string | null = null;
@@ -491,20 +530,35 @@ Deno.serve(async (req: Request) => {
         // Add to conversation and increment edit count
         const assistantMessage: ConversationMessage = {
           role: 'assistant',
-          content: textResponse || 'Image updated',
+          content: textResponse ?? 'Image updated',
           image_url: imageUrl || undefined,
           timestamp: new Date().toISOString(),
         };
 
         const { data: currentImage } = await supabase
           .from('images')
-          .select('conversation, edit_count')
+          .select('conversation, edit_count, image_url, version_history')
           .eq('id', imageId)
           .single();
 
         if (currentImage) {
           updateData.conversation = [...(currentImage.conversation || []), assistantMessage];
           updateData.edit_count = (currentImage.edit_count || 0) + 1;
+          
+          // Save previous version to history before updating
+          if (currentImage.image_url) {
+            const versionHistory = Array.isArray(currentImage.version_history) 
+              ? currentImage.version_history 
+              : [];
+            
+            const versionEntry = {
+              image_url: currentImage.image_url,
+              timestamp: new Date().toISOString(),
+              edit_prompt: prompt,
+            };
+            
+            updateData.version_history = [...versionHistory, versionEntry];
+          }
         }
       }
 

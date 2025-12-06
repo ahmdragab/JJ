@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload } from 'lucide-react';
+import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X } from 'lucide-react';
 import { Brand, supabase } from '../lib/supabase';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
@@ -581,11 +581,40 @@ export function BrandKitEditor({
                 {localBrand.name}
               </h1>
               <p className="text-slate-400 text-lg mb-4">{localBrand.domain}</p>
-              {localBrand.slogan && (
-                <p className="text-xl text-slate-600 font-light italic max-w-xl mb-4">
-                  "{localBrand.slogan}"
-                </p>
-              )}
+              <div className="flex items-start gap-3 mb-4">
+                {localBrand.slogan ? (
+                  <>
+                    <p className="text-xl text-slate-600 font-light italic max-w-xl">
+                      "{localBrand.slogan}"
+                    </p>
+                    <button
+                      onClick={() => {
+                        const updated = { ...localBrand, slogan: null };
+                        setLocalBrand(updated);
+                        handleSave(updated);
+                      }}
+                      className="text-slate-400 hover:text-red-500 transition-colors p-1"
+                      title="Delete tagline"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add a tagline..."
+                      value={localBrand.slogan || ''}
+                      onChange={(e) => {
+                        const updated = { ...localBrand, slogan: e.target.value || null };
+                        setLocalBrand(updated);
+                      }}
+                      onBlur={() => handleSave(localBrand)}
+                      className="text-xl text-slate-600 font-light italic max-w-xl bg-transparent border-b border-slate-300 focus:outline-none focus:border-slate-500 placeholder:text-slate-400"
+                    />
+                  </div>
+                )}
+              </div>
               {/* Summary/Description */}
               {(localBrand.styleguide?.summary || localBrand.extraction_data?.summary) && (
                 <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">

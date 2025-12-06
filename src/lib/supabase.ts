@@ -149,6 +149,12 @@ export type ConversationMessage = {
   timestamp: string;
 };
 
+export type ImageVersion = {
+  image_url: string;
+  timestamp: string;
+  edit_prompt: string;
+};
+
 export type GeneratedImage = {
   id: string;
   user_id: string;
@@ -159,6 +165,7 @@ export type GeneratedImage = {
   conversation: ConversationMessage[];
   edit_count: number;
   max_edits: number;
+  version_history: ImageVersion[];
   metadata: {
     aspect_ratio?: string;
     template_fields?: Record<string, string>;

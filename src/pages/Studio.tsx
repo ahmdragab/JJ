@@ -16,7 +16,9 @@ import {
   Clock,
   Edit3,
   LayoutTemplate,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, Template, ConversationMessage } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -47,6 +49,10 @@ export function Studio({ brand }: { brand: Brand }) {
   // Modal state
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
   const [editing, setEditing] = useState(false);
+  const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
+  const [modalEditPrompt, setModalEditPrompt] = useState('');
+  const [modalEditing, setModalEditing] = useState(false);
+  const [showModalEditPrompt, setShowModalEditPrompt] = useState(false);
   
   // Confirmation dialog state
   const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; imageId: string | null }>({
@@ -293,6 +299,113 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
+  const handleModalEdit = async () => {
+    console.log('handleModalEdit called', { 
+      hasPrompt: !!modalEditPrompt.trim(), 
+      hasImage: !!selectedImage, 
+      isEditing: modalEditing 
+    });
+    
+    if (!modalEditPrompt.trim() || !selectedImage || modalEditing) {
+      console.log('Early return from handleModalEdit');
+      return;
+    }
+
+    if (selectedImage.edit_count >= selectedImage.max_edits) {
+      alert(`You've reached the maximum of ${selectedImage.max_edits} edits for this image.`);
+      return;
+    }
+
+    const userMessage: ConversationMessage = {
+      role: 'user',
+      content: modalEditPrompt,
+      timestamp: new Date().toISOString(),
+    };
+
+    const editPromptText = modalEditPrompt;
+    const imageId = selectedImage.id;
+    const originalImage = selectedImage;
+    
+    // Set editing state and clear input immediately
+    setModalEditing(true);
+    setModalEditPrompt('');
+    
+    // Optimistically update the UI to show loading
+    const updatedConversation = [...(selectedImage.conversation || []), userMessage];
+    setSelectedImage({
+      ...selectedImage,
+      status: 'generating',
+      conversation: updatedConversation,
+      edit_count: selectedImage.edit_count + 1,
+    });
+
+    try {
+      console.log('Making API call...');
+      
+      // Make the API call - this blocks until the image is generated
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            prompt: editPromptText,
+            brandId: brand.id,
+            imageId: imageId,
+            editMode: true,
+            previousImageUrl: selectedImage.image_url,
+            conversation: updatedConversation.slice(-5),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Edit failed');
+      }
+
+      console.log('API call complete, fetching updated image...');
+
+      // Fetch the updated image from the database
+      const { data: updatedImage, error: fetchError } = await supabase
+        .from('images')
+        .select('*')
+        .eq('id', imageId)
+        .single();
+
+      if (fetchError) {
+        console.error('Failed to fetch updated image:', fetchError);
+        throw fetchError;
+      }
+
+      console.log('Updated image fetched:', {
+        status: updatedImage.status,
+        hasImageUrl: !!updatedImage.image_url,
+        editCount: updatedImage.edit_count
+      });
+
+      // Update the modal with the new image
+      setSelectedImage(updatedImage);
+      
+      // Show the latest version
+      const versions = getAllVersions(updatedImage);
+      setCurrentVersionIndex(Math.max(0, versions.length - 1));
+      
+      // Update the gallery in the background
+      loadImages().catch(console.error);
+      
+    } catch (error) {
+      console.error('Failed to edit:', error);
+      // Revert to original image on error
+      setSelectedImage(originalImage);
+      setModalEditPrompt(editPromptText);
+    } finally {
+      setModalEditing(false);
+    }
+  };
+
   const handleDownload = async (image: GeneratedImage, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!image.image_url) return;
@@ -369,6 +482,56 @@ export function Studio({ brand }: { brand: Brand }) {
       minute: '2-digit',
     });
   };
+
+  // Get all versions (history + current)
+  const getAllVersions = (img: GeneratedImage | null): Array<{ image_url: string; edit_prompt?: string; timestamp: string }> => {
+    if (!img) return [];
+    
+    const versions: Array<{ image_url: string; edit_prompt?: string; timestamp: string }> = [];
+    
+    // Add version history (oldest first)
+    if (img.version_history && Array.isArray(img.version_history)) {
+      versions.push(...img.version_history);
+    }
+    
+    // Add current version (newest)
+    if (img.image_url) {
+      versions.push({
+        image_url: img.image_url,
+        timestamp: img.updated_at,
+      });
+    }
+    
+    return versions;
+  };
+
+  const navigateVersion = (direction: number, totalVersions: number) => {
+    setCurrentVersionIndex((prev) => {
+      const newIndex = prev + direction;
+      return Math.max(0, Math.min(totalVersions - 1, newIndex));
+    });
+  };
+
+  // Reset version index when selected image changes
+  useEffect(() => {
+    if (selectedImage) {
+      const versions = getAllVersions(selectedImage);
+      setCurrentVersionIndex(Math.max(0, versions.length - 1)); // Start at latest version
+      setShowModalEditPrompt(false);
+      setModalEditPrompt('');
+    } else {
+      setCurrentVersionIndex(0);
+      setShowModalEditPrompt(false);
+      setModalEditPrompt('');
+    }
+  }, [selectedImage?.id]);
+
+  // Focus modal edit input when prompt box appears
+  useEffect(() => {
+    if (showModalEditPrompt && modalEditInputRef.current) {
+      setTimeout(() => modalEditInputRef.current?.focus(), 100);
+    }
+  }, [showModalEditPrompt]);
 
   const aspectRatios: { value: AspectRatio; label: string }[] = [
     { value: 'auto', label: 'Auto' },
@@ -763,8 +926,13 @@ export function Studio({ brand }: { brand: Brand }) {
       {/* Image Modal */}
       {selectedImage && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8"
-          onClick={() => setSelectedImage(null)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 md:p-8"
+          onClick={(e) => {
+            // Don't close if clicking on the modal, edit prompt, or while editing
+            if (e.target === e.currentTarget && !showModalEditPrompt && !modalEditing) {
+              setSelectedImage(null);
+            }
+          }}
         >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -776,31 +944,59 @@ export function Studio({ brand }: { brand: Brand }) {
           >
             {/* Close Button */}
             <button
-              onClick={() => setSelectedImage(null)}
-              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-white transition-colors shadow-lg"
+              onClick={() => {
+                if (!modalEditing) {
+                  setSelectedImage(null);
+                  setShowModalEditPrompt(false);
+                  setModalEditPrompt('');
+                }
+              }}
+              disabled={modalEditing}
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-white transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Image Panel */}
-            <div className="flex-1 bg-slate-100 flex items-center justify-center p-6 md:p-8">
-              {selectedImage.image_url ? (
-                <img
-                  src={selectedImage.image_url}
-                  alt="Generated"
-                  className="max-w-full max-h-[60vh] md:max-h-[70vh] rounded-2xl shadow-lg object-contain"
-                />
-              ) : selectedImage.status === 'generating' ? (
-                <div className="text-center">
-                  <Loader2 className="w-12 h-12 animate-spin text-slate-400 mx-auto mb-4" />
-                  <p className="text-slate-600">Creating your image...</p>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">Image not available</p>
-                </div>
-              )}
+            <div className="flex-1 bg-slate-100 flex items-center justify-center p-6 md:p-8 relative">
+              {(() => {
+                const versions = getAllVersions(selectedImage);
+                const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
+
+                return (
+                  <>
+                    {currentVersion?.image_url ? (
+                      <div className="relative">
+                        <img
+                          src={currentVersion.image_url}
+                          alt={`Generated version ${currentVersionIndex + 1}`}
+                          className="max-w-full max-h-[60vh] md:max-h-[70vh] rounded-2xl shadow-lg object-contain"
+                        />
+                        {(modalEditing || selectedImage.status === 'generating') && (
+                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
+                            <div className="text-center text-white">
+                              <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
+                              <p className="font-medium">
+                                {selectedImage.status === 'generating' ? 'Creating your image...' : 'Applying your edits...'}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : selectedImage.status === 'generating' ? (
+                      <div className="text-center">
+                        <Loader2 className="w-12 h-12 animate-spin text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-600">Creating your image...</p>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <p className="text-slate-500">Image not available</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Info Panel */}
@@ -821,33 +1017,64 @@ export function Studio({ brand }: { brand: Brand }) {
                 </p>
               </div>
 
-              {/* Edit History */}
-              {selectedImage.conversation && selectedImage.conversation.length > 0 && (
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Edit History</p>
-                  {selectedImage.conversation.map((msg, index) => (
-                    <div
-                      key={index}
-                      className={`rounded-xl p-3 text-sm ${
-                        msg.role === 'user'
-                          ? 'bg-slate-900 text-white ml-4'
-                          : 'bg-slate-100 text-slate-700 mr-4'
-                      }`}
-                    >
-                      {msg.content}
+              {/* Version Navigation */}
+              {(() => {
+                const versions = getAllVersions(selectedImage);
+                const canNavigateLeft = currentVersionIndex > 0;
+                const canNavigateRight = currentVersionIndex < versions.length - 1;
+                const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
+
+                return versions.length > 1 ? (
+                  <div className="p-4 border-b border-slate-200 bg-slate-50/50">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-medium text-slate-600 uppercase tracking-wider">Version History</span>
+                      <span className="text-sm font-medium text-slate-700">
+                        {currentVersionIndex + 1} / {versions.length}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => navigateVersion(-1, versions.length)}
+                        disabled={!canNavigateLeft}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                          canNavigateLeft
+                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
+                            : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                        <span className="text-sm font-medium">Previous</span>
+                      </button>
+                      <button
+                        onClick={() => navigateVersion(1, versions.length)}
+                        disabled={!canNavigateRight}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                          canNavigateRight
+                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
+                            : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <span className="text-sm font-medium">Next</span>
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {currentVersion?.edit_prompt && (
+                      <p className="mt-2 text-xs text-slate-500 italic">
+                        "{currentVersion.edit_prompt}"
+                      </p>
+                    )}
+                  </div>
+                ) : null;
+              })()}
 
               {/* Actions */}
               <div className="p-4 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={() => {
-                    startEditing(selectedImage);
-                    setSelectedImage(null);
+                    setShowModalEditPrompt(true);
                   }}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-medium transition-all hover:shadow-lg"
+                  disabled={modalEditing || selectedImage.edit_count >= selectedImage.max_edits}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: primaryColor }}
                 >
                   <Edit3 className="w-4 h-4" />
@@ -862,6 +1089,89 @@ export function Studio({ brand }: { brand: Brand }) {
               </div>
             </div>
           </div>
+
+          {/* Floating Edit Prompt Box */}
+          {showModalEditPrompt && (
+            <div 
+              className="relative w-full max-w-2xl mt-4 z-[60]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-2xl p-4">
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${primaryColor}15` }}
+                  >
+                    <Edit3 className="w-5 h-5" style={{ color: primaryColor }} />
+                  </div>
+                  
+                  <input
+                    ref={modalEditInputRef}
+                    type="text"
+                    value={modalEditPrompt}
+                    onChange={(e) => setModalEditPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation(); // Prevent event bubbling
+                        console.log('Enter pressed in modal edit input');
+                        if (modalEditPrompt.trim() && !modalEditing) {
+                          handleModalEdit();
+                        }
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowModalEditPrompt(false);
+                        setModalEditPrompt('');
+                      }
+                    }}
+                    onKeyPress={(e) => {
+                      // Additional prevention
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                    placeholder="What would you like to change?"
+                    className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-sm text-base py-2"
+                    disabled={modalEditing}
+                  />
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        setShowModalEditPrompt(false);
+                        setModalEditPrompt('');
+                      }}
+                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors"
+                      disabled={modalEditing}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={handleModalEdit}
+                      disabled={modalEditing || !modalEditPrompt.trim() || selectedImage.edit_count >= selectedImage.max_edits}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: primaryColor }}
+                    >
+                      {modalEditing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                      <span className="hidden sm:inline">Apply</span>
+                    </button>
+                  </div>
+                </div>
+                {selectedImage.edit_count >= selectedImage.max_edits && (
+                  <p className="mt-2 text-xs text-amber-600 text-center">
+                    You've reached the maximum of {selectedImage.max_edits} edits for this image.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
