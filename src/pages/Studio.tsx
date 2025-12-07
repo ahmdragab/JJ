@@ -279,6 +279,7 @@ export function Studio({ brand }: { brand: Brand }) {
             prompt,
             brandId: brand.id,
             imageId: imageRecord.id,
+            aspectRatio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -630,12 +631,17 @@ export function Studio({ brand }: { brand: Brand }) {
   }, [showModalEditPrompt]);
 
   const aspectRatios: { value: AspectRatio; label: string }[] = [
-    { value: 'auto', label: 'Auto' },
+    { value: 'auto', label: 'Auto (AI decides)' },
     { value: '1:1', label: 'Square (1:1)' },
-    { value: '16:9', label: 'Landscape (16:9)' },
-    { value: '9:16', label: 'Portrait (9:16)' },
-    { value: '4:5', label: 'Portrait (4:5)' },
+    { value: '2:3', label: 'Portrait (2:3)' },
+    { value: '3:4', label: 'Portrait (3:4)' },
+    { value: '4:5', label: 'Social (4:5)' },
+    { value: '9:16', label: 'Mobile (9:16)' },
     { value: '3:2', label: 'Landscape (3:2)' },
+    { value: '4:3', label: 'Landscape (4:3)' },
+    { value: '5:4', label: 'Classic (5:4)' },
+    { value: '16:9', label: 'Widescreen (16:9)' },
+    { value: '21:9', label: 'Cinematic (21:9)' },
   ];
 
   if (loading) {
@@ -927,15 +933,6 @@ export function Studio({ brand }: { brand: Brand }) {
           >
             <div className={`flex gap-3 p-3 ${prompt.trim() ? 'flex-col' : 'items-center'}`}>
               <div className="flex items-start gap-3 flex-1">
-                {!editingImage && (
-                  <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${primaryColor}15` }}
-                  >
-                    <Sparkles className="w-5 h-5" style={{ color: primaryColor }} />
-                  </div>
-                )}
-                
                 <textarea
                   ref={inputRef}
                   value={prompt}
@@ -964,10 +961,8 @@ export function Studio({ brand }: { brand: Brand }) {
                     className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     style={{ backgroundColor: primaryColor }}
                   >
-                    {(generating || editing) ? (
+                    {(generating || editing) && (
                       <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
                     )}
                     <span className="hidden sm:inline">
                       {editingImage ? 'Apply' : 'Create'}
@@ -992,22 +987,78 @@ export function Studio({ brand }: { brand: Brand }) {
                       </button>
 
                       {showRatioDropdown && (
-                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
-                          {aspectRatios.map((ratio) => (
+                        <div className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-96 overflow-y-auto">
+                          {/* Auto Option */}
+                          <div className="px-3 py-2">
                             <button
-                              key={ratio.value}
                               onClick={() => {
-                                setSelectedAspectRatio(ratio.value);
+                                setSelectedAspectRatio('auto');
                                 setShowRatioDropdown(false);
                               }}
-                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"
+                              className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
                             >
-                              <span>{ratio.label}</span>
-                              {selectedAspectRatio === ratio.value && (
+                              <div className="flex items-center gap-2">
+                                <Grid3x3 className="w-4 h-4 text-slate-400" />
+                                <span>Auto (AI decides)</span>
+                              </div>
+                              {selectedAspectRatio === 'auto' && (
                                 <Check className="w-4 h-4 text-slate-600" />
                               )}
                             </button>
-                          ))}
+                          </div>
+                          <div className="border-t border-slate-100 my-1" />
+                          
+                          {/* Portrait/Square Ratios */}
+                          <div className="px-3 py-2">
+                            {[
+                              { value: '1:1', label: 'Square (1:1)' },
+                              { value: '2:3', label: 'Portrait (2:3)' },
+                              { value: '3:4', label: 'Portrait (3:4)' },
+                              { value: '4:5', label: 'Social (4:5)' },
+                              { value: '9:16', label: 'Mobile (9:16)' },
+                            ].map((ratio) => (
+                              <button
+                                key={ratio.value}
+                                onClick={() => {
+                                  setSelectedAspectRatio(ratio.value as AspectRatio);
+                                  setShowRatioDropdown(false);
+                                }}
+                                className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                              >
+                                <span>{ratio.label}</span>
+                                {selectedAspectRatio === ratio.value && (
+                                  <Check className="w-4 h-4 text-slate-600" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                          
+                          <div className="border-t border-slate-100 my-1" />
+                          
+                          {/* Landscape Ratios */}
+                          <div className="px-3 py-2">
+                            {[
+                              { value: '3:2', label: 'Landscape (3:2)' },
+                              { value: '4:3', label: 'Landscape (4:3)' },
+                              { value: '5:4', label: 'Classic (5:4)' },
+                              { value: '16:9', label: 'Widescreen (16:9)' },
+                              { value: '21:9', label: 'Cinematic (21:9)' },
+                            ].map((ratio) => (
+                              <button
+                                key={ratio.value}
+                                onClick={() => {
+                                  setSelectedAspectRatio(ratio.value as AspectRatio);
+                                  setShowRatioDropdown(false);
+                                }}
+                                className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                              >
+                                <span>{ratio.label}</span>
+                                {selectedAspectRatio === ratio.value && (
+                                  <Check className="w-4 h-4 text-slate-600" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1019,10 +1070,10 @@ export function Studio({ brand }: { brand: Brand }) {
                       <button
                         onClick={() => setShowMediaPopover(!showMediaPopover)}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                        title="Select media"
+                        title="Attach files"
                       >
                         <FolderOpen className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Media</span>
+                        <span className="hidden sm:inline">Attach</span>
                         <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
                         {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
                           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
@@ -1074,7 +1125,7 @@ export function Studio({ brand }: { brand: Brand }) {
                               <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Upload Reference</p>
+                              <p className="text-sm font-medium text-slate-900">Add Reference</p>
                               <p className="text-xs text-slate-500">Inspo / style images</p>
                             </div>
                           </button>
@@ -1083,11 +1134,11 @@ export function Studio({ brand }: { brand: Brand }) {
                     </div>
                   )}
 
-                  {/* Enhance Prompt Button (placeholder) */}
-                  {!editingImage && (
+                  {/* Enhance Prompt Button (placeholder) - Commented out */}
+                  {false && !editingImage && (
                     <button
                       className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
-                      onClick={() => {/* TODO: Enhance prompt */}}
+                      onClick={() => {}}
                     >
                       <Wand2 className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Enhance</span>
@@ -1100,124 +1151,7 @@ export function Studio({ brand }: { brand: Brand }) {
               )}
 
               {/* Actions - Show on right side when no text (original behavior) */}
-              {!prompt.trim() && inputFocused && (
-                <div className="flex items-center gap-2 shrink-0">
-                  {/* Ratio Dropdown (only for new images) */}
-                  {!editingImage && (
-                    <div className="relative" ref={ratioDropdownRef}>
-                      <button
-                        onClick={() => setShowRatioDropdown(!showRatioDropdown)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
-                      >
-                        <Grid3x3 className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{selectedAspectRatio === 'auto' ? 'Auto' : selectedAspectRatio}</span>
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {showRatioDropdown && (
-                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
-                          {aspectRatios.map((ratio) => (
-                            <button
-                              key={ratio.value}
-                              onClick={() => {
-                                setSelectedAspectRatio(ratio.value);
-                                setShowRatioDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"
-                            >
-                              <span>{ratio.label}</span>
-                              {selectedAspectRatio === ratio.value && (
-                                <Check className="w-4 h-4 text-slate-600" />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Media Button with Popover */}
-                  {!editingImage && (
-                    <div className="relative" ref={mediaPopoverRef}>
-                      <button
-                        onClick={() => setShowMediaPopover(!showMediaPopover)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                        title="Select media"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Media</span>
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
-                        {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
-                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
-                            style={{ 
-                              backgroundColor: primaryColor,
-                              color: 'white',
-                            }}
-                          >
-                            {selectedAssets.length + selectedReferences.length}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Media Popover */}
-                      {showMediaPopover && (
-                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
-                          <button
-                            onClick={() => {
-                              setShowMediaLibrary(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
-                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
-                            </div>
-                          </button>
-                          
-                          <div className="h-px bg-slate-100 mx-2" />
-                          
-                          <button
-                            onClick={() => {
-                              setShowReferenceUpload(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Upload Reference</p>
-                              <p className="text-xs text-slate-500">Inspo / style images</p>
-                            </div>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Enhance Prompt Button (placeholder) */}
-                  {!editingImage && (
-                    <button
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
-                      onClick={() => {/* TODO: Enhance prompt */}}
-                    >
-                      <Wand2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Enhance</span>
-                    </button>
-                  )}
-                </div>
-              )}
+              {/* Removed: Auto, Media, and Enhance buttons now only show when user types something */}
             </div>
           </div>
         </div>

@@ -78,6 +78,7 @@ interface RenderPlan {
   channel: string;
   objective: string;
   aspect_ratio: string;
+  resolution?: '1K' | '2K' | '4K'; // Optional: GPT can recommend resolution based on channel/context
   headline: string | null;
   subheadline: string | null;
   cta: string | null;
@@ -256,7 +257,8 @@ You must respond with a valid JSON object matching this schema:
 {
   "channel": "linkedin_post | instagram_post | story | facebook_ad | twitter | youtube_thumbnail | general",
   "objective": "awareness | promo | announcement | hiring | product_launch | general",
-  "aspect_ratio": "1:1 | 16:9 | 9:16 | 4:5",
+  "aspect_ratio": "1:1 | 2:3 | 3:4 | 4:5 | 9:16 | 3:2 | 4:3 | 5:4 | 16:9 | 21:9",
+  "resolution": "1K | 2K | 4K (optional - recommend based on channel and use case. Use 2K for most social media, 4K for high-quality prints/ads, 1K for quick tests)",
   "headline": "compelling headline text or null if not needed",
   "subheadline": "supporting text or null",
   "cta": "call to action text or null",
@@ -264,7 +266,14 @@ You must respond with a valid JSON object matching this schema:
   "text_region_notes": "natural description of where text should appear (avoid rigid percentages)",
   "asset_instructions": [{"asset_id": "...", "usage": "specific instructions on how to include this high-fidelity asset accurately in the design (placement, size, integration)"}],
   "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) strict instruction to use ONLY brand colors, (2) requirement that brand logo MUST be included, (3) brand description/summary so the model understands what the brand does, (4) clear instructions for high-fidelity assets to be included accurately, (5) style references to be used for inspiration only (not copied)"
-}`;
+}
+
+RESOLUTION GUIDELINES:
+- For social media posts (LinkedIn, Instagram, Facebook, Twitter): Use "2K" (good quality, standard cost)
+- For stories/short-form content: Use "2K" (fast, good quality)
+- For high-quality ads, print materials, or premium content: Use "4K" (highest quality, higher cost)
+- For quick tests or low-priority content: Use "1K" (fastest, lowest cost)
+- Default to "2K" if unsure`;
 
   const userMessage = `User's request: "${userPrompt}"
 
@@ -473,6 +482,85 @@ CRITICAL REQUIREMENTS:
 }
 
 // ============================================================================
+// RESOLUTION MAPPING
+// ============================================================================
+
+type ResolutionLevel = '1K' | '2K' | '4K';
+type AspectRatioValue = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9';
+
+interface Resolution {
+  width: number;
+  height: number;
+}
+
+// Resolution mapping based on Gemini 3 Pro Image Preview specifications
+const RESOLUTION_MAP: Record<AspectRatioValue, Record<ResolutionLevel, Resolution>> = {
+  '1:1': {
+    '1K': { width: 1024, height: 1024 },
+    '2K': { width: 2048, height: 2048 },
+    '4K': { width: 4096, height: 4096 },
+  },
+  '2:3': {
+    '1K': { width: 848, height: 1264 },
+    '2K': { width: 1696, height: 2528 },
+    '4K': { width: 3392, height: 5056 },
+  },
+  '3:2': {
+    '1K': { width: 1264, height: 848 },
+    '2K': { width: 2528, height: 1696 },
+    '4K': { width: 5056, height: 3392 },
+  },
+  '3:4': {
+    '1K': { width: 896, height: 1200 },
+    '2K': { width: 1792, height: 2400 },
+    '4K': { width: 3584, height: 4800 },
+  },
+  '4:3': {
+    '1K': { width: 1200, height: 896 },
+    '2K': { width: 2400, height: 1792 },
+    '4K': { width: 4800, height: 3584 },
+  },
+  '4:5': {
+    '1K': { width: 928, height: 1152 },
+    '2K': { width: 1856, height: 2304 },
+    '4K': { width: 3712, height: 4608 },
+  },
+  '5:4': {
+    '1K': { width: 1152, height: 928 },
+    '2K': { width: 2304, height: 1856 },
+    '4K': { width: 4608, height: 3712 },
+  },
+  '9:16': {
+    '1K': { width: 768, height: 1376 },
+    '2K': { width: 1536, height: 2752 },
+    '4K': { width: 3072, height: 5504 },
+  },
+  '16:9': {
+    '1K': { width: 1376, height: 768 },
+    '2K': { width: 2752, height: 1536 },
+    '4K': { width: 5504, height: 3072 },
+  },
+  '21:9': {
+    '1K': { width: 1584, height: 672 },
+    '2K': { width: 3168, height: 1344 },
+    '4K': { width: 6336, height: 2688 },
+  },
+};
+
+function getResolution(aspectRatio: AspectRatioValue | 'auto' | undefined, resolutionLevel: ResolutionLevel = '2K'): Resolution | null {
+  if (!aspectRatio || aspectRatio === 'auto') {
+    return null; // Let AI decide
+  }
+  
+  const ratioMap = RESOLUTION_MAP[aspectRatio as AspectRatioValue];
+  if (!ratioMap) {
+    return null;
+  }
+  
+  return ratioMap[resolutionLevel];
+}
+
+// ============================================================================
 // IMAGE HANDLING
 // ============================================================================
 
@@ -622,6 +710,9 @@ Deno.serve(async (req: Request) => {
       includeLogoReference = true,
       assets = [],      // New: assets to include
       references = [],  // New: style references
+      aspectRatio,     // Aspect ratio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto'
+      // Default to 2K resolution (same token cost as 1K but better quality)
+      resolution: resolutionLevel = '2K', // Resolution level: '1K' | '2K' | '4K'
     } = await req.json();
 
     if (!prompt) {
@@ -693,6 +784,7 @@ Deno.serve(async (req: Request) => {
     
     // Store GPT prompt info for response (used in non-edit mode)
     let gptPromptInfo: GPTPromptInfo | null = null;
+    let renderPlan: RenderPlan | null = null; // Store render plan for resolution recommendation
 
     // For edit mode, include the previous image
     if (editMode && previousImageUrl) {
@@ -718,7 +810,6 @@ Deno.serve(async (req: Request) => {
       // ================================================================
       
       let finalPrompt: string;
-      let renderPlan: RenderPlan | null = null;
 
       if (brand) {
         // Use GPT-5.1 to generate optimized prompt
@@ -731,9 +822,11 @@ Deno.serve(async (req: Request) => {
         renderPlan = gptResult.renderPlan;
         gptPromptInfo = gptResult.promptInfo;
         finalPrompt = renderPlan.final_prompt;
+        
         console.log("Using GPT-5.1 optimized prompt");
         console.log("Channel:", renderPlan.channel);
         if (renderPlan.headline) console.log("Headline:", renderPlan.headline);
+        if (renderPlan.resolution) console.log("GPT recommended resolution:", renderPlan.resolution);
       } else {
         finalPrompt = prompt;
       }
@@ -826,6 +919,57 @@ Deno.serve(async (req: Request) => {
       parts.push({ text: finalPrompt });
     }
 
+    // Resolution is always fixed at 2K
+    const finalResolution: ResolutionLevel = '2K';
+    
+    // Determine which aspect ratio to use
+    let aspectRatioToUse: string | null = null;
+    
+    if (aspectRatio && aspectRatio !== 'auto') {
+      // User specified an aspect ratio - use it
+      aspectRatioToUse = aspectRatio;
+      console.log(`Using user-specified aspect ratio: ${aspectRatioToUse}`);
+    } else if (aspectRatio === 'auto' || !aspectRatio) {
+      // Auto mode: use GPT's recommended aspect ratio if available
+      if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
+        aspectRatioToUse = renderPlan.aspect_ratio;
+        console.log(`Auto mode: Using GPT-recommended aspect ratio: ${aspectRatioToUse}`);
+      } else {
+        console.log(`Auto mode: No GPT aspect ratio recommendation - model will decide based on prompt`);
+      }
+    }
+    
+    // Get resolution dimensions for logging (if aspect ratio is known)
+    const resolutionDims = aspectRatioToUse 
+      ? getResolution(aspectRatioToUse as AspectRatioValue, finalResolution)
+      : null;
+    
+    // Log resolution info
+    if (resolutionDims) {
+      console.log(`Target resolution: ${resolutionDims.width}x${resolutionDims.height} for aspect ratio ${aspectRatioToUse} at ${finalResolution}`);
+    } else {
+      console.log(`Aspect ratio will be determined by model. Resolution: ${finalResolution}`);
+    }
+    
+    // Build generation config according to Gemini API documentation
+    // For gemini-3-pro-image-preview, use image_config with aspect_ratio and image_size
+    // Reference: https://ai.google.dev/gemini-api/docs/image-generation
+    const generationConfig: Record<string, unknown> = {
+      responseModalities: ["TEXT", "IMAGE"],
+    };
+    
+    // Add image_config if we have an aspect ratio to use (either user-specified or GPT-recommended)
+    if (aspectRatioToUse) {
+      generationConfig.image_config = {
+        aspect_ratio: aspectRatioToUse,
+        image_size: finalResolution, // Always 2K
+      };
+      console.log(`Using image_config: aspect_ratio=${aspectRatioToUse}, image_size=${finalResolution}`);
+    } else {
+      // No aspect ratio specified - model decides based on prompt
+      console.log(`No image_config - model will determine aspect ratio from prompt content`);
+    }
+
     // Call Gemini API
     console.log("Calling Gemini API with", parts.length, "parts...");
     const geminiResponse = await fetch(
@@ -835,9 +979,7 @@ Deno.serve(async (req: Request) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts }],
-          generationConfig: {
-            responseModalities: ["TEXT", "IMAGE"],
-          },
+          generationConfig,
         }),
       }
     );

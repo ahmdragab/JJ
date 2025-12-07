@@ -49,16 +49,81 @@ export function BrandsList({
     const brandId = confirmDelete.brandId;
     setDeleting(brandId);
     try {
+      // Find the brand to get storage paths
+      const brandToDelete = brands.find(b => b.id === brandId);
+      
+      // Clean up storage files before deleting the brand
+      if (brandToDelete) {
+        // Delete brand logos
+        if (brandToDelete.logos) {
+          const logoPaths: string[] = [];
+          if (brandToDelete.logos.primary) {
+            const primaryPath = brandToDelete.logos.primary.split('/brand-logos/')[1];
+            if (primaryPath) logoPaths.push(primaryPath);
+          }
+          if (brandToDelete.logos.icon) {
+            const iconPath = brandToDelete.logos.icon.split('/brand-logos/')[1];
+            if (iconPath) logoPaths.push(iconPath);
+          }
+          if (logoPaths.length > 0) {
+            await supabase.storage.from('brand-logos').remove(logoPaths);
+          }
+        }
+
+        // Delete brand assets (these will be cascade deleted, but clean up storage)
+        const { data: assets } = await supabase
+          .from('brand_assets')
+          .select('url')
+          .eq('brand_id', brandId);
+        
+        if (assets && assets.length > 0) {
+          const assetPaths = assets
+            .map(asset => {
+              const urlParts = asset.url.split('/brand-assets/');
+              return urlParts.length > 1 ? urlParts[1] : null;
+            })
+            .filter((path): path is string => path !== null);
+          
+          if (assetPaths.length > 0) {
+            await supabase.storage.from('brand-assets').remove(assetPaths);
+          }
+        }
+
+        // Delete brand images
+        const { data: images } = await supabase
+          .from('images')
+          .select('image_url')
+          .eq('brand_id', brandId);
+        
+        if (images && images.length > 0) {
+          const imagePaths = images
+            .map(img => {
+              if (!img.image_url) return null;
+              const urlParts = img.image_url.split('/brand-images/');
+              return urlParts.length > 1 ? urlParts[1] : null;
+            })
+            .filter((path): path is string => path !== null);
+          
+          if (imagePaths.length > 0) {
+            await supabase.storage.from('brand-images').remove(imagePaths);
+          }
+        }
+      }
+
+      // Delete the brand (cascade will handle related records)
       const { error } = await supabase
         .from('brands')
         .delete()
         .eq('id', brandId);
 
       if (error) throw error;
+      
+      // Update local state
       setBrands(brands.filter(b => b.id !== brandId));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete brand:', error);
-      alert('Failed to delete brand. Please try again.');
+      const errorMessage = error?.message || 'Unknown error occurred';
+      alert(`Failed to delete brand: ${errorMessage}. Please try again.`);
     } finally {
       setDeleting(null);
       setConfirmDelete({ isOpen: false, brandId: null });

@@ -125,6 +125,7 @@ export function CreatePage({ brand }: { brand: Brand }) {
             prompt,
             brandId: brand.id,
             imageId: imageRecord.id,
+            aspectRatio: metadata?.aspect_ratio || (selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio),
           }),
         }
       );
