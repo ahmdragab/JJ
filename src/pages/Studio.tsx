@@ -18,10 +18,14 @@ import {
   LayoutTemplate,
   ChevronUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FolderOpen,
+  Palette
 } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, Template, ConversationMessage } from '../lib/supabase';
+import { supabase, Brand, GeneratedImage, Template, ConversationMessage, BrandAsset } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { AssetPicker } from '../components/AssetPicker';
+import { ReferenceUpload } from '../components/ReferenceUpload';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -53,6 +57,8 @@ export function Studio({ brand }: { brand: Brand }) {
   const [modalEditPrompt, setModalEditPrompt] = useState('');
   const [modalEditing, setModalEditing] = useState(false);
   const [showModalEditPrompt, setShowModalEditPrompt] = useState(false);
+  const [gptPromptInfo, setGptPromptInfo] = useState<{ system_prompt: string; user_message: string; full_prompt: string } | null>(null);
+  const [showGptPrompt, setShowGptPrompt] = useState(false);
   
   // Confirmation dialog state
   const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; imageId: string | null }>({
@@ -66,16 +72,57 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showTemplatesSection, setShowTemplatesSection] = useState(false);
   const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   
-  const inputRef = useRef<HTMLInputElement>(null);
+  // Asset selection state
+  const [selectedAssets, setSelectedAssets] = useState<BrandAsset[]>([]);
+  const [selectedReferences, setSelectedReferences] = useState<BrandAsset[]>([]);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+  const [showMediaPopover, setShowMediaPopover] = useState(false);
+  const [showReferenceUpload, setShowReferenceUpload] = useState(false);
+  
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const ratioDropdownRef = useRef<HTMLDivElement>(null);
   const modalEditInputRef = useRef<HTMLInputElement>(null);
+  const mediaPopoverRef = useRef<HTMLDivElement>(null);
 
   const primaryColor = brand.colors?.primary || '#1a1a1a';
 
+  // Calculate auto-included images (logo, backdrop, screenshot)
+  const autoIncludedImages = [
+    brand.logos?.primary ? 1 : 0,
+    brand.backdrops?.length ? 1 : 0,
+    brand.screenshot ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  // Gemini 3 Pro Image limits
+  const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
+  const MAX_TOTAL_IMAGES = 14; // Total including auto-included
+
+  // Calculate current counts
+  const currentAssets = selectedAssets.length;
+  const currentReferences = selectedReferences.length;
+  const currentTotal = currentAssets + currentReferences + autoIncludedImages;
+
+  // Persist prompt to localStorage
+  const STORAGE_KEY = `studio-prompt-${brand.id}`;
+
   useEffect(() => {
     loadData();
+    // Load saved prompt from localStorage
+    const savedPrompt = localStorage.getItem(STORAGE_KEY);
+    if (savedPrompt) {
+      setPrompt(savedPrompt);
+    }
   }, [brand.id]);
+
+  // Save prompt to localStorage whenever it changes
+  useEffect(() => {
+    if (prompt.trim()) {
+      localStorage.setItem(STORAGE_KEY, prompt);
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [prompt, STORAGE_KEY]);
 
   useEffect(() => {
     // Poll for generating images
@@ -95,6 +142,9 @@ export function Studio({ brand }: { brand: Brand }) {
         if (!prompt.trim() && !editingImage) {
           setInputFocused(false);
         }
+      }
+      if (mediaPopoverRef.current && !mediaPopoverRef.current.contains(event.target as Node)) {
+        setShowMediaPopover(false);
       }
     };
     
@@ -210,9 +260,12 @@ export function Studio({ brand }: { brand: Brand }) {
       // Add to images list optimistically
       setImages(prev => [imageRecord, ...prev]);
       setPrompt('');
+      localStorage.removeItem(STORAGE_KEY);
       setInputFocused(false);
       setCurrentTemplateId(null);
       setTemplateFields({});
+      setSelectedAssets([]);
+      setSelectedReferences([]);
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
@@ -226,12 +279,33 @@ export function Studio({ brand }: { brand: Brand }) {
             prompt,
             brandId: brand.id,
             imageId: imageRecord.id,
+            assets: selectedAssets.map(a => ({
+              id: a.id,
+              url: a.url,
+              name: a.name,
+              category: a.category,
+              role: 'must_include',
+            })),
+            references: selectedReferences.map(r => ({
+              id: r.id,
+              url: r.url,
+              name: r.name,
+              category: r.category,
+              role: 'style_reference',
+            })),
           }),
         }
       );
 
       if (!response.ok) {
         throw new Error('Failed to generate image');
+      }
+
+      // Capture GPT prompt info if available
+      const responseData = await response.json();
+      if (responseData.gpt_prompt_info) {
+        setGptPromptInfo(responseData.gpt_prompt_info);
+        console.log('GPT Prompt Info captured:', responseData.gpt_prompt_info);
       }
 
       // Reload to get the generated image
@@ -288,6 +362,7 @@ export function Studio({ brand }: { brand: Brand }) {
       }
 
       setPrompt('');
+      localStorage.removeItem(STORAGE_KEY);
       setEditingImage(null);
       setInputFocused(false);
       await loadImages();
@@ -364,6 +439,13 @@ export function Studio({ brand }: { brand: Brand }) {
 
       if (!response.ok) {
         throw new Error('Edit failed');
+      }
+
+      // Capture GPT prompt info if available (for new generations, not edits)
+      const responseData = await response.json();
+      if (responseData.gpt_prompt_info) {
+        setGptPromptInfo(responseData.gpt_prompt_info);
+        console.log('GPT Prompt Info captured:', responseData.gpt_prompt_info);
       }
 
       console.log('API call complete, fetching updated image...');
@@ -471,6 +553,7 @@ export function Studio({ brand }: { brand: Brand }) {
   const cancelEditing = () => {
     setEditingImage(null);
     setPrompt('');
+    localStorage.removeItem(STORAGE_KEY);
     setInputFocused(false);
   };
 
@@ -519,10 +602,23 @@ export function Studio({ brand }: { brand: Brand }) {
       setCurrentVersionIndex(Math.max(0, versions.length - 1)); // Start at latest version
       setShowModalEditPrompt(false);
       setModalEditPrompt('');
+      
+      // Load GPT prompt info from metadata if available
+      const metadata = selectedImage.metadata || {};
+      const promptInfo = metadata.gpt_prompt_info as { system_prompt: string; user_message: string; full_prompt: string } | undefined;
+      if (promptInfo) {
+        setGptPromptInfo(promptInfo);
+        setShowGptPrompt(true); // Expand by default so users can see it
+      } else {
+        setGptPromptInfo(null);
+        setShowGptPrompt(false);
+      }
     } else {
       setCurrentVersionIndex(0);
       setShowModalEditPrompt(false);
       setModalEditPrompt('');
+      setGptPromptInfo(null);
+      setShowGptPrompt(false);
     }
   }, [selectedImage?.id]);
 
@@ -698,7 +794,10 @@ export function Studio({ brand }: { brand: Brand }) {
                 {images.map((image) => (
                   <div
                     key={image.id}
-                    onClick={() => setSelectedImage(image)}
+                    onClick={() => {
+                      setSelectedImage(image);
+                      // GPT prompt info will be loaded from metadata in useEffect
+                    }}
                     className="group relative bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-200/50"
                   >
                     {/* Image Preview */}
@@ -826,34 +925,182 @@ export function Studio({ brand }: { brand: Brand }) {
               borderColor: inputFocused ? `${primaryColor}40` : undefined,
             }}
           >
-            <div className="flex items-center gap-3 p-3">
-              {!editingImage && (
-                <div 
-                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: `${primaryColor}15` }}
-                >
-                  <Sparkles className="w-5 h-5" style={{ color: primaryColor }} />
+            <div className={`flex gap-3 p-3 ${prompt.trim() ? 'flex-col' : 'items-center'}`}>
+              <div className="flex items-start gap-3 flex-1">
+                {!editingImage && (
+                  <div 
+                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: `${primaryColor}15` }}
+                  >
+                    <Sparkles className="w-5 h-5" style={{ color: primaryColor }} />
+                  </div>
+                )}
+                
+                <textarea
+                  ref={inputRef}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onFocus={() => setInputFocused(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      editingImage ? handleEdit() : handleGenerate();
+                    }
+                  }}
+                  placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
+                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-sm text-base py-2 resize-none overflow-y-auto ${
+                    prompt.trim() 
+                      ? 'min-h-[3rem] max-h-[6rem]' 
+                      : 'h-[2.5rem]'
+                  }`}
+                  rows={prompt.trim() ? 2 : 1}
+                />
+
+                {/* Submit Button - Always visible on right when there's text */}
+                {prompt.trim() && (
+                  <button
+                    onClick={editingImage ? handleEdit : handleGenerate}
+                    disabled={(generating || editing) || !prompt.trim()}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {(generating || editing) ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {editingImage ? 'Apply' : 'Create'}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              {/* Actions Row - Moves to bottom when typing */}
+              {prompt.trim() && (
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  {/* Ratio Dropdown (only for new images) */}
+                  {!editingImage && (
+                    <div className="relative" ref={ratioDropdownRef}>
+                      <button
+                        onClick={() => setShowRatioDropdown(!showRatioDropdown)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
+                      >
+                        <Grid3x3 className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">{selectedAspectRatio === 'auto' ? 'Auto' : selectedAspectRatio}</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showRatioDropdown && (
+                        <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50">
+                          {aspectRatios.map((ratio) => (
+                            <button
+                              key={ratio.value}
+                              onClick={() => {
+                                setSelectedAspectRatio(ratio.value);
+                                setShowRatioDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"
+                            >
+                              <span>{ratio.label}</span>
+                              {selectedAspectRatio === ratio.value && (
+                                <Check className="w-4 h-4 text-slate-600" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Media Button with Popover */}
+                  {!editingImage && (
+                    <div className="relative" ref={mediaPopoverRef}>
+                      <button
+                        onClick={() => setShowMediaPopover(!showMediaPopover)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                        title="Select media"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Media</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
+                        {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                            style={{ 
+                              backgroundColor: primaryColor,
+                              color: 'white',
+                            }}
+                          >
+                            {selectedAssets.length + selectedReferences.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Media Popover */}
+                      {showMediaPopover && (
+                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
+                          <button
+                            onClick={() => {
+                              setShowMediaLibrary(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
+                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
+                            </div>
+                          </button>
+                          
+                          <div className="h-px bg-slate-100 mx-2" />
+                          
+                          <button
+                            onClick={() => {
+                              setShowReferenceUpload(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Upload Reference</p>
+                              <p className="text-xs text-slate-500">Inspo / style images</p>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Enhance Prompt Button (placeholder) */}
+                  {!editingImage && (
+                    <button
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
+                      onClick={() => {/* TODO: Enhance prompt */}}
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Enhance</span>
+                    </button>
+                  )}
+
+                  {/* Spacer to push submit button to right if needed, or keep it here */}
+                  <div className="flex-1" />
                 </div>
               )}
-              
-              <input
-                ref={inputRef}
-                type="text"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onFocus={() => setInputFocused(true)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    editingImage ? handleEdit() : handleGenerate();
-                  }
-                }}
-                placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
-                className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-sm text-base py-2"
-              />
 
-              {/* Actions */}
-              {(inputFocused || prompt.trim()) && (
+              {/* Actions - Show on right side when no text (original behavior) */}
+              {!prompt.trim() && inputFocused && (
                 <div className="flex items-center gap-2 shrink-0">
                   {/* Ratio Dropdown (only for new images) */}
                   {!editingImage && (
@@ -889,6 +1136,76 @@ export function Studio({ brand }: { brand: Brand }) {
                     </div>
                   )}
 
+                  {/* Media Button with Popover */}
+                  {!editingImage && (
+                    <div className="relative" ref={mediaPopoverRef}>
+                      <button
+                        onClick={() => setShowMediaPopover(!showMediaPopover)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                        title="Select media"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Media</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
+                        {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                            style={{ 
+                              backgroundColor: primaryColor,
+                              color: 'white',
+                            }}
+                          >
+                            {selectedAssets.length + selectedReferences.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Media Popover */}
+                      {showMediaPopover && (
+                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
+                          <button
+                            onClick={() => {
+                              setShowMediaLibrary(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
+                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
+                            </div>
+                          </button>
+                          
+                          <div className="h-px bg-slate-100 mx-2" />
+                          
+                          <button
+                            onClick={() => {
+                              setShowReferenceUpload(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Upload Reference</p>
+                              <p className="text-xs text-slate-500">Inspo / style images</p>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Enhance Prompt Button (placeholder) */}
                   {!editingImage && (
                     <button
@@ -899,23 +1216,6 @@ export function Studio({ brand }: { brand: Brand }) {
                       <span className="hidden sm:inline">Enhance</span>
                     </button>
                   )}
-
-                  {/* Submit Button */}
-                  <button
-                    onClick={editingImage ? handleEdit : handleGenerate}
-                    disabled={(generating || editing) || !prompt.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: primaryColor }}
-                  >
-                    {(generating || editing) ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4" />
-                    )}
-                    <span className="hidden sm:inline">
-                      {editingImage ? 'Apply' : 'Create'}
-                    </span>
-                  </button>
                 </div>
               )}
             </div>
@@ -949,6 +1249,8 @@ export function Studio({ brand }: { brand: Brand }) {
                   setSelectedImage(null);
                   setShowModalEditPrompt(false);
                   setModalEditPrompt('');
+                  setGptPromptInfo(null);
+                  setShowGptPrompt(false);
                 }
               }}
               disabled={modalEditing}
@@ -1066,6 +1368,44 @@ export function Studio({ brand }: { brand: Brand }) {
                   </div>
                 ) : null;
               })()}
+
+              {/* GPT Prompt Info (for reference) - Only show on localhost */}
+              {gptPromptInfo && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
+                <div className="p-4 border-t border-slate-200 bg-slate-50/50">
+                  <button
+                    onClick={() => setShowGptPrompt(!showGptPrompt)}
+                    className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wand2 className="w-4 h-4 text-slate-600" />
+                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                        Generated Prompt
+                      </span>
+                    </div>
+                    {showGptPrompt ? (
+                      <ChevronUp className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    )}
+                  </button>
+                  {showGptPrompt && (
+                    <div className="mt-3 space-y-3">
+                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-800 mb-2">System Prompt:</div>
+                        <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-slate-50 p-2 rounded border border-slate-100">
+                          {gptPromptInfo.system_prompt}
+                        </pre>
+                      </div>
+                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
+                        <div className="text-xs font-semibold text-slate-800 mb-2">User Message:</div>
+                        <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-slate-50 p-2 rounded border border-slate-100">
+                          {gptPromptInfo.user_message}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Actions */}
               <div className="p-4 border-t border-slate-100 flex items-center gap-2">
@@ -1277,6 +1617,40 @@ export function Studio({ brand }: { brand: Brand }) {
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
+      />
+
+      {/* Assets Library Picker */}
+      <AssetPicker
+        brandId={brand.id}
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelect={(selected) => {
+          // Enforce limit: max 6 assets, and total images (including auto-included) <= 14
+          const maxAllowed = Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences);
+          const filtered = selected.filter(a => a.type === 'asset').slice(0, maxAllowed);
+          setSelectedAssets(filtered);
+        }}
+        selectedAssets={selectedAssets}
+        filterType="asset"
+        title="Select Assets"
+        primaryColor={primaryColor}
+        maxSelection={Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences)}
+      />
+
+      {/* Reference Upload */}
+      <ReferenceUpload
+        brandId={brand.id}
+        isOpen={showReferenceUpload}
+        onClose={() => setShowReferenceUpload(false)}
+        onSelect={(selected) => {
+          // Enforce limit: total images (including auto-included and assets) <= 14
+          const maxAllowed = MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets;
+          const filtered = selected.slice(0, maxAllowed);
+          setSelectedReferences(filtered);
+        }}
+        selectedReferences={selectedReferences}
+        primaryColor={primaryColor}
+        maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets}
       />
 
       <style>{`

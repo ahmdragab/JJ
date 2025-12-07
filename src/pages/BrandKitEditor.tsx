@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X } from 'lucide-react';
-import { Brand, supabase } from '../lib/supabase';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, Image as ImageIcon, Palette } from 'lucide-react';
+import { Brand, BrandAsset, supabase } from '../lib/supabase';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
 
@@ -19,6 +19,8 @@ export function BrandKitEditor({
 }) {
   const [localBrand, setLocalBrand] = useState(brand);
   const [saving, setSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingRef = useRef(false);
   
   // Comparison mode state
   const [alternativeBrand, setAlternativeBrand] = useState<Partial<Brand> | null>(null);
@@ -30,9 +32,160 @@ export function BrandKitEditor({
     voice: 'original',
   });
 
+  // Asset Library state
+  const [brandAssets, setBrandAssets] = useState<BrandAsset[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(true);
+  const [uploadingAsset, setUploadingAsset] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [newAssetType, setNewAssetType] = useState<'asset' | 'reference'>('asset');
+  const [newAssetName, setNewAssetName] = useState('');
+  const [newAssetCategory, setNewAssetCategory] = useState('');
+  const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
+
   useEffect(() => {
-    setLocalBrand(brand);
+    // Only reset localBrand if we're not in the middle of an update
+    // This prevents losing unsaved changes when switching tabs
+    if (!isUpdatingRef.current) {
+      setLocalBrand(brand);
+    }
   }, [brand]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Fetch brand assets
+  useEffect(() => {
+    const fetchAssets = async () => {
+      setLoadingAssets(true);
+      const { data, error } = await supabase
+        .from('brand_assets')
+        .select('*')
+        .eq('brand_id', brand.id)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setBrandAssets(data as BrandAsset[]);
+      }
+      setLoadingAssets(false);
+    };
+
+    fetchAssets();
+  }, [brand.id]);
+
+  // Handle asset upload
+  const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    setUploadingAsset(true);
+
+    try {
+      // Generate unique filename
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${brand.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('brand-assets')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('brand-assets')
+        .getPublicUrl(uploadData.path);
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Create asset record
+      const { data: assetData, error: assetError } = await supabase
+        .from('brand_assets')
+        .insert({
+          brand_id: brand.id,
+          user_id: user.id,
+          name: newAssetName || file.name.replace(/\.[^/.]+$/, ''),
+          url: urlData.publicUrl,
+          type: newAssetType,
+          category: newAssetCategory || null,
+          file_size: file.size,
+          mime_type: file.type,
+        })
+        .select()
+        .single();
+
+      if (assetError) throw assetError;
+
+      // Add to local state
+      setBrandAssets(prev => [assetData as BrandAsset, ...prev]);
+      
+      // Reset form
+      setShowUploadModal(false);
+      setNewAssetName('');
+      setNewAssetCategory('');
+      setNewAssetType('asset');
+    } catch (error) {
+      console.error('Asset upload failed:', error);
+      alert('Failed to upload asset. Please try again.');
+    } finally {
+      setUploadingAsset(false);
+      e.target.value = '';
+    }
+  };
+
+  // Handle asset deletion
+  const handleDeleteAsset = async (asset: BrandAsset) => {
+    if (!confirm(`Delete "${asset.name}"? This cannot be undone.`)) return;
+
+    setDeletingAssetId(asset.id);
+
+    try {
+      // Delete from storage (extract path from URL)
+      const urlParts = asset.url.split('/brand-assets/');
+      if (urlParts.length > 1) {
+        await supabase.storage.from('brand-assets').remove([urlParts[1]]);
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('brand_assets')
+        .delete()
+        .eq('id', asset.id);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setBrandAssets(prev => prev.filter(a => a.id !== asset.id));
+    } catch (error) {
+      console.error('Failed to delete asset:', error);
+      alert('Failed to delete asset.');
+    } finally {
+      setDeletingAssetId(null);
+    }
+  };
 
   // Handle re-extraction
   const handleReExtract = async () => {
@@ -91,19 +244,49 @@ export function BrandKitEditor({
   const [uploadingLogo, setUploadingLogo] = useState<'primary' | 'icon' | null>(null);
 
   const updateColor = (key: string, value: string) => {
+    isUpdatingRef.current = true;
     const updated = {
       ...localBrand,
       colors: { ...localBrand.colors, [key]: value },
     };
     setLocalBrand(updated);
+    
+    // Auto-save after a short delay (debounced)
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await onUpdate(updated);
+        isUpdatingRef.current = false;
+      } catch (error) {
+        console.error('Failed to auto-save color:', error);
+        isUpdatingRef.current = false;
+      }
+    }, 500); // Save 500ms after last change
   };
 
   const updateFont = (key: string, value: string) => {
+    isUpdatingRef.current = true;
     const updated = {
       ...localBrand,
       fonts: { ...localBrand.fonts, [key]: value },
     };
     setLocalBrand(updated);
+    
+    // Auto-save after a short delay (debounced)
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await onUpdate(updated);
+        isUpdatingRef.current = false;
+      } catch (error) {
+        console.error('Failed to auto-save font:', error);
+        isUpdatingRef.current = false;
+      }
+    }, 500); // Save 500ms after last change
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'primary' | 'icon') => {
@@ -161,6 +344,17 @@ export function BrandKitEditor({
       setUploadingLogo(null);
       // Reset input
       e.target.value = '';
+    }
+  };
+
+  const handleSave = async (brandToSave: Brand = localBrand) => {
+    isUpdatingRef.current = true;
+    try {
+      await onUpdate(brandToSave);
+      isUpdatingRef.current = false;
+    } catch (error) {
+      console.error('Failed to save:', error);
+      isUpdatingRef.current = false;
     }
   };
 
@@ -902,6 +1096,230 @@ export function BrandKitEditor({
             </div>
           </section>
         )}
+
+        {/* Asset Library */}
+        <section className="mt-16">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400">
+              Asset Library
+              <span className="ml-2 text-slate-300 font-normal">({brandAssets.length})</span>
+            </h2>
+            <button
+              onClick={() => setShowUploadModal(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-full transition-all hover:scale-105"
+              style={{ 
+                backgroundColor: `${primaryColor}15`,
+                color: primaryColor,
+              }}
+            >
+              <Plus className="w-4 h-4" />
+              Add Asset
+            </button>
+          </div>
+
+          {/* Upload Modal */}
+          {showUploadModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+              <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-lg font-semibold text-slate-800">Upload Asset</h3>
+                  <button
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      setNewAssetName('');
+                      setNewAssetCategory('');
+                    }}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-slate-400" />
+                  </button>
+                </div>
+
+                {/* Asset Type Selection */}
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-slate-700 block mb-2">Type</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNewAssetType('asset')}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
+                        newAssetType === 'asset'
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <ImageIcon className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'asset' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      <div className={`text-sm font-medium ${newAssetType === 'asset' ? 'text-emerald-700' : 'text-slate-600'}`}>Asset</div>
+                      <div className="text-xs text-slate-400">Include in design</div>
+                    </button>
+                    <button
+                      onClick={() => setNewAssetType('reference')}
+                      className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
+                        newAssetType === 'reference'
+                          ? 'border-purple-500 bg-purple-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Palette className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'reference' ? 'text-purple-600' : 'text-slate-400'}`} />
+                      <div className={`text-sm font-medium ${newAssetType === 'reference' ? 'text-purple-700' : 'text-slate-600'}`}>Reference</div>
+                      <div className="text-xs text-slate-400">Style inspiration</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Asset Name */}
+                <div className="mb-4">
+                  <label className="text-sm font-medium text-slate-700 block mb-2">Name (optional)</label>
+                  <input
+                    type="text"
+                    value={newAssetName}
+                    onChange={(e) => setNewAssetName(e.target.value)}
+                    placeholder="e.g., Product Hero Shot"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Category */}
+                <div className="mb-6">
+                  <label className="text-sm font-medium text-slate-700 block mb-2">Category (optional)</label>
+                  <select
+                    value={newAssetCategory}
+                    onChange={(e) => setNewAssetCategory(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">Select a category</option>
+                    <option value="product">Product</option>
+                    <option value="ui_screen">UI / Screenshot</option>
+                    <option value="lifestyle">Lifestyle</option>
+                    <option value="team">Team / People</option>
+                    <option value="moodboard">Moodboard</option>
+                    <option value="campaign">Campaign</option>
+                    <option value="icon">Icon / Graphic</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+
+                {/* Upload Button */}
+                <label className="block">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAssetUpload}
+                    className="hidden"
+                    disabled={uploadingAsset}
+                  />
+                  <div
+                    className={`w-full py-4 rounded-xl text-white font-medium text-center cursor-pointer transition-all ${
+                      uploadingAsset ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-lg hover:scale-[1.02]'
+                    }`}
+                    style={{ 
+                      background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                    }}
+                  >
+                    {uploadingAsset ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Uploading...
+                      </span>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2">
+                        <Upload className="w-5 h-5" />
+                        Choose File & Upload
+                      </span>
+                    )}
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {/* Assets Grid */}
+          {loadingAssets ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
+            </div>
+          ) : brandAssets.length === 0 ? (
+            <div 
+              className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center"
+              style={{ backgroundColor: `${primaryColor}05` }}
+            >
+              <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <ImageIcon className="w-8 h-8 text-slate-400" />
+              </div>
+              <h3 className="text-slate-700 font-medium mb-2">No assets yet</h3>
+              <p className="text-slate-500 text-sm mb-4">
+                Upload product photos, UI screenshots, or style references to use when generating designs.
+              </p>
+              <button
+                onClick={() => setShowUploadModal(true)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-white font-medium transition-all hover:shadow-lg"
+                style={{ 
+                  background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
+                }}
+              >
+                <Plus className="w-4 h-4" />
+                Upload First Asset
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {brandAssets.map((asset) => (
+                <div
+                  key={asset.id}
+                  className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all"
+                >
+                  {/* Image */}
+                  <div 
+                    className="aspect-square"
+                    style={{
+                      backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
+                      backgroundSize: '16px 16px',
+                      backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                      backgroundColor: '#fafafa',
+                    }}
+                  >
+                    <img
+                      src={asset.url}
+                      alt={asset.name}
+                      className="w-full h-full object-contain p-2"
+                    />
+                  </div>
+
+                  {/* Type Badge */}
+                  <span 
+                    className={`absolute top-2 left-2 px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-medium ${
+                      asset.type === 'asset' 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : 'bg-purple-100 text-purple-700'
+                    }`}
+                  >
+                    {asset.type}
+                  </span>
+
+                  {/* Delete Button */}
+                  <button
+                    onClick={() => handleDeleteAsset(asset)}
+                    disabled={deletingAssetId === asset.id}
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/90 hover:bg-red-50 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                  >
+                    {deletingAssetId === asset.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                  </button>
+
+                  {/* Info */}
+                  <div className="p-3 border-t border-slate-100">
+                    <p className="text-sm font-medium text-slate-700 truncate">{asset.name}</p>
+                    {asset.category && (
+                      <p className="text-xs text-slate-400 capitalize">{asset.category.replace(/_/g, ' ')}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Backdrops */}
         {localBrand.backdrops && localBrand.backdrops.length > 0 && (

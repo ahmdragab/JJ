@@ -232,6 +232,72 @@ serve(async (req: Request) => {
 
       if (updateError) {
         console.error('Database update error:', updateError);
+      } else {
+        // Get the brand to retrieve user_id
+        const { data: brandRecord } = await supabase
+          .from('brands')
+          .select('user_id')
+          .eq('id', brandId)
+          .single();
+
+        if (brandRecord?.user_id) {
+          // Get existing assets to avoid duplicates
+          const { data: existingAssets } = await supabase
+            .from('brand_assets')
+            .select('url')
+            .eq('brand_id', brandId);
+
+          const existingUrls = new Set(existingAssets?.map(a => a.url) || []);
+
+          // Add screenshot to asset library if it exists and not already added
+          if (brandData.screenshot && !existingUrls.has(brandData.screenshot)) {
+            const { error: screenshotError } = await supabase
+              .from('brand_assets')
+              .insert({
+                brand_id: brandId,
+                user_id: brandRecord.user_id,
+                name: 'Website Screenshot',
+                description: 'Automatically extracted website screenshot',
+                url: brandData.screenshot,
+                type: 'asset',
+                category: 'screenshot',
+              });
+            
+            if (screenshotError) {
+              console.error('Failed to add screenshot to asset library:', screenshotError);
+            }
+          }
+
+          // Add page images to asset library (skip duplicates)
+          if (brandData.page_images && brandData.page_images.length > 0) {
+            const assetInserts = brandData.page_images
+              .filter(img => img.url && !existingUrls.has(img.url))
+              .map((img, index) => ({
+                brand_id: brandId,
+                user_id: brandRecord.user_id,
+                name: `Extracted Image ${index + 1}`,
+                description: `Automatically extracted from website (${img.type || 'image'})`,
+                url: img.url,
+                type: 'asset' as const,
+                category: img.type || 'extracted',
+              }));
+
+            // Insert in batches to avoid overwhelming the database
+            if (assetInserts.length > 0) {
+              const batchSize = 10;
+              for (let i = 0; i < assetInserts.length; i += batchSize) {
+                const batch = assetInserts.slice(i, i + batchSize);
+                const { error: batchError } = await supabase
+                  .from('brand_assets')
+                  .insert(batch);
+                
+                if (batchError) {
+                  console.error(`Failed to add page images batch ${i / batchSize + 1} to asset library:`, batchError);
+                }
+              }
+            }
+          }
+        }
       }
     }
 

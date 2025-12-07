@@ -187,3 +187,18 @@ export type ExtractionJob = {
   created_at: string;
   completed_at?: string;
 };
+
+export type BrandAsset = {
+  id: string;
+  brand_id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  url: string;
+  type: 'asset' | 'reference';
+  category?: string;
+  file_size?: number;
+  mime_type?: string;
+  created_at: string;
+  updated_at: string;
+};

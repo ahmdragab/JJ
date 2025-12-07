@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ArrowLeft, Sparkles, Loader2, Download, RefreshCw, Wand2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
-import { Brand } from '../lib/supabase';
+import { ArrowLeft, Sparkles, Loader2, Download, RefreshCw, Wand2, Check, X, ChevronDown, ChevronUp, Image as ImageIcon, Palette, Plus, FolderOpen } from 'lucide-react';
+import { Brand, BrandAsset } from '../lib/supabase';
+import { AssetPicker } from '../components/AssetPicker';
 
 export function ImageGenerator({
   brand,
@@ -15,6 +16,38 @@ export function ImageGenerator({
   const [textResponse, setTextResponse] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showBrandContext, setShowBrandContext] = useState(false);
+
+  // Asset selection state
+  const [selectedAssets, setSelectedAssets] = useState<BrandAsset[]>([]);
+  const [selectedReferences, setSelectedReferences] = useState<BrandAsset[]>([]);
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [showReferencePicker, setShowReferencePicker] = useState(false);
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false);
+
+  // Computed values
+  const primaryColor = brand.colors.primary || '#10b981';
+
+  // Calculate auto-included images (logo, backdrop, screenshot)
+  const autoIncludedImages = [
+    brand.logos.primary ? 1 : 0,
+    brand.backdrops?.length ? 1 : 0,
+    brand.screenshot ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  // Gemini 3 Pro Image limits
+  const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
+  const MAX_TOTAL_IMAGES = 14; // Total including auto-included
+
+  // Calculate current counts
+  const currentAssets = selectedAssets.length;
+  const currentReferences = selectedReferences.length;
+  const currentTotal = currentAssets + currentReferences + autoIncludedImages;
+
+  // Validation
+  const canAddAsset = currentAssets < MAX_HIGH_FIDELITY && currentTotal < MAX_TOTAL_IMAGES;
+  const canAddReference = currentTotal < MAX_TOTAL_IMAGES;
+  const assetsRemaining = Math.max(0, MAX_HIGH_FIDELITY - currentAssets);
+  const totalRemaining = Math.max(0, MAX_TOTAL_IMAGES - currentTotal);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -36,6 +69,21 @@ export function ImageGenerator({
           body: JSON.stringify({
             prompt,
             brandId: brand.id,
+            // Pass selected assets and references
+            assets: selectedAssets.map(a => ({
+              id: a.id,
+              url: a.url,
+              name: a.name,
+              category: a.category,
+              role: 'must_include',
+            })),
+            references: selectedReferences.map(r => ({
+              id: r.id,
+              url: r.url,
+              name: r.name,
+              category: r.category,
+              role: 'style_reference',
+            })),
           }),
         }
       );
@@ -57,6 +105,16 @@ export function ImageGenerator({
     } finally {
       setGenerating(false);
     }
+  };
+
+  // Remove asset from selection
+  const removeAsset = (assetId: string) => {
+    setSelectedAssets(prev => prev.filter(a => a.id !== assetId));
+  };
+
+  // Remove reference from selection
+  const removeReference = (refId: string) => {
+    setSelectedReferences(prev => prev.filter(r => r.id !== refId));
   };
 
   const handleDownload = () => {
@@ -286,13 +344,204 @@ export function ImageGenerator({
               <label className="block text-slate-700 font-medium mb-3">
                 Describe your image
               </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the image you want to create..."
-                className="w-full h-40 px-4 py-3 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none shadow-sm"
-              />
+              <div className="relative">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Describe the image you want to create..."
+                  className="w-full h-32 px-4 py-3 pr-14 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none shadow-sm"
+                />
+                <button
+                  onClick={() => setShowMediaLibrary(true)}
+                  className="absolute right-2 top-2 p-2 rounded-lg transition-all hover:scale-110 active:scale-95 z-10 shadow-sm"
+                  style={{ 
+                    backgroundColor: `${primaryColor}15`,
+                    color: primaryColor,
+                  }}
+                  title="Select from media library"
+                >
+                  <FolderOpen className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+
+            {/* Asset & Reference Selection */}
+            <div className="space-y-4">
+              {/* Assets Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-emerald-600" />
+                    Assets to Include
+                    <span className="text-xs text-slate-400 font-normal">(will appear in design)</span>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                      currentAssets >= MAX_HIGH_FIDELITY 
+                        ? 'bg-red-100 text-red-700' 
+                        : currentAssets >= MAX_HIGH_FIDELITY - 1
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}>
+                      {currentAssets}/{MAX_HIGH_FIDELITY}
+                    </span>
+                  </label>
+                  <button
+                    onClick={() => setShowAssetPicker(true)}
+                    disabled={!canAddAsset}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ 
+                      backgroundColor: `${primaryColor}15`,
+                      color: primaryColor,
+                    }}
+                    title={!canAddAsset ? (currentAssets >= MAX_HIGH_FIDELITY ? 'Asset limit reached (6/6)' : 'Total image limit reached') : 'Add assets'}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add
+                  </button>
+                </div>
+                {!canAddAsset && currentAssets < MAX_HIGH_FIDELITY && (
+                  <p className="text-xs text-amber-600 mb-2">
+                    Total image limit reached. Remove {currentTotal - MAX_TOTAL_IMAGES + 1} image{currentTotal - MAX_TOTAL_IMAGES + 1 > 1 ? 's' : ''} to add more assets.
+                  </p>
+                )}
+                {currentAssets >= MAX_HIGH_FIDELITY && (
+                  <p className="text-xs text-red-600 mb-2">
+                    Asset limit reached (6/6 high-fidelity images). Remove assets to add more.
+                  </p>
+                )}
+                
+                {selectedAssets.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedAssets.map((asset) => (
+                      <div
+                        key={asset.id}
+                        className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm"
+                      >
+                        <img
+                          src={asset.url}
+                          alt={asset.name}
+                          className="w-16 h-16 object-cover"
+                        />
+                        <button
+                          onClick={() => removeAsset(asset.id)}
+                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        >
+                          <X className="w-5 h-5 text-white" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-emerald-500 text-white text-[9px] text-center py-0.5 font-medium">
+                          ASSET
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => setShowAssetPicker(true)}
+                    className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+                  >
+                    <p className="text-slate-400 text-sm">Click to add product photos, UI screenshots, etc.</p>
+                  </div>
+                )}
+              </div>
+
+              {/* References Section */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-purple-600" />
+                    Style References
+                    <span className="text-xs text-slate-400 font-normal">(for mood/style only)</span>
+                  </label>
+                  <button
+                    onClick={() => setShowReferencePicker(true)}
+                    disabled={!canAddReference}
+                    className="text-xs font-medium px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 transition-colors flex items-center gap-1 hover:bg-purple-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!canAddReference ? 'Total image limit reached (14/14)' : 'Add style references'}
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add
+                  </button>
+                </div>
+                {!canAddReference && (
+                  <p className="text-xs text-amber-600 mb-2">
+                    Total image limit reached (14/14). Remove images to add more references.
+                  </p>
+                )}
+                
+                {selectedReferences.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedReferences.map((ref) => (
+                      <div
+                        key={ref.id}
+                        className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm"
+                      >
+                        <img
+                          src={ref.url}
+                          alt={ref.name}
+                          className="w-16 h-16 object-cover"
+                        />
+                        <button
+                          onClick={() => removeReference(ref.id)}
+                          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        >
+                          <X className="w-5 h-5 text-white" />
+                        </button>
+                        <div className="absolute bottom-0 left-0 right-0 bg-purple-500 text-white text-[9px] text-center py-0.5 font-medium">
+                          REF
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div 
+                    onClick={() => setShowReferencePicker(true)}
+                    className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
+                  >
+                    <p className="text-slate-400 text-sm">Click to add moodboards, inspiration images, etc.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Image Count Summary */}
+            {currentTotal > 0 && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Total images:</span>
+                  <span className={`font-semibold ${
+                    currentTotal >= MAX_TOTAL_IMAGES 
+                      ? 'text-red-600' 
+                      : currentTotal >= MAX_TOTAL_IMAGES - 2
+                      ? 'text-amber-600'
+                      : 'text-slate-900'
+                  }`}>
+                    {currentTotal}/{MAX_TOTAL_IMAGES}
+                  </span>
+                </div>
+                <div className="mt-2 text-xs text-slate-500 space-y-1">
+                  <div className="flex justify-between">
+                    <span>• Assets (high-fidelity):</span>
+                    <span className={currentAssets >= MAX_HIGH_FIDELITY ? 'text-red-600 font-medium' : ''}>
+                      {currentAssets}/{MAX_HIGH_FIDELITY}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>• Style references:</span>
+                    <span>{currentReferences}</span>
+                  </div>
+                  {autoIncludedImages > 0 && (
+                    <div className="flex justify-between text-slate-400">
+                      <span>• Auto-included (logo, backdrop, screenshot):</span>
+                      <span>{autoIncludedImages}</span>
+                    </div>
+                  )}
+                  {totalRemaining > 0 && (
+                    <p className="text-emerald-600 font-medium mt-2">
+                      {totalRemaining} more image{totalRemaining > 1 ? 's' : ''} allowed
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
 
             <button
               onClick={handleGenerate}
@@ -392,6 +641,63 @@ export function ImageGenerator({
           </div>
         </div>
       </div>
+
+      {/* Asset Picker Modal */}
+      <AssetPicker
+        brandId={brand.id}
+        isOpen={showAssetPicker}
+        onClose={() => setShowAssetPicker(false)}
+        onSelect={(assets) => {
+          // Enforce limit: max 6 assets, and total images (including auto-included) <= 14
+          const maxAllowed = Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences);
+          const filtered = assets.filter(a => a.type === 'asset').slice(0, maxAllowed);
+          setSelectedAssets(filtered);
+        }}
+        selectedAssets={selectedAssets}
+        filterType="asset"
+        title="Select Assets"
+        primaryColor={primaryColor}
+        maxSelection={Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences)}
+      />
+
+      {/* Reference Picker Modal */}
+      <AssetPicker
+        brandId={brand.id}
+        isOpen={showReferencePicker}
+        onClose={() => setShowReferencePicker(false)}
+        onSelect={(refs) => {
+          // Enforce limit: total images (including auto-included and assets) <= 14
+          const maxAllowed = MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets;
+          const filtered = refs.filter(r => r.type === 'reference').slice(0, maxAllowed);
+          setSelectedReferences(filtered);
+        }}
+        selectedAssets={selectedReferences}
+        filterType="reference"
+        title="Select Style References"
+        primaryColor="#8b5cf6"
+        maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets}
+      />
+
+      {/* Media Library Picker - Unified picker for all assets */}
+      <AssetPicker
+        brandId={brand.id}
+        isOpen={showMediaLibrary}
+        onClose={() => setShowMediaLibrary(false)}
+        onSelect={(selected) => {
+          // Split selected items by their type and enforce limits
+          const assets = selected.filter(a => a.type === 'asset').slice(0, MAX_HIGH_FIDELITY);
+          const maxRefs = MAX_TOTAL_IMAGES - autoIncludedImages - assets.length;
+          const refs = selected.filter(r => r.type === 'reference').slice(0, maxRefs);
+          setSelectedAssets(assets);
+          setSelectedReferences(refs);
+        }}
+        selectedAssets={[...selectedAssets, ...selectedReferences]}
+        filterType="all"
+        title="Media Library"
+        primaryColor={primaryColor}
+        maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages}
+        maxAssets={MAX_HIGH_FIDELITY}
+      />
     </div>
   );
 }

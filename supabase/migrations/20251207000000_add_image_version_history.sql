@@ -16,3 +16,5 @@ ADD COLUMN IF NOT EXISTS version_history jsonb DEFAULT '[]' NOT NULL;
 
 COMMENT ON COLUMN images.version_history IS 'Array of previous image versions with URLs, timestamps, and edit prompts';
 
+
+

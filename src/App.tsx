@@ -61,6 +61,10 @@ function BrandRoutes() {
   const handleUpdateBrand = async (updates: Partial<Brand>) => {
     if (!brand) return;
 
+    // Update optimistically in the UI immediately
+    setBrand(prev => prev ? { ...prev, ...updates, updated_at: new Date().toISOString() } : null);
+
+    // Save to database in the background
     await supabase
       .from('brands')
       .update({
@@ -75,7 +79,16 @@ function BrandRoutes() {
       })
       .eq('id', brand.id);
 
-    loadBrandBySlug(brand.slug);
+    // Silently refresh in the background without showing loading state
+    const { data } = await supabase
+      .from('brands')
+      .select('*')
+      .eq('slug', brand.slug)
+      .maybeSingle();
+    
+    if (data) {
+      setBrand(data);
+    }
   };
 
   const handleReExtract = async (): Promise<Partial<Brand> | null> => {
@@ -129,8 +142,8 @@ function BrandRoutes() {
 
   return (
     <>
-      <Navbar currentBrand={brand} credits={29} />
-      <div className="pt-16">
+      {brand.status !== 'extracting' && <Navbar currentBrand={brand} credits={29} />}
+      <div className={brand.status !== 'extracting' ? 'pt-16' : ''}>
         <Routes>
           <Route 
             index 

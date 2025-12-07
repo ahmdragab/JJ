@@ -80,3 +80,5 @@ WHERE slug IS NULL;
 -- Make slug NOT NULL after backfill
 ALTER TABLE brands ALTER COLUMN slug SET NOT NULL;
 
+
+
