@@ -151,10 +151,22 @@ export function AssetPicker({
   const processFiles = async (files: File[]) => {
     if (files.length === 0) return;
 
-    // Validate files
-    const invalidFiles = files.filter(f => !f.type.startsWith('image/'));
+    // Validate files - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
+    // SVG is NOT supported by Gemini API
+    const SUPPORTED_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
+    
+    const invalidFiles = files.filter(f => !SUPPORTED_TYPES.includes(f.type.toLowerCase()));
     if (invalidFiles.length > 0) {
-      alert('Please upload image files only');
+      const unsupportedNames = invalidFiles.map(f => f.name).join(', ');
+      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUnsupported files: ${unsupportedNames}`);
       return;
     }
 
@@ -334,7 +346,7 @@ export function AssetPicker({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/heic,image/heif,image/gif"
                 multiple
                 onChange={handleUpload}
                 className="hidden"

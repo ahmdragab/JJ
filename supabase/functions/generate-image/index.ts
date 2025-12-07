@@ -64,6 +64,7 @@ interface AssetInput {
   name: string;
   category?: string;
   role: 'must_include' | 'style_reference';
+  style_description?: string; // Optional: for style library references
 }
 
 interface ConversationMessage {
@@ -195,7 +196,8 @@ async function callGPT51(
   userPrompt: string,
   brand: Brand,
   assets: AssetInput[],
-  references: AssetInput[]
+  references: AssetInput[],
+  aspectRatio?: string | null  // User-selected aspect ratio (null/undefined/'auto' means let GPT decide)
 ): Promise<{ renderPlan: RenderPlan; promptInfo: GPTPromptInfo | null }> {
   if (!OPENAI_API_KEY) {
     // Fallback to simple prompt if no OpenAI key
@@ -221,7 +223,10 @@ IMPORTANT: These assets should be included prominently and accurately in the fin
     ? `STYLE REFERENCES (for mood/style inspiration only - DO NOT copy directly):
 These are reference images used ONLY for understanding style, mood, color palette, composition, and aesthetic. The image generation model should use these for inspiration but should NOT copy any specific elements, text, logos, or objects from them.
 
-${references.map(r => `- ${r.name} (${r.category || 'general'}): ${r.url}`).join('\n')}
+${references.map(r => {
+      const styleDesc = r.style_description ? `\n  Style description: ${r.style_description}` : '';
+      return `- ${r.name} (${r.category || 'general'}): ${r.url}${styleDesc}`;
+    }).join('\n')}
 
 IMPORTANT: These are style guides only. Use them to understand the desired aesthetic, but do not include any specific elements from these images in the final design.`
     : 'No user-selected style references provided.';
@@ -231,13 +236,24 @@ IMPORTANT: These are style guides only. Use them to understand the desired aesth
     referencesContext += `\n\nNOTE: The brand's website screenshot will also be automatically included as a style reference to help the image model understand the brand's actual design aesthetic and visual language.`;
   }
 
+  // Add aspect ratio constraint if user specified one
+  const aspectRatioContext = aspectRatio && aspectRatio !== 'auto'
+    ? `\n\nASPECT RATIO CONSTRAINT:
+The user has specified that the design MUST use aspect ratio: ${aspectRatio}
+- You MUST set "aspect_ratio" in your response to exactly "${aspectRatio}"
+- Optimize your design_notes and final_prompt for this specific aspect ratio
+- For vertical ratios (9:16, 2:3, 3:4, 4:5), suggest vertical compositions with elements stacked or arranged top-to-bottom
+- For square ratios (1:1), suggest balanced, centered compositions
+- For landscape ratios (16:9, 21:9, 3:2, 4:3, 5:4), suggest horizontal compositions with elements arranged left-to-right`
+    : '';
+
   const systemPrompt = `You are a design prompt architect. Your job is to take a user's simple request and transform it into a detailed, optimized prompt for an AI image generation model.
 
 ${brandContext}
 
 ${assetsContext}
 
-${referencesContext}
+${referencesContext}${aspectRatioContext}
 
 CRITICAL RULES:
 1. Understand what this brand does from the description above - ensure the design accurately reflects their industry, products, and services
@@ -257,7 +273,7 @@ You must respond with a valid JSON object matching this schema:
 {
   "channel": "linkedin_post | instagram_post | story | facebook_ad | twitter | youtube_thumbnail | general",
   "objective": "awareness | promo | announcement | hiring | product_launch | general",
-  "aspect_ratio": "1:1 | 2:3 | 3:4 | 4:5 | 9:16 | 3:2 | 4:3 | 5:4 | 16:9 | 21:9",
+  "aspect_ratio": "1:1 | 2:3 | 3:4 | 4:5 | 9:16 | 3:2 | 4:3 | 5:4 | 16:9 | 21:9"${aspectRatio && aspectRatio !== 'auto' ? ` (MUST be "${aspectRatio}" if user specified it)` : ' (recommend based on channel and content)'},
   "resolution": "1K | 2K | 4K (optional - recommend based on channel and use case. Use 2K for most social media, 4K for high-quality prints/ads, 1K for quick tests)",
   "headline": "compelling headline text or null if not needed",
   "subheadline": "supporting text or null",
@@ -275,7 +291,7 @@ RESOLUTION GUIDELINES:
 - For quick tests or low-priority content: Use "1K" (fastest, lowest cost)
 - Default to "2K" if unsure`;
 
-  const userMessage = `User's request: "${userPrompt}"
+  const userMessage = `User's request: "${userPrompt}"${aspectRatio && aspectRatio !== 'auto' ? `\n\nIMPORTANT: The user has specified aspect ratio "${aspectRatio}". You MUST use this exact aspect ratio in your response and optimize the design for this format.` : ''}
 
 Based on this request and the brand context, create a detailed render plan and final prompt for generating a high-quality, on-brand marketing visual.`;
 
@@ -804,6 +820,93 @@ Deno.serve(async (req: Request) => {
           text: `USER'S EDIT REQUEST: ${prompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.`,
         });
       }
+
+      // Add assets and references in edit mode too
+      // Add logo reference (always included unless disabled)
+      if (brand && includeLogoReference) {
+        const bestLogoUrl = getBestLogoUrl(brand);
+        if (bestLogoUrl) {
+          const logoData = await fetchImageAsBase64(bestLogoUrl);
+          if (logoData) {
+            parts.push({
+              text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
+            });
+            parts.push({
+              inline_data: {
+                mime_type: logoData.mimeType,
+                data: logoData.data,
+              },
+            });
+          }
+        }
+      }
+
+      // Add user-selected assets (must_include)
+      for (const asset of (assets as AssetInput[])) {
+        const assetData = await fetchImageAsBase64(asset.url);
+        if (assetData) {
+          parts.push({
+            text: `ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}). Include this prominently in the design:`,
+          });
+          parts.push({
+            inline_data: {
+              mime_type: assetData.mimeType,
+              data: assetData.data,
+            },
+          });
+        }
+      }
+
+      // Add backdrop/style references
+      if (brand?.backdrops?.length) {
+        const backdropData = await fetchImageAsBase64(brand.backdrops[0].url);
+        if (backdropData) {
+          parts.push({
+            text: "STYLE REFERENCE - Example of the brand's visual style. Use this for mood and style inspiration only, do not copy elements directly:",
+          });
+          parts.push({
+            inline_data: {
+              mime_type: backdropData.mimeType,
+              data: backdropData.data,
+            },
+          });
+        }
+      }
+
+      // Add website screenshot as style reference (always included if available)
+      if (brand?.screenshot) {
+        const screenshotData = await fetchImageAsBase64(brand.screenshot);
+        if (screenshotData) {
+          parts.push({
+            text: "STYLE REFERENCE - Website screenshot showing the brand's actual website design and visual style. Use this for understanding the brand's aesthetic, layout patterns, and design language. Use only for style inspiration, do NOT copy any text, logos, or specific UI elements:",
+          });
+          parts.push({
+            inline_data: {
+              mime_type: screenshotData.mimeType,
+              data: screenshotData.data,
+            },
+          });
+        }
+      }
+
+      // Add user-selected references (style_reference)
+      for (const ref of (references as AssetInput[])) {
+        const refData = await fetchImageAsBase64(ref.url);
+        if (refData) {
+          const styleDesc = ref.style_description 
+            ? ` Style: ${ref.style_description}.` 
+            : '';
+          parts.push({
+            text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
+          });
+          parts.push({
+            inline_data: {
+              mime_type: refData.mimeType,
+              data: refData.data,
+            },
+          });
+        }
+      }
     } else {
       // ================================================================
       // NEW: GPT-5.1 PROMPTING LAYER
@@ -813,11 +916,14 @@ Deno.serve(async (req: Request) => {
 
       if (brand) {
         // Use GPT-5.1 to generate optimized prompt
+        // Pass aspectRatio only if user specified one (not 'auto' or undefined)
+        const aspectRatioToPass = aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined;
         const gptResult = await callGPT51(
           prompt,
           brand,
           assets as AssetInput[],
-          references as AssetInput[]
+          references as AssetInput[],
+          aspectRatioToPass
         );
         renderPlan = gptResult.renderPlan;
         gptPromptInfo = gptResult.promptInfo;
@@ -903,8 +1009,11 @@ Deno.serve(async (req: Request) => {
       for (const ref of (references as AssetInput[])) {
         const refData = await fetchImageAsBase64(ref.url);
         if (refData) {
+          const styleDesc = ref.style_description 
+            ? ` Style: ${ref.style_description}.` 
+            : '';
           parts.push({
-            text: `STYLE REFERENCE - "${ref.name}". Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
+            text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
           });
           parts.push({
             inline_data: {

@@ -7,7 +7,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
 
 // Generate a slug from domain name
 export function generateSlug(domain: string): string {
@@ -199,6 +205,30 @@ export type BrandAsset = {
   category?: string;
   file_size?: number;
   mime_type?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StyleTags = {
+  mood?: string[];
+  visualType?: string[];
+  contentFormat?: string[];
+  businessModel?: string[];
+  industry?: string[];
+};
+
+export type Style = {
+  id: string;
+  name: string;
+  description?: string;
+  url: string;
+  category: string; // Kept for backward compatibility, but tags.mood should be used
+  tags?: StyleTags;
+  style_description?: string;
+  file_size?: number;
+  mime_type?: string;
+  display_order: number;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };

@@ -4,6 +4,7 @@ import { Landing } from './pages/Landing';
 import { BrandsList } from './pages/BrandsList';
 import { BrandKitEditor } from './pages/BrandKitEditor';
 import { Studio } from './pages/Studio';
+import { StylesAdmin } from './pages/StylesAdmin';
 import { Navbar } from './components/Navbar';
 import { supabase, Brand, generateSlug } from './lib/supabase';
 import { useState, useEffect } from 'react';
@@ -303,6 +304,19 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <BrandRoutes />
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/styles" 
+        element={
+          <ProtectedRoute>
+            <>
+              <Navbar credits={29} />
+              <div className="pt-16">
+                <StylesAdmin />
+              </div>
+            </>
           </ProtectedRoute>
         } 
       />

@@ -93,10 +93,22 @@ export function ReferenceUpload({
   // Process files (shared by both upload methods)
   const processFiles = async (files: File[]) => {
 
-    // Validate files
-    const invalidFiles = files.filter(f => !f.type.startsWith('image/'));
+    // Validate files - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
+    // SVG is NOT supported by Gemini API
+    const SUPPORTED_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
+    
+    const invalidFiles = files.filter(f => !SUPPORTED_TYPES.includes(f.type.toLowerCase()));
     if (invalidFiles.length > 0) {
-      alert('Please upload image files only');
+      const unsupportedNames = invalidFiles.map(f => f.name).join(', ');
+      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUnsupported files: ${unsupportedNames}`);
       return;
     }
 
@@ -251,7 +263,7 @@ export function ReferenceUpload({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg,image/jpg,image/webp,image/heic,image/heif,image/gif"
               multiple
               onChange={handleUpload}
               className="hidden"
@@ -274,7 +286,7 @@ export function ReferenceUpload({
                   Click to upload or drag and drop
                 </p>
                 <p className="text-xs text-slate-500">
-                  PNG, JPG, GIF up to 5MB
+                  PNG, JPEG, WEBP, HEIC, HEIF, GIF up to 5MB
                 </p>
               </div>
             )}

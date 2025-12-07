@@ -83,9 +83,20 @@ export function BrandKitEditor({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
+    // Validate file type - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
+    // SVG is NOT supported by Gemini API
+    const SUPPORTED_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
+    
+    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
+      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUploaded file: ${file.name}`);
       return;
     }
 
@@ -293,9 +304,20 @@ export function BrandKitEditor({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
+    // Validate file type - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
+    // SVG is NOT supported by Gemini API
+    const SUPPORTED_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
+    
+    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
+      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUploaded file: ${file.name}`);
       return;
     }
 
@@ -320,7 +342,14 @@ export function BrandKitEditor({
           upsert: false,
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Storage upload error:', error);
+        // Check if bucket doesn't exist
+        if (error.message?.includes('Bucket') || error.message?.includes('bucket')) {
+          throw new Error('Storage bucket not found. Please contact support or run database migrations.');
+        }
+        throw error;
+      }
 
       // Get public URL
       const { data: urlData } = supabase.storage
@@ -337,9 +366,19 @@ export function BrandKitEditor({
           [type]: logoUrl,
         },
       });
+      
+      // Auto-save the logo update
+      await handleSave({
+        ...localBrand,
+        logos: { 
+          ...localBrand.logos, 
+          [type]: logoUrl,
+        },
+      });
     } catch (error) {
       console.error('Logo upload failed:', error);
-      alert('Failed to upload logo. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to upload logo: ${errorMessage}`);
     } finally {
       setUploadingLogo(null);
       // Reset input

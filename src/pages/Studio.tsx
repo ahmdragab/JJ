@@ -15,17 +15,17 @@ import {
   Wand2,
   Clock,
   Edit3,
-  LayoutTemplate,
   ChevronUp,
   ChevronLeft,
   ChevronRight,
   FolderOpen,
   Palette
 } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, Template, ConversationMessage, BrandAsset } from '../lib/supabase';
+import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AssetPicker } from '../components/AssetPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
+import { StylesPicker } from '../components/StylesPicker';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -38,7 +38,8 @@ type EditingImage = {
 export function Studio({ brand }: { brand: Brand }) {
   const navigate = useNavigate();
   const [images, setImages] = useState<GeneratedImage[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
+  // TEMPLATES COMMENTED OUT
+  // const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   
@@ -66,18 +67,21 @@ export function Studio({ brand }: { brand: Brand }) {
     imageId: null,
   });
   
+  // TEMPLATES COMMENTED OUT
   // Template state
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
-  const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
-  const [showTemplatesSection, setShowTemplatesSection] = useState(false);
-  const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
+  // const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  // const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
+  // const [showTemplatesSection, setShowTemplatesSection] = useState(false);
+  // const [currentTemplateId, setCurrentTemplateId] = useState<string | null>(null);
   
   // Asset selection state
   const [selectedAssets, setSelectedAssets] = useState<BrandAsset[]>([]);
   const [selectedReferences, setSelectedReferences] = useState<BrandAsset[]>([]);
+  const [selectedStyles, setSelectedStyles] = useState<Style[]>([]);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
   const [showMediaPopover, setShowMediaPopover] = useState(false);
   const [showReferenceUpload, setShowReferenceUpload] = useState(false);
+  const [showStylesPicker, setShowStylesPicker] = useState(false);
   
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -98,9 +102,9 @@ export function Studio({ brand }: { brand: Brand }) {
   const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
   const MAX_TOTAL_IMAGES = 14; // Total including auto-included
 
-  // Calculate current counts
+  // Calculate current counts (styles count as references)
   const currentAssets = selectedAssets.length;
-  const currentReferences = selectedReferences.length;
+  const currentReferences = selectedReferences.length + selectedStyles.length;
   const currentTotal = currentAssets + currentReferences + autoIncludedImages;
 
   // Persist prompt to localStorage
@@ -153,7 +157,7 @@ export function Studio({ brand }: { brand: Brand }) {
   }, [prompt, editingImage]);
 
   const loadData = async () => {
-    await Promise.all([loadImages(), loadTemplates()]);
+    await Promise.all([loadImages()/*, loadTemplates()*/]);
     setLoading(false);
   };
 
@@ -172,36 +176,37 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  const loadTemplates = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: true });
+  // TEMPLATES COMMENTED OUT
+  // const loadTemplates = async () => {
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('templates')
+  //       .select('*')
+  //       .eq('is_active', true)
+  //       .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setTemplates(data || []);
-    } catch (error) {
-      console.error('Failed to load templates:', error);
-    }
-  };
+  //     if (error) throw error;
+  //     setTemplates(data || []);
+  //   } catch (error) {
+  //     console.error('Failed to load templates:', error);
+  //   }
+  // };
 
-  const buildPromptFromTemplate = (template: Template, fields: Record<string, string>): string => {
-    let prompt = template.prompt_template;
+  // const buildPromptFromTemplate = (template: Template, fields: Record<string, string>): string => {
+  //   let prompt = template.prompt_template;
     
-    // Replace field placeholders
-    for (const [key, value] of Object.entries(fields)) {
-      prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value);
-    }
+  //   // Replace field placeholders
+  //   for (const [key, value] of Object.entries(fields)) {
+  //     prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value);
+  //   }
     
-    // Handle conditional blocks {{#if field}}...{{/if}}
-    prompt = prompt.replace(/\{\{#if (\w+)\}\}(.*?)\{\{\/if\}\}/gs, (_, field, content) => {
-      return fields[field] ? content.replace(new RegExp(`{{${field}}}`, 'g'), fields[field]) : '';
-    });
+  //   // Handle conditional blocks {{#if field}}...{{/if}}
+  //   prompt = prompt.replace(/\{\{#if (\w+)\}\}(.*?)\{\{\/if\}\}/gs, (_, field, content) => {
+  //     return fields[field] ? content.replace(new RegExp(`{{${field}}}`, 'g'), fields[field]) : '';
+  //   });
     
-    return prompt;
-  };
+  //   return prompt;
+  // };
 
   const handleDeleteClick = (imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -243,12 +248,12 @@ export function Studio({ brand }: { brand: Brand }) {
         .insert({
           user_id: (await supabase.auth.getUser()).data.user?.id,
           brand_id: brand.id,
-          template_id: currentTemplateId || null,
+          template_id: null, // TEMPLATES COMMENTED OUT: currentTemplateId || null,
           prompt,
           status: 'generating',
           metadata: {
             aspect_ratio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
-            template_fields: currentTemplateId && templateFields ? templateFields : undefined,
+            // TEMPLATES COMMENTED OUT: template_fields: currentTemplateId && templateFields ? templateFields : undefined,
           },
           conversation: [],
         })
@@ -262,10 +267,31 @@ export function Studio({ brand }: { brand: Brand }) {
       setPrompt('');
       localStorage.removeItem(STORAGE_KEY);
       setInputFocused(false);
-      setCurrentTemplateId(null);
-      setTemplateFields({});
+      // TEMPLATES COMMENTED OUT
+      // setCurrentTemplateId(null);
+      // setTemplateFields({});
       setSelectedAssets([]);
       setSelectedReferences([]);
+      setSelectedStyles([]);
+
+      // Combine references and styles
+      const allReferences = [
+        ...selectedReferences.map(r => ({
+          id: r.id,
+          url: r.url,
+          name: r.name,
+          category: r.category,
+          role: 'style_reference' as const,
+        })),
+        ...selectedStyles.map(s => ({
+          id: s.id,
+          url: s.url,
+          name: s.name,
+          category: s.category,
+          role: 'style_reference' as const,
+          style_description: s.style_description,
+        })),
+      ];
 
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
@@ -287,13 +313,7 @@ export function Studio({ brand }: { brand: Brand }) {
               category: a.category,
               role: 'must_include',
             })),
-            references: selectedReferences.map(r => ({
-              id: r.id,
-              url: r.url,
-              name: r.name,
-              category: r.category,
-              role: 'style_reference',
-            })),
+            references: allReferences,
           }),
         }
       );
@@ -354,6 +374,30 @@ export function Studio({ brand }: { brand: Brand }) {
             editMode: true,
             previousImageUrl: editingImage.image_url,
             conversation: [...(fullImage.conversation || []), userMessage].slice(-5),
+            assets: selectedAssets.map(a => ({
+              id: a.id,
+              url: a.url,
+              name: a.name,
+              category: a.category,
+              role: 'must_include',
+            })),
+            references: [
+              ...selectedReferences.map(r => ({
+                id: r.id,
+                url: r.url,
+                name: r.name,
+                category: r.category,
+                role: 'style_reference' as const,
+              })),
+              ...selectedStyles.map(s => ({
+                id: s.id,
+                url: s.url,
+                name: s.name,
+                category: s.category,
+                role: 'style_reference' as const,
+                style_description: s.style_description,
+              })),
+            ],
           }),
         }
       );
@@ -366,6 +410,9 @@ export function Studio({ brand }: { brand: Brand }) {
       localStorage.removeItem(STORAGE_KEY);
       setEditingImage(null);
       setInputFocused(false);
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
       await loadImages();
       
     } catch (error) {
@@ -434,6 +481,30 @@ export function Studio({ brand }: { brand: Brand }) {
             editMode: true,
             previousImageUrl: selectedImage.image_url,
             conversation: updatedConversation.slice(-5),
+            assets: selectedAssets.map(a => ({
+              id: a.id,
+              url: a.url,
+              name: a.name,
+              category: a.category,
+              role: 'must_include',
+            })),
+            references: [
+              ...selectedReferences.map(r => ({
+                id: r.id,
+                url: r.url,
+                name: r.name,
+                category: r.category,
+                role: 'style_reference' as const,
+              })),
+              ...selectedStyles.map(s => ({
+                id: s.id,
+                url: s.url,
+                name: s.name,
+                category: s.category,
+                role: 'style_reference' as const,
+                style_description: s.style_description,
+              })),
+            ],
           }),
         }
       );
@@ -484,6 +555,9 @@ export function Studio({ brand }: { brand: Brand }) {
       // Revert to original image on error
       setSelectedImage(originalImage);
       setModalEditPrompt(editPromptText);
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
     } finally {
       setModalEditing(false);
     }
@@ -509,35 +583,36 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  const handleTemplateClick = (template: Template) => {
-    // If template has fields, show modal to fill them
-    if (template.fields && template.fields.length > 0) {
-      setSelectedTemplate(template);
-      setTemplateFields({});
-    } else {
-      // No fields, auto-fill the prompt
-      const prompt = buildPromptFromTemplate(template, {});
-      setPrompt(prompt);
-      setInputFocused(true);
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  };
+  // TEMPLATES COMMENTED OUT
+  // const handleTemplateClick = (template: Template) => {
+  //   // If template has fields, show modal to fill them
+  //   if (template.fields && template.fields.length > 0) {
+  //     setSelectedTemplate(template);
+  //     setTemplateFields({});
+  //   } else {
+  //     // No fields, auto-fill the prompt
+  //     const prompt = buildPromptFromTemplate(template, {});
+  //     setPrompt(prompt);
+  //     setInputFocused(true);
+  //     setTimeout(() => inputRef.current?.focus(), 100);
+  //   }
+  // };
 
-  const handleTemplateGenerate = async () => {
-    if (!selectedTemplate) return;
+  // const handleTemplateGenerate = async () => {
+  //   if (!selectedTemplate) return;
     
-    const prompt = buildPromptFromTemplate(selectedTemplate, templateFields);
-    const templateId = selectedTemplate.id;
+  //   const prompt = buildPromptFromTemplate(selectedTemplate, templateFields);
+  //   const templateId = selectedTemplate.id;
     
-    setSelectedTemplate(null);
-    setTemplateFields({});
-    setCurrentTemplateId(templateId);
+  //   setSelectedTemplate(null);
+  //   setTemplateFields({});
+  //   setCurrentTemplateId(templateId);
     
-    // Set the prompt and focus input
-    setPrompt(prompt);
-    setInputFocused(true);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
+  //   // Set the prompt and focus input
+  //   setPrompt(prompt);
+  //   setInputFocused(true);
+  //   setTimeout(() => inputRef.current?.focus(), 100);
+  // };
 
   const startEditing = (image: GeneratedImage, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -630,6 +705,24 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   }, [showModalEditPrompt]);
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    if (!selectedImage) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !showModalEditPrompt && !modalEditing) {
+        setSelectedImage(null);
+        setShowModalEditPrompt(false);
+        setModalEditPrompt('');
+        setGptPromptInfo(null);
+        setShowGptPrompt(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [selectedImage, showModalEditPrompt, modalEditing]);
+
   const aspectRatios: { value: AspectRatio; label: string }[] = [
     { value: 'auto', label: 'Auto (AI decides)' },
     { value: '1:1', label: 'Square (1:1)' },
@@ -670,8 +763,9 @@ export function Studio({ brand }: { brand: Brand }) {
       <div className="relative z-10 pb-40">
         <div className="p-6 md:p-12">
           <div className="max-w-7xl mx-auto">
+            {/* TEMPLATES COMMENTED OUT */}
             {/* Templates Section - Collapsible when images exist */}
-            {images.length > 0 && templates.length > 0 && (
+            {/* {images.length > 0 && templates.length > 0 && (
               <div className="mb-8">
                 <button
                   onClick={() => setShowTemplatesSection(!showTemplatesSection)}
@@ -722,62 +816,12 @@ export function Studio({ brand }: { brand: Brand }) {
                   </div>
                 )}
               </div>
-            )}
+            )} */}
 
-            {/* Gallery Grid or Templates (empty state) */}
+            {/* Gallery Grid or Empty State */}
             {images.length === 0 ? (
-              templates.length > 0 ? (
-                <div>
-                  <div className="text-center mb-8">
-                    <div 
-                      className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center"
-                      style={{ backgroundColor: `${primaryColor}10` }}
-                    >
-                      <ImageIcon className="w-8 h-8" style={{ color: primaryColor }} />
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">
-                      Get started with a template
-                    </h3>
-                    <p className="text-sm text-slate-600">
-                      Choose a template below or create from scratch using the input
-                    </p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {templates.map((template) => (
-                      <button
-                        key={template.id}
-                        onClick={() => handleTemplateClick(template)}
-                        className="group relative bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 hover:bg-white hover:shadow-lg hover:border-slate-300 transition-all text-left"
-                      >
-                        <div 
-                          className="w-full aspect-square rounded-lg mb-3 flex items-center justify-center"
-                          style={{ 
-                            backgroundColor: template.preview_color || `${primaryColor}15` 
-                          }}
-                        >
-                          <LayoutTemplate 
-                            className="w-8 h-8" 
-                            style={{ color: template.preview_color || primaryColor }}
-                          />
-                        </div>
-                        <h4 className="text-sm font-medium text-slate-900 mb-1">
-                          {template.name}
-                        </h4>
-                        {template.description && (
-                          <p className="text-xs text-slate-500 line-clamp-2">
-                            {template.description}
-                          </p>
-                        )}
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
-                          <Grid3x3 className="w-3 h-3" />
-                          <span>{template.aspect_ratio}</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
+              // TEMPLATES COMMENTED OUT - removed template empty state
+              (
                 <div className="text-center py-20">
                   <div className="max-w-md mx-auto">
                     <div 
@@ -1064,9 +1108,8 @@ export function Studio({ brand }: { brand: Brand }) {
                     </div>
                   )}
 
-                  {/* Media Button with Popover */}
-                  {!editingImage && (
-                    <div className="relative" ref={mediaPopoverRef}>
+                  {/* Media Button with Popover - Available for both new and edit modes */}
+                  <div className="relative" ref={mediaPopoverRef}>
                       <button
                         onClick={() => setShowMediaPopover(!showMediaPopover)}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
@@ -1075,14 +1118,14 @@ export function Studio({ brand }: { brand: Brand }) {
                         <FolderOpen className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Attach</span>
                         <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
-                        {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
+                        {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
                           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
                             style={{ 
                               backgroundColor: primaryColor,
                               color: 'white',
                             }}
                           >
-                            {selectedAssets.length + selectedReferences.length}
+                            {selectedAssets.length + selectedReferences.length + selectedStyles.length}
                           </span>
                         )}
                       </button>
@@ -1132,7 +1175,26 @@ export function Studio({ brand }: { brand: Brand }) {
                         </div>
                       )}
                     </div>
-                  )}
+
+                  {/* Styles Button - Next to Attach */}
+                  <button
+                    onClick={() => setShowStylesPicker(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                    title="Choose a style"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Styles</span>
+                    {selectedStyles.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                        style={{ 
+                          backgroundColor: primaryColor,
+                          color: 'white',
+                        }}
+                      >
+                        {selectedStyles.length}
+                      </span>
+                    )}
+                  </button>
 
                   {/* Enhance Prompt Button (placeholder) - Commented out */}
                   {false && !editingImage && (
@@ -1162,14 +1224,22 @@ export function Studio({ brand }: { brand: Brand }) {
         <div 
           className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4 md:p-8"
           onClick={(e) => {
-            // Don't close if clicking on the modal, edit prompt, or while editing
-            if (e.target === e.currentTarget && !showModalEditPrompt && !modalEditing) {
+            // Don't close if clicking on the modal content, edit prompt, or while editing
+            const target = e.target as HTMLElement;
+            // Check if click is on backdrop or outer container (not on modal content)
+            const isBackdrop = target === e.currentTarget || 
+                              target.getAttribute('data-backdrop') === 'true';
+            if (isBackdrop && !showModalEditPrompt && !modalEditing) {
               setSelectedImage(null);
+              setShowModalEditPrompt(false);
+              setModalEditPrompt('');
+              setGptPromptInfo(null);
+              setShowGptPrompt(false);
             }
           }}
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" data-backdrop="true" />
           
           {/* Modal Content */}
           <div 
@@ -1413,6 +1483,96 @@ export function Studio({ brand }: { brand: Brand }) {
                   />
 
                   <div className="flex items-center gap-2 shrink-0">
+                    {/* Attach Button for Modal Edit */}
+                    <div className="relative" ref={mediaPopoverRef}>
+                      <button
+                        onClick={() => setShowMediaPopover(!showMediaPopover)}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                        title="Attach files"
+                        disabled={modalEditing}
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Attach</span>
+                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
+                        {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
+                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                            style={{ 
+                              backgroundColor: primaryColor,
+                              color: 'white',
+                            }}
+                          >
+                            {selectedAssets.length + selectedReferences.length + selectedStyles.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Media Popover */}
+                      {showMediaPopover && (
+                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
+                          <button
+                            onClick={() => {
+                              setShowMediaLibrary(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
+                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
+                            </div>
+                          </button>
+                          
+                          <div className="h-px bg-slate-100 mx-2" />
+                          
+                          <button
+                            onClick={() => {
+                              setShowReferenceUpload(true);
+                              setShowMediaPopover(false);
+                            }}
+                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
+                          >
+                            <div 
+                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900">Add Reference</p>
+                              <p className="text-xs text-slate-500">Inspo / style images</p>
+                            </div>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Styles Button - Next to Attach (Modal Edit) */}
+                    <button
+                      onClick={() => setShowStylesPicker(true)}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                      title="Choose a style"
+                      disabled={modalEditing}
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Styles</span>
+                      {selectedStyles.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                          style={{ 
+                            backgroundColor: primaryColor,
+                            color: 'white',
+                          }}
+                        >
+                          {selectedStyles.length}
+                        </span>
+                      )}
+                    </button>
+
                     <button
                       onClick={() => {
                         setShowModalEditPrompt(false);
@@ -1449,8 +1609,9 @@ export function Studio({ brand }: { brand: Brand }) {
         </div>
       )}
 
+      {/* TEMPLATES COMMENTED OUT */}
       {/* Template Field Modal */}
-      {selectedTemplate && (
+      {/* {selectedTemplate && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={() => {
@@ -1458,15 +1619,12 @@ export function Studio({ brand }: { brand: Brand }) {
             setTemplateFields({});
           }}
         >
-          {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           
-          {/* Modal Content */}
           <div 
             className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button
               onClick={() => {
                 setSelectedTemplate(null);
@@ -1477,7 +1635,6 @@ export function Studio({ brand }: { brand: Brand }) {
               <X className="w-4 h-4" />
             </button>
 
-            {/* Header */}
             <div className="mb-6 pr-8">
               <h3 className="text-lg font-bold text-slate-900 mb-1">
                 {selectedTemplate.name}
@@ -1489,7 +1646,6 @@ export function Studio({ brand }: { brand: Brand }) {
               )}
             </div>
 
-            {/* Fields */}
             <div className="space-y-4 mb-6">
               {selectedTemplate.fields.map((field) => (
                 <div key={field.name}>
@@ -1513,7 +1669,6 @@ export function Studio({ brand }: { brand: Brand }) {
               ))}
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-3">
               <button
                 onClick={() => {
@@ -1539,7 +1694,7 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
@@ -1577,14 +1732,27 @@ export function Studio({ brand }: { brand: Brand }) {
         isOpen={showReferenceUpload}
         onClose={() => setShowReferenceUpload(false)}
         onSelect={(selected) => {
-          // Enforce limit: total images (including auto-included and assets) <= 14
-          const maxAllowed = MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets;
+          // Enforce limit: total images (including auto-included, assets, and styles) <= 14
+          const maxAllowed = MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets - selectedStyles.length;
           const filtered = selected.slice(0, maxAllowed);
           setSelectedReferences(filtered);
         }}
         selectedReferences={selectedReferences}
         primaryColor={primaryColor}
-        maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets}
+        maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets - selectedStyles.length}
+      />
+
+      {/* Styles Picker */}
+      <StylesPicker
+        isOpen={showStylesPicker}
+        onClose={() => setShowStylesPicker(false)}
+        onSelect={(selected) => {
+          // Maximum 2 styles allowed
+          const filtered = selected.slice(0, 2);
+          setSelectedStyles(filtered);
+        }}
+        selectedStyles={selectedStyles}
+        primaryColor={primaryColor}
       />
 
       <style>{`

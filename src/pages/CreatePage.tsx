@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2, LayoutTemplate, ChevronRight, ChevronDown, Grid3x3, Wand2, Check, ArrowLeft } from 'lucide-react';
-import { supabase, Brand, Template, GeneratedImage } from '../lib/supabase';
+import { Loader2, ChevronDown, Grid3x3, Wand2, Check } from 'lucide-react';
+import { supabase, Brand } from '../lib/supabase';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
 export function CreatePage({ brand }: { brand: Brand }) {
   const navigate = useNavigate();
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
-  const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
+  // TEMPLATES COMMENTED OUT
+  // const [templates, setTemplates] = useState<Template[]>([]);
+  // const [loading, setLoading] = useState(true);
+  // const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  // const [templateFields, setTemplateFields] = useState<Record<string, string>>({});
   const [scratchPrompt, setScratchPrompt] = useState('');
   const [generating, setGenerating] = useState(false);
-  const [mode, setMode] = useState<'choice' | 'template'>('choice');
-  const [templatesExpanded, setTemplatesExpanded] = useState(false);
+  // const [mode, setMode] = useState<'choice' | 'template'>('choice');
+  // const [templatesExpanded, setTemplatesExpanded] = useState(false);
   const [customPromptExpanded, setCustomPromptExpanded] = useState(false);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>('auto');
   const [showRatioDropdown, setShowRatioDropdown] = useState(false);
@@ -23,9 +24,10 @@ export function CreatePage({ brand }: { brand: Brand }) {
 
   const primaryColor = brand.colors?.primary || '#1a1a1a';
 
-  useEffect(() => {
-    loadTemplates();
-  }, []);
+  // TEMPLATES COMMENTED OUT
+  // useEffect(() => {
+  //   loadTemplates();
+  // }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -52,44 +54,45 @@ export function CreatePage({ brand }: { brand: Brand }) {
     };
   }, [showRatioDropdown, customPromptExpanded, scratchPrompt]);
 
-  const loadTemplates = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('templates')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: true });
+  // TEMPLATES COMMENTED OUT
+  // const loadTemplates = async () => {
+  //   try {
+  //     const { data, error } = await supabase
+  //       .from('templates')
+  //       .select('*')
+  //       .eq('is_active', true)
+  //       .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setTemplates(data || []);
-    } catch (error) {
-      console.error('Failed to load templates:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     if (error) throw error;
+  //     setTemplates(data || []);
+  //   } catch (error) {
+  //     console.error('Failed to load templates:', error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
-  const handleSelectTemplate = (template: Template) => {
-    setSelectedTemplate(template);
-    setTemplateFields({});
-    setMode('template');
-  };
+  // const handleSelectTemplate = (template: Template) => {
+  //   setSelectedTemplate(template);
+  //   setTemplateFields({});
+  //   setMode('template');
+  // };
 
-  const buildPromptFromTemplate = (template: Template, fields: Record<string, string>): string => {
-    let prompt = template.prompt_template;
+  // const buildPromptFromTemplate = (template: Template, fields: Record<string, string>): string => {
+  //   let prompt = template.prompt_template;
     
-    // Replace field placeholders
-    for (const [key, value] of Object.entries(fields)) {
-      prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value);
-    }
+  //   // Replace field placeholders
+  //   for (const [key, value] of Object.entries(fields)) {
+  //     prompt = prompt.replace(new RegExp(`{{${key}}}`, 'g'), value);
+  //   }
     
-    // Handle conditional blocks {{#if field}}...{{/if}}
-    prompt = prompt.replace(/\{\{#if (\w+)\}\}(.*?)\{\{\/if\}\}/gs, (_, field, content) => {
-      return fields[field] ? content.replace(new RegExp(`{{${field}}}`, 'g'), fields[field]) : '';
-    });
+  //   // Handle conditional blocks {{#if field}}...{{/if}}
+  //   prompt = prompt.replace(/\{\{#if (\w+)\}\}(.*?)\{\{\/if\}\}/gs, (_, field, content) => {
+  //     return fields[field] ? content.replace(new RegExp(`{{${field}}}`, 'g'), fields[field]) : '';
+  //   });
     
-    return prompt;
-  };
+  //   return prompt;
+  // };
 
   const handleGenerate = async (prompt: string, templateId?: string, metadata?: Record<string, unknown>) => {
     setGenerating(true);
@@ -145,15 +148,16 @@ export function CreatePage({ brand }: { brand: Brand }) {
     }
   };
 
-  const handleTemplateGenerate = () => {
-    if (!selectedTemplate) return;
+  // TEMPLATES COMMENTED OUT
+  // const handleTemplateGenerate = () => {
+  //   if (!selectedTemplate) return;
     
-    const prompt = buildPromptFromTemplate(selectedTemplate, templateFields);
-    handleGenerate(prompt, selectedTemplate.id, {
-      aspect_ratio: selectedTemplate.aspect_ratio,
-      template_fields: templateFields,
-    });
-  };
+  //   const prompt = buildPromptFromTemplate(selectedTemplate, templateFields);
+  //   handleGenerate(prompt, selectedTemplate.id, {
+  //     aspect_ratio: selectedTemplate.aspect_ratio,
+  //     template_fields: templateFields,
+  //   });
+  // };
 
   const handleScratchGenerate = () => {
     if (!scratchPrompt.trim()) return;
@@ -171,23 +175,25 @@ export function CreatePage({ brand }: { brand: Brand }) {
     }
   };
 
-  const getAspectRatioIcon = (ratio: string) => {
-    switch (ratio) {
-      case '1:1': return '□';
-      case '16:9': return '▬';
-      case '9:16': return '▮';
-      case '4:5': return '▯';
-      default: return '□';
-    }
-  };
+  // TEMPLATES COMMENTED OUT
+  // const getAspectRatioIcon = (ratio: string) => {
+  //   switch (ratio) {
+  //     case '1:1': return '□';
+  //     case '16:9': return '▬';
+  //     case '9:16': return '▮';
+  //     case '4:5': return '▯';
+  //     default: return '□';
+  //   }
+  // };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
-      </div>
-    );
-  }
+  // TEMPLATES COMMENTED OUT - removed loading state
+  // if (loading) {
+  //   return (
+  //     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+  //       <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 relative overflow-hidden">
@@ -205,9 +211,8 @@ export function CreatePage({ brand }: { brand: Brand }) {
 
       <div className="relative z-10 p-6 md:p-12">
         <div className="max-w-5xl mx-auto">
-          {/* Choice Mode */}
-          {mode === 'choice' && (
-            <div className="space-y-12">
+          {/* Free-form prompt input */}
+          <div className="space-y-12">
               {/* Custom Input Field */}
               <div className={`transition-all duration-300 ${customPromptExpanded ? 'max-w-5xl mx-auto' : 'max-w-4xl mx-auto'} mt-16`} ref={inputContainerRef}>
                 <div 
@@ -368,8 +373,9 @@ export function CreatePage({ brand }: { brand: Brand }) {
                 </div>
               </div>
 
+              {/* TEMPLATES COMMENTED OUT */}
               {/* Templates Grid */}
-              <div className="space-y-6">
+              {/* <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-slate-800 flex items-center gap-2">
                   <LayoutTemplate className="w-5 h-5" />
                   Templates
@@ -381,7 +387,6 @@ export function CreatePage({ brand }: { brand: Brand }) {
                       onClick={() => handleSelectTemplate(template)}
                       className="group relative bg-white/70 backdrop-blur-sm rounded-3xl p-6 text-left hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-200/50"
                     >
-                      {/* Aspect ratio preview */}
                       <div 
                         className="h-32 rounded-2xl mb-4 flex items-center justify-center text-4xl font-light text-white/80"
                         style={{ backgroundColor: template.preview_color || primaryColor }}
@@ -422,12 +427,12 @@ export function CreatePage({ brand }: { brand: Brand }) {
                     )}
                   </button>
                 )}
-              </div>
+              </div> */}
             </div>
-          )}
 
+          {/* TEMPLATES COMMENTED OUT */}
           {/* Template Mode */}
-          {mode === 'template' && selectedTemplate && (
+          {/* {mode === 'template' && selectedTemplate && (
             <div className="max-w-2xl mx-auto space-y-8">
               <button
                 onClick={() => {
@@ -493,7 +498,7 @@ export function CreatePage({ brand }: { brand: Brand }) {
                 </button>
               </div>
             </div>
-          )}
+          )} */}
 
         </div>
       </div>
