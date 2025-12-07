@@ -146,7 +146,13 @@ export function Navbar({ currentBrand, credits = 0 }: NavbarProps) {
                       <button
                         key={brand.id}
                         onClick={() => {
-                          navigate(`/brands/${brand.slug}`);
+                          // If on studio page, navigate to the selected brand's studio
+                          // Otherwise, navigate to the brand page
+                          if (isOnStudioPage) {
+                            navigate(`/brands/${brand.slug}/studio`);
+                          } else {
+                            navigate(`/brands/${brand.slug}`);
+                          }
                           setShowBrandMenu(false);
                         }}
                         className={`w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition-colors ${
