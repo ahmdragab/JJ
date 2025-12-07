@@ -136,7 +136,15 @@ export function CreatePage({ brand }: { brand: Brand }) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate image');
+        // Handle credit errors specifically
+        if (response.status === 402) {
+          alert(`Insufficient credits. You have ${data.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+        } else {
+          throw new Error(data.error || 'Failed to generate image');
+        }
+        // Delete the image record if generation failed
+        await supabase.from('images').delete().eq('id', imageRecord.id);
+        return;
       }
 
       // Navigate to the image editor
@@ -144,6 +152,7 @@ export function CreatePage({ brand }: { brand: Brand }) {
       
     } catch (error) {
       console.error('Failed to generate:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate image');
       setGenerating(false);
     }
   };

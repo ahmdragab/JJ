@@ -232,3 +232,27 @@ export type Style = {
   created_at: string;
   updated_at: string;
 };
+
+// Credit management functions
+export async function getUserCredits(): Promise<number> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { data, error } = await supabase
+    .from('user_credits')
+    .select('credits')
+    .eq('user_id', user.id)
+    .single();
+
+  if (error || !data) {
+    // If no record exists, return 0 (will be created on first use)
+    return 0;
+  }
+
+  return data.credits;
+}
+
+export async function checkHasCredits(required: number = 1): Promise<boolean> {
+  const credits = await getUserCredits();
+  return credits >= required;
+}

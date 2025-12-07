@@ -143,7 +143,7 @@ function BrandRoutes() {
 
   return (
     <>
-      {brand.status !== 'extracting' && <Navbar currentBrand={brand} credits={29} />}
+      {brand.status !== 'extracting' && <Navbar currentBrand={brand} />}
       <div className={brand.status !== 'extracting' ? 'pt-16' : ''}>
         <Routes>
           <Route 
@@ -276,7 +276,7 @@ function BrandsListWrapper() {
 
   return (
     <>
-      <Navbar credits={29} />
+      <Navbar />
       <div className="pt-16">
         <BrandsList
           onSelectBrand={(slug) => navigate(`/brands/${slug}`)}
@@ -312,7 +312,7 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <>
-              <Navbar credits={29} />
+              <Navbar />
               <div className="pt-16">
                 <StylesAdmin />
               </div>

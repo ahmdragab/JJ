@@ -319,7 +319,17 @@ export function Studio({ brand }: { brand: Brand }) {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to generate image');
+        const errorData = await response.json();
+        // Handle credit errors specifically
+        if (response.status === 402) {
+          alert(`Insufficient credits. You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+          // Remove the image record that was created
+          await supabase.from('images').delete().eq('id', imageRecord.id);
+          setImages(prev => prev.filter(img => img.id !== imageRecord.id));
+        } else {
+          throw new Error(errorData.error || 'Failed to generate image');
+        }
+        return;
       }
 
       // Capture GPT prompt info if available
@@ -334,6 +344,7 @@ export function Studio({ brand }: { brand: Brand }) {
       
     } catch (error) {
       console.error('Failed to generate:', error);
+      alert(error instanceof Error ? error.message : 'Failed to generate image');
     } finally {
       setGenerating(false);
     }

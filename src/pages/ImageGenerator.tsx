@@ -91,7 +91,13 @@ export function ImageGenerator({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to generate image');
+        // Handle credit errors specifically
+        if (response.status === 402) {
+          setError(`Insufficient credits. You have ${data.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+        } else {
+          setError(data.error || 'Failed to generate image');
+        }
+        return;
       }
 
       if (data.image_base64) {

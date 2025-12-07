@@ -10,14 +10,14 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, Brand } from '../lib/supabase';
+import { supabase, Brand, getUserCredits } from '../lib/supabase';
 
 interface NavbarProps {
   currentBrand?: Brand;
-  credits?: number;
+  credits?: number; // Optional - if not provided, will fetch automatically
 }
 
-export function Navbar({ currentBrand, credits = 0 }: NavbarProps) {
+export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
@@ -25,6 +25,7 @@ export function Navbar({ currentBrand, credits = 0 }: NavbarProps) {
   const [showBrandMenu, setShowBrandMenu] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [lastBrand, setLastBrand] = useState<Brand | null>(null);
+  const [credits, setCredits] = useState<number>(creditsProp ?? 0);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const brandMenuRef = useRef<HTMLDivElement>(null);
 
@@ -54,6 +55,51 @@ export function Navbar({ currentBrand, credits = 0 }: NavbarProps) {
       loadLastBrand();
     }
   }, [location.pathname, user, currentBrand]);
+
+  // Load credits if not provided as prop
+  useEffect(() => {
+    if (user && creditsProp === undefined) {
+      loadCredits();
+    } else if (creditsProp !== undefined) {
+      setCredits(creditsProp);
+    }
+  }, [user, creditsProp]);
+
+  // Subscribe to credit updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user_credits_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_credits',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newCredits = (payload.new as { credits: number }).credits;
+          setCredits(newCredits);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  const loadCredits = async () => {
+    if (!user) return;
+    try {
+      const userCredits = await getUserCredits();
+      setCredits(userCredits);
+    } catch (error) {
+      console.error('Failed to load credits:', error);
+    }
+  };
 
   const loadBrands = async () => {
     const { data } = await supabase

@@ -745,8 +745,10 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Fetch brand data
+    // Fetch brand data and get user_id
     let brand: Brand | null = null;
+    let userId: string | null = null;
+    
     if (brandId) {
       const { data: brandData } = await supabase
         .from("brands")
@@ -756,6 +758,47 @@ Deno.serve(async (req: Request) => {
 
       if (brandData) {
         brand = brandData as Brand;
+        userId = brandData.user_id;
+      }
+    }
+
+    // If we have imageId, get user_id from the image record (more reliable)
+    if (imageId && !userId) {
+      const { data: imageData } = await supabase
+        .from("images")
+        .select("user_id")
+        .eq("id", imageId)
+        .single();
+      
+      if (imageData) {
+        userId = imageData.user_id;
+      }
+    }
+
+    // Deduct credits for new generations (not edits)
+    if (!editMode && userId) {
+      const { data: creditDeducted, error: creditError } = await supabase.rpc('deduct_credit', {
+        user_uuid: userId,
+        amount: 1
+      });
+
+      if (creditError || !creditDeducted) {
+        // Get current credits for error message
+        const { data: creditsData } = await supabase
+          .from("user_credits")
+          .select("credits")
+          .eq("user_id", userId)
+          .single();
+
+        const currentCredits = creditsData?.credits ?? 0;
+        
+        return new Response(
+          JSON.stringify({ 
+            error: "Insufficient credits. Please purchase more credits to generate images.",
+            credits: currentCredits
+          }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
     }
 
