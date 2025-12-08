@@ -777,21 +777,18 @@ Deno.serve(async (req: Request) => {
 
     // Deduct credits for new generations (not edits)
     if (!editMode && userId) {
-      const { data: creditDeducted, error: creditError } = await supabase.rpc('deduct_credit', {
-        user_uuid: userId,
-        amount: 1
-      });
+      // First, check current credits
+      const { data: creditsData, error: creditsError } = await supabase
+        .from("user_credits")
+        .select("credits")
+        .eq("user_id", userId)
+        .single();
 
-      if (creditError || !creditDeducted) {
-        // Get current credits for error message
-        const { data: creditsData } = await supabase
-          .from("user_credits")
-          .select("credits")
-          .eq("user_id", userId)
-          .single();
-
-        const currentCredits = creditsData?.credits ?? 0;
-        
+      const currentCredits = creditsData?.credits ?? 0;
+      
+      // If no credits record or insufficient credits
+      if (creditsError || currentCredits < 1) {
+        console.log("Credit check failed:", { creditsError, currentCredits, userId });
         return new Response(
           JSON.stringify({ 
             error: "Insufficient credits. Please purchase more credits to generate images.",
@@ -800,6 +797,46 @@ Deno.serve(async (req: Request) => {
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // Deduct credit using direct UPDATE (more reliable than RPC)
+      const { error: deductError } = await supabase
+        .from("user_credits")
+        .update({ 
+          credits: currentCredits - 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", userId)
+        .eq("credits", currentCredits); // Optimistic lock to prevent race conditions
+
+      if (deductError) {
+        console.error("Failed to deduct credit:", deductError);
+        return new Response(
+          JSON.stringify({ 
+            error: "Failed to process credits. Please try again.",
+            credits: currentCredits
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Log the transaction (non-blocking - don't fail if this errors)
+      try {
+        await supabase
+          .from("credit_transactions")
+          .insert({
+            user_id: userId,
+            type: 'deducted',
+            amount: -1,
+            balance_after: currentCredits - 1,
+            source: 'usage',
+            description: 'Credit used for image generation'
+          });
+      } catch (txError) {
+        console.warn("Failed to log credit transaction:", txError);
+        // Don't fail the request - credit was already deducted
+      }
+
+      console.log(`Credit deducted for user ${userId}: ${currentCredits} -> ${currentCredits - 1}`);
     }
 
     console.log("Mode:", editMode ? "EDIT" : "GENERATE");

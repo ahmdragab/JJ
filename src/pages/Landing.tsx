@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowUp, FolderOpen, X, Mail, CheckCircle } from 'lucide-react';
+import { ArrowUp, FolderOpen, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import backgroundVideo from '../video.mp4';
 
@@ -18,7 +18,7 @@ export function Landing({
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showEmailConfirmation, setShowEmailConfirmation] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
   // Word slider for "designs"
   const words = ['designs', 'assets', 'ads', 'creatives', 'infographics', 'illustrations', 'posters'];
@@ -46,22 +46,30 @@ export function Landing({
     return () => clearTimeout(timer);
   }, [currentWordIndex]);
 
+  // Auto-start extraction when user logs in with a pending URL
+  useEffect(() => {
+    if (user && pendingUrl) {
+      onStart(pendingUrl);
+      setPendingUrl(null);
+      setUrl('');
+    }
+  }, [user, pendingUrl, onStart]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    setShowEmailConfirmation(false);
 
     try {
       if (isSignUp) {
         await signUp(email, password);
-        // Show email confirmation message instead of closing modal
-        setShowEmailConfirmation(true);
       } else {
         await signIn(email, password);
-        setShowAuth(false);
       }
+      // Close modal after successful auth - the useEffect will handle starting extraction if there's a pending URL
+      setShowAuth(false);
+      setEmail('');
+      setPassword('');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
@@ -72,6 +80,10 @@ export function Landing({
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
+      // Save the URL so we can start extraction after signup
+      if (url.trim()) {
+        setPendingUrl(url.trim());
+      }
       setIsSignUp(true);
       setShowAuth(true);
       setError('');
@@ -157,7 +169,7 @@ export function Landing({
             />
             <button
               type="submit"
-              className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-emerald-500 hover:bg-emerald-600"
+              className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600"
             >
               <ArrowUp className="w-4 h-4" />
             </button>
@@ -207,6 +219,7 @@ export function Landing({
           onClick={() => {
             setShowAuth(false);
             setError('');
+            setPendingUrl(null);
           }}
         >
           {/* Backdrop with blur */}
@@ -222,63 +235,21 @@ export function Landing({
               onClick={() => {
                 setShowAuth(false);
                 setError('');
-                setShowEmailConfirmation(false);
                 setEmail('');
                 setPassword('');
+                setPendingUrl(null);
               }}
               className="absolute top-4 right-4 w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* Email Confirmation Message */}
-            {showEmailConfirmation ? (
-              <div className="text-center py-4">
-                <div className="flex justify-center mb-4">
-                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
-                    <Mail className="w-8 h-8 text-emerald-600" />
-                  </div>
-                </div>
-                <h2 className="text-2xl font-bold text-slate-900 mb-3">
-                  Check your email
-                </h2>
-                <p className="text-slate-600 mb-2">
-                  We've sent a confirmation link to
-                </p>
-                <p className="text-slate-900 font-medium mb-6">{email}</p>
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 mb-6">
-                  <div className="flex items-start gap-3">
-                    <CheckCircle className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-left">
-                      <p className="text-sm text-emerald-900 font-medium mb-1">
-                        Next steps
-                      </p>
-                      <p className="text-sm text-emerald-700">
-                        Click the confirmation link in the email to verify your account and start creating.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setShowAuth(false);
-                    setShowEmailConfirmation(false);
-                    setEmail('');
-                    setPassword('');
-                  }}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg transition-all shadow-lg hover:shadow-xl"
-                >
-                  Got it
-                </button>
-              </div>
-            ) : (
-              <>
-                {/* Title */}
-                <h2 className="text-2xl font-bold text-slate-900 mb-6 pr-8">
-                  {isSignUp ? 'Create Account' : 'Sign In'}
-                </h2>
+            {/* Title */}
+            <h2 className="text-2xl font-bold text-slate-900 mb-6 pr-8">
+              {isSignUp ? 'Create Account' : 'Sign In'}
+            </h2>
 
-                <form onSubmit={handleAuth} className="space-y-5">
+            <form onSubmit={handleAuth} className="space-y-5">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Email
@@ -287,7 +258,7 @@ export function Landing({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white"
                   required
                 />
               </div>
@@ -300,7 +271,7 @@ export function Landing({
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all bg-white"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white"
                   required
                 />
               </div>
@@ -314,28 +285,26 @@ export function Landing({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                className="w-full py-3.5 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
               >
                 {loading ? 'Please wait...' : isSignUp ? 'Sign Up' : 'Sign In'}
               </button>
             </form>
 
-                <div className="mt-6 text-center">
-                  <button
-                    onClick={() => {
-                      setIsSignUp(!isSignUp);
-                      setError('');
-                    }}
-                    className="text-sm text-slate-600 hover:text-emerald-600 transition-colors"
-                  >
-                    {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-                    <span className="font-medium text-emerald-600 hover:text-emerald-700">
-                      {isSignUp ? 'Sign in' : 'Sign up'}
-                    </span>
-                  </button>
-                </div>
-              </>
-            )}
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setError('');
+                }}
+                className="text-sm text-slate-600 hover:text-indigo-600 transition-colors"
+              >
+                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                <span className="font-medium text-indigo-600 hover:text-indigo-700">
+                  {isSignUp ? 'Sign in' : 'Sign up'}
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       )}

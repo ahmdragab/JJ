@@ -175,22 +175,28 @@ BEGIN
   VALUES (NEW.id, 20, 20)
   ON CONFLICT (user_id) DO NOTHING;
   
-  -- Record the initial transaction
-  INSERT INTO credit_transactions (
-    user_id,
-    type,
-    amount,
-    balance_after,
-    source,
-    description
-  ) VALUES (
-    NEW.id,
-    'granted',
-    20,
-    20,
-    'signup',
-    'Welcome credits for new user'
-  );
+  -- Record the initial transaction (wrap in exception handling to not break signup)
+  BEGIN
+    INSERT INTO credit_transactions (
+      user_id,
+      type,
+      amount,
+      balance_after,
+      source,
+      description
+    ) VALUES (
+      NEW.id,
+      'granted',
+      20,
+      20,
+      'signup',
+      'Welcome credits for new user'
+    );
+  EXCEPTION WHEN OTHERS THEN
+    -- If transaction insert fails, log but don't fail the signup
+    -- The credits were already added successfully
+    RAISE WARNING 'Failed to create credit transaction for user %: %', NEW.id, SQLERRM;
+  END;
   
   RETURN NEW;
 END;
