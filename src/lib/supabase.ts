@@ -238,18 +238,22 @@ export async function getUserCredits(): Promise<number> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return 0;
 
-  const { data, error } = await supabase
-    .from('user_credits')
-    .select('credits')
-    .eq('user_id', user.id)
-    .single();
+  // Use get_or_create_credits function - creates credits if they don't exist
+  // No parameters needed - function uses auth.uid() internally for security
+  const { data, error } = await supabase.rpc('get_or_create_credits');
 
-  if (error || !data) {
-    // If no record exists, return 0 (will be created on first use)
-    return 0;
+  if (error) {
+    console.error('Error getting credits:', error);
+    // Fallback to direct query
+    const { data: fallbackData } = await supabase
+      .from('user_credits')
+      .select('credits')
+      .eq('user_id', user.id)
+      .single();
+    return fallbackData?.credits ?? 0;
   }
 
-  return data.credits;
+  return data ?? 0;
 }
 
 export async function checkHasCredits(required: number = 1): Promise<boolean> {
