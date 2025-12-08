@@ -107,6 +107,9 @@ export function StylesPicker({
     industry: 'Industry',
   };
 
+  // Get all tags grouped by category (must be defined before filteredStyles uses it)
+  const tagsByCategory = getTagsByCategory();
+
   // Filter styles by selected tags
   // OR within same category, AND across different categories
   const filteredStyles = styles.filter(style => {
@@ -153,8 +156,6 @@ export function StylesPicker({
       );
     });
   });
-
-  const tagsByCategory = getTagsByCategory();
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => {

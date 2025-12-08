@@ -96,3 +96,4 @@ GROUP BY credit_range
 ORDER BY credit_range;
 ```
 
+

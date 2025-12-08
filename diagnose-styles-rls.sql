@@ -51,3 +51,4 @@ WHERE schemaname = 'storage'
   AND policyname LIKE '%styles%'
 ORDER BY policyname;
 
+

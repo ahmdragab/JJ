@@ -124,9 +124,11 @@ export function ImageEditor({ brand }: { brand: Brand }) {
     }
 
     setEditing(true);
+    // Save the prompt before clearing it
+    const promptText = editPrompt.trim();
     const userMessage: ConversationMessage = {
       role: 'user',
-      content: editPrompt,
+      content: promptText,
       timestamp: new Date().toISOString(),
     };
 
@@ -145,7 +147,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
-            prompt: editPrompt,
+            prompt: promptText,
             brandId: brand.id,
             imageId: image.id,
             editMode: true,

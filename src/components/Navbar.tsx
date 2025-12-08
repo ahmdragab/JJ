@@ -240,7 +240,6 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
             <div className="hidden md:flex items-center pointer-events-auto">
               <div className="flex items-center gap-1 px-4 py-1.5 rounded-full bg-white/30 backdrop-blur-sm">
                 <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-sm text-slate-600">Studio</span>
               </div>
             </div>
           )}
@@ -267,7 +266,6 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                 }}
               >
                 <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline">Studio</span>
               </button>
             )}
 

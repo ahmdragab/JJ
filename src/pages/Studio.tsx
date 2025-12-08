@@ -26,6 +26,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AssetPicker } from '../components/AssetPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
 import { StylesPicker } from '../components/StylesPicker';
+import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -83,6 +84,11 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showReferenceUpload, setShowReferenceUpload] = useState(false);
   const [showStylesPicker, setShowStylesPicker] = useState(false);
   
+  // Smart presets state
+  const [smartPresets, setSmartPresets] = useState<SmartPreset[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(false);
+  const [showPresetsModal, setShowPresetsModal] = useState(false);
+  
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
   const ratioDropdownRef = useRef<HTMLDivElement>(null);
@@ -116,6 +122,20 @@ export function Studio({ brand }: { brand: Brand }) {
     const savedPrompt = localStorage.getItem(STORAGE_KEY);
     if (savedPrompt) {
       setPrompt(savedPrompt);
+    }
+    
+    // Load smart presets
+    if (brand) {
+      setLoadingPresets(true);
+      generateSmartPresets(brand)
+        .then(presets => {
+          setSmartPresets(presets);
+          setLoadingPresets(false);
+        })
+        .catch(error => {
+          console.error('Failed to load presets:', error);
+          setLoadingPresets(false);
+        });
     }
   }, [brand.id]);
 
@@ -235,6 +255,19 @@ export function Studio({ brand }: { brand: Brand }) {
       setDeleting(null);
       setConfirmDelete({ isOpen: false, imageId: null });
     }
+  };
+
+  const handlePresetClick = (preset: SmartPreset) => {
+    // Set the prompt and aspect ratio
+    setPrompt(preset.prompt);
+    setSelectedAspectRatio(preset.aspectRatio);
+    setInputFocused(true);
+    
+    // Focus input and scroll to it
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
   };
 
   const handleGenerate = async () => {
@@ -831,25 +864,101 @@ export function Studio({ brand }: { brand: Brand }) {
 
             {/* Gallery Grid or Empty State */}
             {images.length === 0 ? (
-              // TEMPLATES COMMENTED OUT - removed template empty state
-              (
-                <div className="text-center py-20">
-                  <div className="max-w-md mx-auto">
-                    <div 
-                      className="w-24 h-24 rounded-3xl mx-auto mb-6 flex items-center justify-center"
-                      style={{ backgroundColor: `${primaryColor}10` }}
-                    >
-                      <ImageIcon className="w-12 h-12" style={{ color: primaryColor }} />
-                    </div>
-                    <h3 className="text-2xl font-bold text-slate-800 mb-3">
-                      No images yet
+              <div className="space-y-12">
+                {/* Smart Presets Section */}
+                <div>
+                  <div className="mb-6">
+                    <h3 className="text-2xl font-bold text-slate-800 mb-2">
+                      Quick Start with Smart Presets
                     </h3>
-                    <p className="text-slate-600 mb-6">
-                      Start creating on-brand images using the input below
+                    <p className="text-slate-600">
+                      Personalized suggestions based on <span className="font-semibold">{brand.name}</span>
                     </p>
                   </div>
+                  
+                  {loadingPresets ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                      <span className="ml-3 text-slate-600">Generating smart presets...</span>
+                    </div>
+                  ) : smartPresets.length > 0 ? (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {smartPresets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          onClick={() => handlePresetClick(preset)}
+                          className="group relative bg-white rounded-xl p-4 border-2 border-slate-200 hover:shadow-lg transition-all text-left"
+                          style={{
+                            borderColor: 'rgb(226 232 240)',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = primaryColor;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = 'rgb(226 232 240)';
+                          }}
+                        >
+                          {/* Icon & Aspect Ratio */}
+                          <div className="flex items-center justify-between mb-3">
+                            <div 
+                              className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                              style={{ backgroundColor: `${primaryColor}10` }}
+                            >
+                              {preset.icon}
+                            </div>
+                            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                              {preset.aspectRatio}
+                            </span>
+                          </div>
+                          
+                          {/* Label & Category */}
+                          <h4 className="font-semibold text-slate-900 mb-1 text-sm">
+                            {preset.label}
+                          </h4>
+                          <p className="text-xs text-slate-500 mb-3">
+                            {preset.category}
+                          </p>
+                          
+                          {/* Smart Indicator */}
+                          {preset.smartContext?.whyRelevant && (
+                            <div 
+                              className="flex items-center gap-1 text-xs"
+                              style={{ color: primaryColor }}
+                            >
+                              <Sparkles className="w-3 h-3" />
+                              <span>{preset.smartContext.whyRelevant}</span>
+                            </div>
+                          )}
+                          
+                          {/* Hover Effect */}
+                          <div 
+                            className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-50 group-hover:to-transparent rounded-xl transition-all pointer-events-none" 
+                            style={{ 
+                              background: `linear-gradient(to bottom right, ${primaryColor}15, transparent)`
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-500">
+                      <p>Unable to load presets. You can still create images using the input below.</p>
+                    </div>
+                  )}
                 </div>
-              )
+                
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-4 bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 text-slate-500">
+                      Or write your own prompt below
+                    </span>
+                  </div>
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
                 {images.map((image) => (
@@ -922,13 +1031,6 @@ export function Studio({ brand }: { brand: Brand }) {
                           </div>
                         </div>
                       </div>
-
-                      {/* Status badge */}
-                      {image.status === 'generating' && (
-                        <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">
-                          Creating
-                        </div>
-                      )}
                       
                       {/* Edit count badge */}
                       {image.edit_count > 0 && (
@@ -971,6 +1073,19 @@ export function Studio({ brand }: { brand: Brand }) {
                 className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors shrink-0"
               >
                 <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Smart Presets Link - Only show when not editing and images exist */}
+          {!editingImage && images.length > 0 && smartPresets.length > 0 && (
+            <div className="mb-2 flex items-center justify-center">
+              <button
+                onClick={() => setShowPresetsModal(true)}
+                className="text-xs text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1.5"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Browse smart presets</span>
               </button>
             </div>
           )}
@@ -1754,6 +1869,115 @@ export function Studio({ brand }: { brand: Brand }) {
       />
 
       {/* Styles Picker */}
+      {/* Smart Presets Modal */}
+      {showPresetsModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowPresetsModal(false)}
+        >
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          
+          <div 
+            className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">
+                  Smart Presets
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Personalized suggestions for <span className="font-semibold">{brand.name}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPresetsModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Presets Grid */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingPresets ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                  <span className="ml-3 text-slate-600">Loading presets...</span>
+                </div>
+              ) : smartPresets.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {smartPresets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => {
+                        handlePresetClick(preset);
+                        setShowPresetsModal(false);
+                      }}
+                      className="group relative bg-white rounded-xl p-4 border-2 border-slate-200 hover:shadow-lg transition-all text-left"
+                      style={{
+                        borderColor: 'rgb(226 232 240)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = primaryColor;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'rgb(226 232 240)';
+                      }}
+                    >
+                      {/* Icon & Aspect Ratio */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div 
+                          className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
+                          style={{ backgroundColor: `${primaryColor}10` }}
+                        >
+                          {preset.icon}
+                        </div>
+                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
+                          {preset.aspectRatio}
+                        </span>
+                      </div>
+                      
+                      {/* Label & Category */}
+                      <h4 className="font-semibold text-slate-900 mb-1 text-sm">
+                        {preset.label}
+                      </h4>
+                      <p className="text-xs text-slate-500 mb-3">
+                        {preset.category}
+                      </p>
+                      
+                      {/* Smart Indicator */}
+                      {preset.smartContext?.whyRelevant && (
+                        <div 
+                          className="flex items-center gap-1 text-xs"
+                          style={{ color: primaryColor }}
+                        >
+                          <Sparkles className="w-3 h-3" />
+                          <span>{preset.smartContext.whyRelevant}</span>
+                        </div>
+                      )}
+                      
+                      {/* Hover Effect */}
+                      <div 
+                        className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-50 group-hover:to-transparent rounded-xl transition-all pointer-events-none" 
+                        style={{ 
+                          background: `linear-gradient(to bottom right, ${primaryColor}15, transparent)`
+                        }}
+                      />
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-500">
+                  <p>No presets available. You can still create images using the input below.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <StylesPicker
         isOpen={showStylesPicker}
         onClose={() => setShowStylesPicker(false)}

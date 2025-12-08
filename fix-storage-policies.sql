@@ -58,3 +58,4 @@ WHERE schemaname = 'storage'
   AND (policyname LIKE '%styles%' OR qual::text LIKE '%styles%')
 ORDER BY policyname;
 
+

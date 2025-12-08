@@ -243,3 +243,4 @@ SELECT process_subscription_renewals();
 - Consider adding indexes for frequently queried fields
 - You may want to add a `credit_expiration` feature later (credits expire after X days)
 
+

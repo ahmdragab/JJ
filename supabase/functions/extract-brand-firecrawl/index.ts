@@ -301,6 +301,32 @@ serve(async (req: Request) => {
       }
     }
 
+    // Trigger brand style analysis asynchronously (don't wait for it)
+    if (brandData.screenshot) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      
+      // Call analyze-brand-style function asynchronously
+      const styleAnalysisUrl = `${supabaseUrl}/functions/v1/analyze-brand-style`;
+      const pageImageUrls = (brandData.page_images || []).slice(0, 3).map(img => img.url);
+      
+      fetch(styleAnalysisUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          brandId: brandId,
+          screenshotUrl: brandData.screenshot,
+          pageImageUrls: pageImageUrls,
+        }),
+      }).catch(error => {
+        console.error('Failed to trigger style analysis (non-blocking):', error);
+        // Don't fail the extraction if style analysis fails
+      });
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

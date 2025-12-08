@@ -23,9 +23,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      (async () => {
-        setUser(session?.user ?? null);
-      })();
+      setUser(prevUser => {
+        const newUser = session?.user ?? null;
+        // Only update if user ID actually changed to prevent unnecessary re-renders
+        // This prevents flicker when token refreshes on tab focus
+        if (prevUser?.id === newUser?.id) {
+          return prevUser;
+        }
+        return newUser;
+      });
     });
 
     return () => subscription.unsubscribe();

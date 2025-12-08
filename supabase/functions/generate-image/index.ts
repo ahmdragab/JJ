@@ -55,6 +55,29 @@ interface Brand {
       background?: string;
       text?: string;
     };
+    style_profile?: {
+      layout_density?: 'minimal' | 'medium' | 'dense';
+      whitespace?: 'high' | 'medium' | 'low';
+      shape_language?: string[];
+      imagery_type?: string[];
+      color_usage?: {
+        contrast?: 'dark-on-light' | 'light-on-dark' | 'mixed';
+        gradients?: boolean;
+        duotone_overlays?: boolean;
+      };
+      typography_feeling?: {
+        category?: 'geometric sans' | 'grotesk' | 'serif' | 'condensed' | 'mixed';
+        headline_style?: 'loud' | 'understated' | 'balanced';
+      };
+      motion_energy?: 'calm' | 'moderate' | 'dynamic';
+      brand_archetype?: string[];
+      design_elements?: {
+        shadows?: 'none' | 'subtle' | 'prominent';
+        borders?: 'none' | 'thin' | 'thick';
+        patterns?: boolean;
+        textures?: boolean;
+      };
+    };
   };
 }
 
@@ -144,7 +167,23 @@ function describeColor(hex: string): string {
   return `color ${hex}`;
 }
 
-function buildBrandContext(brand: Brand): string {
+function buildBrandContext(brand: Brand): { hardConstraints: string; softGuidelines: string } {
+  // ============================================================================
+  // HARD CONSTRAINTS (Identity Level - MUST OBEY)
+  // ============================================================================
+  const hardConstraints: string[] = [];
+
+  // Brand identity
+  hardConstraints.push(`BRAND: ${brand.name}`);
+  if (brand.slogan) hardConstraints.push(`Tagline: "${brand.slogan}"`);
+  if (brand.domain) hardConstraints.push(`Domain: ${brand.domain}`);
+
+  // Brand description
+  if (brand.styleguide?.summary) {
+    hardConstraints.push(`\nWHAT THIS BRAND DOES:\n${brand.styleguide.summary}\n\nThis description is essential - use it to ensure the design accurately represents what ${brand.name} does and their industry/domain.`);
+  }
+
+  // Colors (STRICT - identity level)
   const colors: string[] = [];
   if (brand.colors.primary) {
     colors.push(`- Primary: ${brand.colors.primary} (${describeColor(brand.colors.primary)})`);
@@ -156,36 +195,137 @@ function buildBrandContext(brand: Brand): string {
     colors.push(`- Background: ${brand.colors.background} (${describeColor(brand.colors.background)})`);
   }
 
+  if (colors.length > 0) {
+    hardConstraints.push(`\nCOLORS (STRICT - USE ONLY THESE):\n${colors.join('\n')}\n\nIMPORTANT: Only use the exact brand colors listed above. Do not introduce colors that are not part of the brand palette.`);
+  } else {
+    hardConstraints.push(`\nCOLORS: Use modern, professional colors`);
+  }
+
+  // Logo requirement
+  hardConstraints.push(`\nLOGO: The brand logo MUST be included in every design. This is non-negotiable.`);
+
+  // Typography category (identity level)
+  if (brand.fonts?.heading || brand.fonts?.body) {
+    const typography: string[] = [];
+    if (brand.fonts.heading) typography.push(`Heading font: ${brand.fonts.heading}`);
+    if (brand.fonts.body) typography.push(`Body font: ${brand.fonts.body}`);
+    hardConstraints.push(`\nTYPOGRAPHY:\n${typography.join('\n')}`);
+  }
+
+  // Voice & tone (identity level)
   const voice: string[] = [];
   if (brand.voice?.formality) voice.push(`Formality: ${brand.voice.formality}`);
   if (brand.voice?.energy) voice.push(`Energy: ${brand.voice.energy}`);
   if (brand.voice?.adjectives?.length) voice.push(`Adjectives: ${brand.voice.adjectives.join(', ')}`);
+  if (brand.voice?.keywords?.length) voice.push(`Keywords: ${brand.voice.keywords.join(', ')}`);
 
-  // Build brand description section - this is critical for understanding what the brand does
-  let brandDescription = '';
-  if (brand.styleguide?.summary) {
-    brandDescription = `\n\nWHAT THIS BRAND DOES:\n${brand.styleguide.summary}\n\nThis description is essential - use it to ensure the design accurately represents what ${brand.name} does and their industry/domain.`;
+  if (voice.length > 0) {
+    hardConstraints.push(`\nVOICE & TONE:\n${voice.join('\n')}`);
+  } else {
+    hardConstraints.push(`\nVOICE & TONE: Professional and approachable`);
   }
 
-  return `
-BRAND: ${brand.name}
-${brand.slogan ? `Tagline: "${brand.slogan}"` : ''}
-${brand.domain ? `Domain: ${brand.domain}` : ''}${brandDescription}
+  // ============================================================================
+  // SOFT GUIDELINES (Style Level - BIAS TOWARDS, but allowed to deviate)
+  // ============================================================================
+  const softGuidelines: string[] = [];
 
-COLORS (STRICT - USE ONLY THESE):
-${colors.length > 0 ? colors.join('\n') : 'Use modern, professional colors'}
-${colors.length > 0 ? '\nIMPORTANT: Only use the exact brand colors listed above. Do not introduce colors that are not part of the brand palette.' : ''}
+  // Theme/mode preference
+  if (brand.styleguide?.mode) {
+    softGuidelines.push(`Theme preference: ${brand.styleguide.mode} (but can adapt if needed)`);
+  }
 
-TYPOGRAPHY:
-${brand.fonts?.heading ? `- Heading font: ${brand.fonts.heading}` : '- Use clean, modern heading font'}
-${brand.fonts?.body ? `- Body font: ${brand.fonts.body}` : '- Use readable body font'}
+  // Style profile (if available)
+  const styleProfile = brand.styleguide?.style_profile;
+  if (styleProfile) {
+    softGuidelines.push(`\nBRAND STYLE PROFILE (use as design principles, not rigid templates):`);
 
-VOICE & TONE:
-${voice.length > 0 ? voice.join('\n') : 'Professional and approachable'}
-${brand.voice?.keywords?.length ? `Keywords: ${brand.voice.keywords.join(', ')}` : ''}
+    // Layout & spacing
+    if (styleProfile.layout_density) {
+      softGuidelines.push(`- Layout density: ${styleProfile.layout_density} (bias towards this, but can vary)`);
+    }
+    if (styleProfile.whitespace) {
+      softGuidelines.push(`- Whitespace: ${styleProfile.whitespace} (prefer this level, but can adjust)`);
+    }
 
-THEME: ${brand.styleguide?.mode || 'auto'}
-`.trim();
+    // Shape language
+    if (styleProfile.shape_language && styleProfile.shape_language.length > 0) {
+      softGuidelines.push(`- Shape language: ${styleProfile.shape_language.join(', ')} (prefer these shapes, but can explore others)`);
+    }
+
+    // Imagery type
+    if (styleProfile.imagery_type && styleProfile.imagery_type.length > 0) {
+      softGuidelines.push(`- Imagery type: ${styleProfile.imagery_type.join(', ')} (bias towards these, but can mix)`);
+    }
+
+    // Color usage patterns
+    if (styleProfile.color_usage) {
+      const colorUsage: string[] = [];
+      if (styleProfile.color_usage.contrast) {
+        colorUsage.push(`contrast: ${styleProfile.color_usage.contrast}`);
+      }
+      if (styleProfile.color_usage.gradients) {
+        colorUsage.push(`gradients: ${styleProfile.color_usage.gradients ? 'yes' : 'no'}`);
+      }
+      if (styleProfile.color_usage.duotone_overlays) {
+        colorUsage.push(`duotone/overlays: ${styleProfile.color_usage.duotone_overlays ? 'yes' : 'no'}`);
+      }
+      if (colorUsage.length > 0) {
+        softGuidelines.push(`- Color usage: ${colorUsage.join(', ')} (prefer these patterns, but can vary)`);
+      }
+    }
+
+    // Typography feeling
+    if (styleProfile.typography_feeling) {
+      const typoFeeling: string[] = [];
+      if (styleProfile.typography_feeling.category) {
+        typoFeeling.push(`category: ${styleProfile.typography_feeling.category}`);
+      }
+      if (styleProfile.typography_feeling.headline_style) {
+        typoFeeling.push(`headline style: ${styleProfile.typography_feeling.headline_style}`);
+      }
+      if (typoFeeling.length > 0) {
+        softGuidelines.push(`- Typography feeling: ${typoFeeling.join(', ')} (bias towards this, but can adapt)`);
+      }
+    }
+
+    // Motion/energy
+    if (styleProfile.motion_energy) {
+      softGuidelines.push(`- Visual energy: ${styleProfile.motion_energy} (prefer this energy level, but can adjust)`);
+    }
+
+    // Design elements
+    if (styleProfile.design_elements) {
+      const elements: string[] = [];
+      if (styleProfile.design_elements.shadows) {
+        elements.push(`shadows: ${styleProfile.design_elements.shadows}`);
+      }
+      if (styleProfile.design_elements.borders) {
+        elements.push(`borders: ${styleProfile.design_elements.borders}`);
+      }
+      if (styleProfile.design_elements.patterns) {
+        elements.push(`patterns: ${styleProfile.design_elements.patterns ? 'yes' : 'no'}`);
+      }
+      if (styleProfile.design_elements.textures) {
+        elements.push(`textures: ${styleProfile.design_elements.textures ? 'yes' : 'no'}`);
+      }
+      if (elements.length > 0) {
+        softGuidelines.push(`- Design elements: ${elements.join(', ')} (prefer these, but can explore)`);
+      }
+    }
+
+    // Brand archetype
+    if (styleProfile.brand_archetype && styleProfile.brand_archetype.length > 0) {
+      softGuidelines.push(`- Brand archetype: ${styleProfile.brand_archetype.join(', ')} (keep this in mind for overall vibe)`);
+    }
+  }
+
+  return {
+    hardConstraints: hardConstraints.join('\n'),
+    softGuidelines: softGuidelines.length > 0 
+      ? softGuidelines.join('\n')
+      : 'No specific style guidelines available. Use modern, professional design principles.',
+  };
 }
 
 // ============================================================================
@@ -208,7 +348,7 @@ async function callGPT51(
     };
   }
 
-  const brandContext = buildBrandContext(brand);
+  const { hardConstraints, softGuidelines } = buildBrandContext(brand);
   
   const assetsContext = assets.length > 0 
     ? `HIGH-FIDELITY ASSETS TO INCLUDE (must appear accurately in the final design):
@@ -231,10 +371,7 @@ ${references.map(r => {
 IMPORTANT: These are style guides only. Use them to understand the desired aesthetic, but do not include any specific elements from these images in the final design.`
     : 'No user-selected style references provided.';
   
-  // Add website screenshot to references context if available
-  if (brand.screenshot) {
-    referencesContext += `\n\nNOTE: The brand's website screenshot will also be automatically included as a style reference to help the image model understand the brand's actual design aesthetic and visual language.`;
-  }
+  // Note: We no longer pass raw screenshot - we use the style profile instead
 
   // Add aspect ratio constraint if user specified one
   const aspectRatioContext = aspectRatio && aspectRatio !== 'auto'
@@ -249,13 +386,35 @@ The user has specified that the design MUST use aspect ratio: ${aspectRatio}
 
   const systemPrompt = `You are a design prompt architect. Your job is to take a user's simple request and transform it into a detailed, optimized prompt for an AI image generation model.
 
-${brandContext}
+================================================================================
+HARD CONSTRAINTS (MUST OBEY - Identity Level)
+================================================================================
+These are non-negotiable requirements that define the brand's identity. They MUST be followed in every design.
 
+${hardConstraints}
+
+================================================================================
+SOFT GUIDELINES (BIAS TOWARDS - Style Level)
+================================================================================
+These are style preferences extracted from the brand's actual website design. They represent the brand's visual language and design patterns. You should BIAS TOWARDS these, but you are ALLOWED TO DEVIATE when exploring different layouts, compositions, or creative directions. The goal is consistency in visual language, not identical templates.
+
+${softGuidelines}
+
+IMPORTANT: Use soft guidelines as design principles and inspiration, not rigid rules. Each design should feel fresh and varied while respecting the brand's overall aesthetic. For example:
+- If the brand uses "rounded cards", you can still use sharp rectangles for variety, but prefer rounded when it makes sense
+- If the brand prefers "flat illustration", you can mix in other imagery types, but keep the overall vibe consistent
+- If the brand has "high whitespace", you can create denser compositions when appropriate, but maintain the general spacious feel
+
+================================================================================
+ASSETS & REFERENCES
+================================================================================
 ${assetsContext}
 
 ${referencesContext}${aspectRatioContext}
 
-CRITICAL RULES:
+================================================================================
+CRITICAL RULES
+================================================================================
 1. Understand what this brand does from the description above - ensure the design accurately reflects their industry, products, and services
 2. Generate appropriate headline and CTA text based on the user's intent AND what the brand does
 3. NEVER invent specific discounts, percentages, or numbers unless the user explicitly provides them
@@ -265,8 +424,8 @@ CRITICAL RULES:
 7. Describe the overall layout naturally - focus on what looks good, not rigid percentages or exact positions
 8. ASSETS (High-Fidelity): Be very specific about how each high-fidelity asset should be used. These must appear accurately in the final design. Describe their placement, size, and integration into the composition.
 9. REFERENCES (Style Only): When referencing style images, describe the mood, color palette, composition style, or aesthetic they inspire, but make it clear these are for inspiration only - no specific elements should be copied.
-10. STRICTLY enforce brand colors only - do not introduce colors outside the brand palette
-11. The brand logo MUST be included in every design - mention this clearly in the final prompt
+10. HARD CONSTRAINTS: All hard constraints (colors, logo, brand description, voice) MUST be strictly followed
+11. SOFT GUIDELINES: Use soft guidelines to inform your design choices, but feel free to explore variations and different compositions while maintaining the brand's overall visual language
 
 OUTPUT FORMAT:
 You must respond with a valid JSON object matching this schema:
@@ -281,7 +440,7 @@ You must respond with a valid JSON object matching this schema:
   "design_notes": "detailed description of the visual composition, style, and overall aesthetic",
   "text_region_notes": "natural description of where text should appear (avoid rigid percentages)",
   "asset_instructions": [{"asset_id": "...", "usage": "specific instructions on how to include this high-fidelity asset accurately in the design (placement, size, integration)"}],
-  "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) strict instruction to use ONLY brand colors, (2) requirement that brand logo MUST be included, (3) brand description/summary so the model understands what the brand does, (4) clear instructions for high-fidelity assets to be included accurately, (5) style references to be used for inspiration only (not copied)"
+  "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) all hard constraints (colors, logo, brand description), (2) soft guidelines as design principles (not rigid rules), (3) clear instructions for high-fidelity assets to be included accurately, (4) style references to be used for inspiration only (not copied). Emphasize that soft guidelines should inform the design but allow for creative variation."
 }
 
 RESOLUTION GUIDELINES:
@@ -576,6 +735,31 @@ function getResolution(aspectRatio: AspectRatioValue | 'auto' | undefined, resol
   return ratioMap[resolutionLevel];
 }
 
+/**
+ * Validates and normalizes aspect ratio to ensure it matches Gemini API requirements.
+ * Valid values: '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'
+ * @param aspectRatio - The aspect ratio to validate
+ * @returns Valid aspect ratio or null if invalid
+ */
+function validateAspectRatio(aspectRatio: string | null | undefined): AspectRatioValue | null {
+  if (!aspectRatio) return null;
+  
+  // Normalize: trim whitespace and ensure exact format
+  const normalized = aspectRatio.trim();
+  
+  // Valid Gemini API aspect ratios
+  const validRatios: AspectRatioValue[] = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
+  
+  // Check if normalized value is in the valid list
+  if (validRatios.includes(normalized as AspectRatioValue)) {
+    return normalized as AspectRatioValue;
+  }
+  
+  // Log warning for invalid values
+  console.warn(`Invalid aspect ratio "${aspectRatio}" - must be one of: ${validRatios.join(', ')}`);
+  return null;
+}
+
 // ============================================================================
 // IMAGE HANDLING
 // ============================================================================
@@ -711,11 +895,29 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    
+    if (!supabaseUrl || !supabaseKey) {
+      return new Response(
+        JSON.stringify({ error: "Server configuration error" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (parseError) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { 
       prompt, 
       brandId, 
@@ -729,7 +931,7 @@ Deno.serve(async (req: Request) => {
       aspectRatio,     // Aspect ratio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto'
       // Default to 2K resolution (same token cost as 1K but better quality)
       resolution: resolutionLevel = '2K', // Resolution level: '1K' | '2K' | '4K'
-    } = await req.json();
+    } = requestBody;
 
     if (!prompt) {
       return new Response(
@@ -775,8 +977,34 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Deduct credits for new generations (not edits)
+    // Credit deduction logic:
+    // - New generations: Always deduct 1 credit
+    // - Edits: First edit is free, subsequent edits cost 1 credit
+    let shouldDeductCredit = false;
+    
     if (!editMode && userId) {
+      // New generation - always deduct
+      shouldDeductCredit = true;
+    } else if (editMode && userId && imageId) {
+      // For edits, check if this is the first edit (edit_count === 0 means first edit is free)
+      const { data: imageData } = await supabase
+        .from("images")
+        .select("edit_count")
+        .eq("id", imageId)
+        .single();
+      
+      const currentEditCount = imageData?.edit_count ?? 0;
+      // Only deduct if this is NOT the first edit (edit_count >= 1 means this will be 2nd+ edit)
+      shouldDeductCredit = currentEditCount >= 1;
+      
+      if (shouldDeductCredit) {
+        console.log(`Edit #${currentEditCount + 1} - will deduct credit (first edit was free)`);
+      } else {
+        console.log(`First edit - free (no credit deduction)`);
+      }
+    }
+
+    if (shouldDeductCredit && userId) {
       // First, check current credits
       const { data: creditsData, error: creditsError } = await supabase
         .from("user_credits")
@@ -829,7 +1057,7 @@ Deno.serve(async (req: Request) => {
             amount: -1,
             balance_after: currentCredits - 1,
             source: 'usage',
-            description: 'Credit used for image generation'
+            description: editMode ? 'Credit used for image edit' : 'Credit used for image generation'
           });
       } catch (txError) {
         console.warn("Failed to log credit transaction:", txError);
@@ -953,21 +1181,8 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Add website screenshot as style reference (always included if available)
-      if (brand?.screenshot) {
-        const screenshotData = await fetchImageAsBase64(brand.screenshot);
-        if (screenshotData) {
-          parts.push({
-            text: "STYLE REFERENCE - Website screenshot showing the brand's actual website design and visual style. Use this for understanding the brand's aesthetic, layout patterns, and design language. Use only for style inspiration, do NOT copy any text, logos, or specific UI elements:",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: screenshotData.mimeType,
-              data: screenshotData.data,
-            },
-          });
-        }
-      }
+      // Note: We no longer pass raw screenshot - we use the style profile instead
+      // The style profile is already incorporated into the prompt via soft guidelines
 
       // Add user-selected references (style_reference)
       for (const ref of (references as AssetInput[])) {
@@ -1069,21 +1284,8 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Add website screenshot as style reference (always included if available)
-      if (brand?.screenshot) {
-        const screenshotData = await fetchImageAsBase64(brand.screenshot);
-        if (screenshotData) {
-          parts.push({
-            text: "STYLE REFERENCE - Website screenshot showing the brand's actual website design and visual style. Use this for understanding the brand's aesthetic, layout patterns, and design language. Use only for style inspiration, do NOT copy any text, logos, or specific UI elements:",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: screenshotData.mimeType,
-              data: screenshotData.data,
-            },
-          });
-        }
-      }
+      // Note: We no longer pass raw screenshot - we use the style profile instead
+      // The style profile is already incorporated into the prompt via soft guidelines
 
       // Add user-selected references (style_reference)
       for (const ref of (references as AssetInput[])) {
@@ -1128,6 +1330,15 @@ Deno.serve(async (req: Request) => {
       }
     }
     
+    // Validate aspect ratio before using it (must match Gemini API requirements)
+    const validatedAspectRatio = validateAspectRatio(aspectRatioToUse);
+    if (aspectRatioToUse && !validatedAspectRatio) {
+      console.warn(`Invalid aspect ratio "${aspectRatioToUse}" - will let model decide instead`);
+      aspectRatioToUse = null;
+    } else if (validatedAspectRatio) {
+      aspectRatioToUse = validatedAspectRatio;
+    }
+    
     // Get resolution dimensions for logging (if aspect ratio is known)
     const resolutionDims = aspectRatioToUse 
       ? getResolution(aspectRatioToUse as AspectRatioValue, finalResolution)
@@ -1147,15 +1358,15 @@ Deno.serve(async (req: Request) => {
       responseModalities: ["TEXT", "IMAGE"],
     };
     
-    // Add image_config if we have an aspect ratio to use (either user-specified or GPT-recommended)
-    if (aspectRatioToUse) {
+    // Add image_config if we have a validated aspect ratio to use (either user-specified or GPT-recommended)
+    if (validatedAspectRatio) {
       generationConfig.image_config = {
-        aspect_ratio: aspectRatioToUse,
+        aspect_ratio: validatedAspectRatio,
         image_size: finalResolution, // Always 2K
       };
-      console.log(`Using image_config: aspect_ratio=${aspectRatioToUse}, image_size=${finalResolution}`);
+      console.log(`Using image_config: aspect_ratio=${validatedAspectRatio}, image_size=${finalResolution}`);
     } else {
-      // No aspect ratio specified - model decides based on prompt
+      // No valid aspect ratio specified - model decides based on prompt
       console.log(`No image_config - model will determine aspect ratio from prompt content`);
     }
 

@@ -4,3 +4,4 @@ ALTER TABLE brands ADD COLUMN IF NOT EXISTS page_images jsonb DEFAULT '[]' NOT N
 
 
 
+

@@ -25,6 +25,9 @@ export function BrandKitEditor({
   // Comparison mode state
   const [alternativeBrand, setAlternativeBrand] = useState<Partial<Brand> | null>(null);
   const [isReExtracting, setIsReExtracting] = useState(false);
+  
+  // Extraction loading state
+  const [currentExtractionStep, setCurrentExtractionStep] = useState(0);
   const [selections, setSelections] = useState<Record<BrandSection, 'original' | 'alternative'>>({
     colors: 'original',
     fonts: 'original',
@@ -77,6 +80,19 @@ export function BrandKitEditor({
 
     fetchAssets();
   }, [brand.id]);
+
+  // Animate extraction steps
+  useEffect(() => {
+    if (brand.status === 'extracting') {
+      const interval = setInterval(() => {
+        setCurrentExtractionStep((prev) => (prev + 1) % 6);
+      }, 2000); // Change step every 2 seconds
+
+      return () => clearInterval(interval);
+    } else {
+      setCurrentExtractionStep(0);
+    }
+  }, [brand.status]);
 
   // Handle asset upload
   const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -723,15 +739,26 @@ export function BrandKitEditor({
   }
 
   if (brand.status === 'extracting') {
+    // Animated extraction steps
+    const steps = [
+      { icon: '🌐', label: 'Crawling website', description: 'Scanning homepage and gathering assets' },
+      { icon: '🎨', label: 'Extracting colors', description: 'Identifying brand color palette' },
+      { icon: '🔤', label: 'Analyzing typography', description: 'Detecting fonts and text styles' },
+      { icon: '🖼️', label: 'Collecting images', description: 'Gathering logos and visual assets' },
+      { icon: '📊', label: 'Analyzing design style', description: 'Understanding visual patterns and aesthetics' },
+      { icon: '✨', label: 'Finalizing brand kit', description: 'Putting everything together' },
+    ];
+
     return (
       <div 
-        className="min-h-screen flex items-center justify-center"
+        className="min-h-screen flex items-center justify-center p-6"
         style={{
           background: `linear-gradient(135deg, ${primaryColor}15 0%, ${secondaryColor}10 100%)`,
         }}
       >
-        <div className="text-center">
-          <div className="relative w-24 h-24 mx-auto mb-8">
+        <div className="text-center max-w-2xl w-full">
+          {/* Animated loader */}
+          <div className="relative w-32 h-32 mx-auto mb-8">
             <div 
               className="absolute inset-0 rounded-full animate-ping opacity-20"
               style={{ backgroundColor: primaryColor }}
@@ -740,17 +767,51 @@ export function BrandKitEditor({
               className="absolute inset-2 rounded-full animate-pulse"
               style={{ backgroundColor: primaryColor, opacity: 0.3 }}
             />
-            <Loader2 
-              className="absolute inset-0 w-24 h-24 animate-spin"
-              style={{ color: primaryColor }}
-            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-5xl animate-bounce">{steps[currentExtractionStep].icon}</span>
+            </div>
           </div>
-          <h2 className="text-3xl font-light text-slate-800 mb-3 tracking-tight">
+
+          {/* Main heading */}
+          <h2 className="text-3xl font-light text-slate-800 mb-2 tracking-tight">
             Extracting Brand Identity
           </h2>
-          <p className="text-slate-500 text-lg">
-            Analyzing colors, typography, and design patterns...
-          </p>
+
+          {/* Current step */}
+          <div className="mb-8">
+            <p className="text-lg font-medium text-slate-700 mb-1">
+              {steps[currentExtractionStep].label}
+            </p>
+            <p className="text-slate-500 text-sm">
+              {steps[currentExtractionStep].description}
+            </p>
+          </div>
+
+          {/* Progress steps indicator */}
+          <div className="flex items-center justify-center gap-2 mb-6">
+            {steps.map((step, index) => (
+              <div
+                key={index}
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  index === currentExtractionStep
+                    ? 'w-8 opacity-100'
+                    : index < currentExtractionStep
+                    ? 'w-2 opacity-50'
+                    : 'w-2 opacity-20'
+                }`}
+                style={{
+                  backgroundColor: index === currentExtractionStep ? primaryColor : secondaryColor || primaryColor,
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Additional info */}
+          <div className="mt-8 pt-6 border-t border-slate-200">
+            <p className="text-xs text-slate-400">
+              This usually takes 30-60 seconds. We're analyzing your brand's visual identity...
+            </p>
+          </div>
         </div>
       </div>
     );

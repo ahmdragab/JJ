@@ -85,6 +85,7 @@ export type Brand = {
   };
   styleguide?: {
     mode?: 'light' | 'dark';
+    summary?: string;
     colors?: {
       accent?: string;
       background?: string;
@@ -120,6 +121,29 @@ export type Brand = {
         link?: Record<string, unknown>;
       };
       card?: Record<string, unknown>;
+    };
+    style_profile?: {
+      layout_density?: 'minimal' | 'medium' | 'dense';
+      whitespace?: 'high' | 'medium' | 'low';
+      shape_language?: string[];
+      imagery_type?: string[];
+      color_usage?: {
+        contrast?: 'dark-on-light' | 'light-on-dark' | 'mixed';
+        gradients?: boolean;
+        duotone_overlays?: boolean;
+      };
+      typography_feeling?: {
+        category?: 'geometric sans' | 'grotesk' | 'serif' | 'condensed' | 'mixed';
+        headline_style?: 'loud' | 'understated' | 'balanced';
+      };
+      motion_energy?: 'calm' | 'moderate' | 'dynamic';
+      brand_archetype?: string[];
+      design_elements?: {
+        shadows?: 'none' | 'subtle' | 'prominent';
+        borders?: 'none' | 'thin' | 'thick';
+        patterns?: boolean;
+        textures?: boolean;
+      };
     };
   };
   status: 'draft' | 'extracting' | 'ready' | 'error';

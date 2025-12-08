@@ -31,3 +31,4 @@ WHERE credits > 0
     WHERE credit_transactions.user_id = user_credits.user_id
   );
 
+

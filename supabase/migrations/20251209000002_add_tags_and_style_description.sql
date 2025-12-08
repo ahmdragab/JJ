@@ -36,3 +36,4 @@ WHERE style_description IS NOT NULL;
 -- Note: We keep the category field for now to maintain backward compatibility
 -- It can be removed in a future migration once all code is updated to use tags
 
+

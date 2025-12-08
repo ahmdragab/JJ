@@ -158,3 +158,4 @@ LIMIT 50;
 - New users get 20 credits automatically on signup
 - All credit changes are logged in `credit_transactions` for audit purposes
 
+

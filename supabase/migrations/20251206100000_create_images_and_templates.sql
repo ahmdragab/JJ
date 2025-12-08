@@ -159,3 +159,4 @@ INSERT INTO templates (name, description, aspect_ratio, category, fields, prompt
 
 
 
+
