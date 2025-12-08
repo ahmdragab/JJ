@@ -37,3 +37,4 @@ WHERE style_description IS NOT NULL;
 -- It can be removed in a future migration once all code is updated to use tags
 
 
+

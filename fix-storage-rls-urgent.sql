@@ -73,3 +73,4 @@ FROM storage.buckets
 WHERE id = 'styles';
 
 
+

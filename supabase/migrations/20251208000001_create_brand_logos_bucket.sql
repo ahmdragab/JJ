@@ -25,3 +25,4 @@ TO authenticated
 USING (bucket_id = 'brand-logos');
 
 
+

@@ -83,3 +83,4 @@ ALTER TABLE brands ALTER COLUMN slug SET NOT NULL;
 
 
 
+

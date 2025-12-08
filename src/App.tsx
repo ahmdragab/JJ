@@ -59,6 +59,29 @@ function BrandRoutes() {
     setLoading(false);
   };
 
+  // Poll for brand updates when status is 'extracting'
+  useEffect(() => {
+    if (!brand || brand.status !== 'extracting') return;
+
+    const pollInterval = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('brands')
+        .select('*')
+        .eq('id', brand.id)
+        .maybeSingle();
+
+      if (!error && data) {
+        setBrand(data);
+        // Stop polling once extraction is complete
+        if (data.status !== 'extracting') {
+          clearInterval(pollInterval);
+        }
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [brand?.id, brand?.status]);
+
   const handleUpdateBrand = async (updates: Partial<Brand>) => {
     if (!brand) return;
 
