@@ -422,7 +422,7 @@ CRITICAL RULES
 5. If the topic involves a cultural/national event (like "Independence Day"), do NOT assume a specific country unless stated
 6. The headline and CTA should be generic enough to be safe but compelling
 7. Describe the overall layout naturally - focus on what looks good, not rigid percentages or exact positions
-8. ASSETS (High-Fidelity): Be very specific about how each high-fidelity asset should be used. These must appear accurately in the final design. Describe their placement, size, and integration into the composition.
+8. ASSETS (High-Fidelity): CRITICAL - You MUST explicitly mention each attached high-fidelity asset in your final_prompt. These assets are attached as images and MUST appear accurately in the final design. In your final_prompt, explicitly state something like "Include the attached [asset name] image" or "Feature the [asset name] prominently" for EACH asset. Do not assume the model will include them automatically - you must explicitly instruct inclusion. Describe their placement, size, and integration into the composition.
 9. REFERENCES (Style Only): When referencing style images, describe the mood, color palette, composition style, or aesthetic they inspire, but make it clear these are for inspiration only - no specific elements should be copied.
 10. HARD CONSTRAINTS: All hard constraints (colors, logo, brand description, voice) MUST be strictly followed
 11. SOFT GUIDELINES: Use soft guidelines to inform your design choices, but feel free to explore variations and different compositions while maintaining the brand's overall visual language
@@ -440,7 +440,7 @@ You must respond with a valid JSON object matching this schema:
   "design_notes": "detailed description of the visual composition, style, and overall aesthetic",
   "text_region_notes": "natural description of where text should appear (avoid rigid percentages)",
   "asset_instructions": [{"asset_id": "...", "usage": "specific instructions on how to include this high-fidelity asset accurately in the design (placement, size, integration)"}],
-  "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) all hard constraints (colors, logo, brand description), (2) soft guidelines as design principles (not rigid rules), (3) clear instructions for high-fidelity assets to be included accurately, (4) style references to be used for inspiration only (not copied). Emphasize that soft guidelines should inform the design but allow for creative variation."
+  "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) all hard constraints (colors, logo, brand description), (2) soft guidelines as design principles (not rigid rules), (3) EXPLICIT instructions mentioning each attached high-fidelity asset by name (e.g., 'Include the attached product image', 'Feature the attached screenshot prominently') - this is CRITICAL as the model needs explicit instructions to include attached images, (4) style references to be used for inspiration only (not copied). Emphasize that soft guidelines should inform the design but allow for creative variation. IMPORTANT: You must explicitly reference each attached asset image in this prompt - do not assume the model will include them automatically."
 }
 
 RESOLUTION GUIDELINES:
@@ -814,7 +814,7 @@ function getBestLogoUrl(brand: Brand): string | null {
   return brand.logos?.primary || null;
 }
 
-async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string } | null> {
+async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string; width?: number; height?: number } | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
@@ -830,6 +830,25 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     const arrayBuffer = await response.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     
+    // Try to extract dimensions from PNG/JPEG headers
+    let width: number | undefined;
+    let height: number | undefined;
+    
+    if (contentType === 'image/png' && uint8Array.length >= 24) {
+      // PNG: width and height are at bytes 16-23 (big-endian)
+      width = (uint8Array[16] << 24) | (uint8Array[17] << 16) | (uint8Array[18] << 8) | uint8Array[19];
+      height = (uint8Array[20] << 24) | (uint8Array[21] << 16) | (uint8Array[22] << 8) | uint8Array[23];
+    } else if ((contentType === 'image/jpeg' || contentType === 'image/jpg') && uint8Array.length >= 20) {
+      // JPEG: Look for SOF markers (0xFFC0, 0xFFC1, 0xFFC2) - dimensions are at offset +5 and +7
+      for (let i = 0; i < uint8Array.length - 9; i++) {
+        if (uint8Array[i] === 0xFF && (uint8Array[i + 1] === 0xC0 || uint8Array[i + 1] === 0xC1 || uint8Array[i + 1] === 0xC2)) {
+          height = (uint8Array[i + 5] << 8) | uint8Array[i + 6];
+          width = (uint8Array[i + 7] << 8) | uint8Array[i + 8];
+          break;
+        }
+      }
+    }
+    
     let binary = '';
     const chunkSize = 8192;
     for (let i = 0; i < uint8Array.length; i += chunkSize) {
@@ -838,11 +857,43 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     }
     const base64 = btoa(binary);
     
-    return { data: base64, mimeType: contentType };
+    return { data: base64, mimeType: contentType, width, height };
   } catch (error) {
     console.error('Failed to fetch image:', error);
     return null;
   }
+}
+
+/**
+ * Detects aspect ratio from image dimensions
+ * Returns a valid AspectRatioValue or null if cannot be determined
+ */
+function detectAspectRatioFromDimensions(width: number, height: number): AspectRatioValue | null {
+  if (!width || !height || width <= 0 || height <= 0) return null;
+  
+  const ratio = width / height;
+  
+  // Tolerance for aspect ratio matching (±0.02)
+  const ratios: Array<{ value: AspectRatioValue; ratio: number }> = [
+    { value: '1:1', ratio: 1.0 },
+    { value: '2:3', ratio: 2/3 },
+    { value: '3:2', ratio: 3/2 },
+    { value: '3:4', ratio: 3/4 },
+    { value: '4:3', ratio: 4/3 },
+    { value: '4:5', ratio: 4/5 },
+    { value: '5:4', ratio: 5/4 },
+    { value: '9:16', ratio: 9/16 },
+    { value: '16:9', ratio: 16/9 },
+    { value: '21:9', ratio: 21/9 },
+  ];
+  
+  for (const { value, ratio: targetRatio } of ratios) {
+    if (Math.abs(ratio - targetRatio) < 0.02) {
+      return value;
+    }
+  }
+  
+  return null;
 }
 
 async function uploadToStorage(
@@ -1110,6 +1161,47 @@ Deno.serve(async (req: Request) => {
     let gptPromptInfo: GPTPromptInfo | null = null;
     let renderPlan: RenderPlan | null = null; // Store render plan for resolution recommendation
 
+    // For edit mode, preserve the original image's aspect ratio
+    let originalAspectRatio: string | null = null;
+    
+    if (editMode && imageId) {
+      // Try to get aspect ratio from image metadata
+      const { data: imageData } = await supabase
+        .from('images')
+        .select('metadata')
+        .eq('id', imageId)
+        .single();
+      
+      if (imageData?.metadata && typeof imageData.metadata === 'object') {
+        const metadata = imageData.metadata as Record<string, unknown>;
+        if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
+          originalAspectRatio = metadata.aspect_ratio;
+          console.log(`Edit mode: Found aspect ratio in metadata: ${originalAspectRatio}`);
+        }
+      }
+      
+      // If not found in metadata, try to detect from image dimensions
+      if (!originalAspectRatio && previousImageUrl) {
+        const previousImageData = await fetchImageAsBase64(previousImageUrl);
+        if (previousImageData?.width && previousImageData?.height) {
+          const detectedRatio = detectAspectRatioFromDimensions(
+            previousImageData.width,
+            previousImageData.height
+          );
+          if (detectedRatio) {
+            originalAspectRatio = detectedRatio;
+            console.log(`Edit mode: Detected aspect ratio from dimensions: ${originalAspectRatio} (${previousImageData.width}x${previousImageData.height})`);
+          }
+        }
+      }
+      
+      if (originalAspectRatio) {
+        console.log(`Edit mode: Will preserve original aspect ratio: ${originalAspectRatio}`);
+      } else {
+        console.log(`Edit mode: Could not determine original aspect ratio - model will decide`);
+      }
+    }
+
     // For edit mode, include the previous image
     if (editMode && previousImageUrl) {
       const previousImageData = await fetchImageAsBase64(previousImageUrl);
@@ -1124,8 +1216,19 @@ Deno.serve(async (req: Request) => {
           },
         });
         
+        // Add aspect ratio preservation instruction if we know it
+        const aspectRatioInstruction = originalAspectRatio
+          ? `\n\nCRITICAL: Maintain the exact same aspect ratio (${originalAspectRatio}) as the original image. The output must have the same dimensions and proportions.`
+          : '';
+        
+        // Add explicit instruction about attached assets in edit mode
+        let assetInstructionEdit = '';
+        if (attachedAssetNamesEdit.length > 0) {
+          assetInstructionEdit = `\n\nCRITICAL: The ${attachedAssetNamesEdit.length} image${attachedAssetNamesEdit.length > 1 ? 's' : ''} attached above (${attachedAssetNamesEdit.join(', ')}) ${attachedAssetNamesEdit.length > 1 ? 'are' : 'is'} REQUIRED and MUST be included in the edited design. These are high-fidelity assets that must appear accurately in the output.`;
+        }
+        
         parts.push({
-          text: `USER'S EDIT REQUEST: ${prompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.`,
+          text: `USER'S EDIT REQUEST: ${prompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.${aspectRatioInstruction}${assetInstructionEdit}`,
         });
       }
 
@@ -1150,11 +1253,13 @@ Deno.serve(async (req: Request) => {
       }
 
       // Add user-selected assets (must_include)
+      const attachedAssetNamesEdit: string[] = [];
       for (const asset of (assets as AssetInput[])) {
         const assetData = await fetchImageAsBase64(asset.url);
         if (assetData) {
+          attachedAssetNamesEdit.push(asset.name);
           parts.push({
-            text: `ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}). Include this prominently in the design:`,
+            text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. Include this prominently in the design with high fidelity and accuracy. This is not optional - the attached image below must be reproduced in the output.`,
           });
           parts.push({
             inline_data: {
@@ -1252,12 +1357,14 @@ Deno.serve(async (req: Request) => {
       }
 
       // Add user-selected assets (must_include)
+      const attachedAssetNames: string[] = [];
       for (const asset of (assets as AssetInput[])) {
         const assetData = await fetchImageAsBase64(asset.url);
         if (assetData) {
           const instruction = renderPlan?.asset_instructions.find(ai => ai.asset_id === asset.id);
+          attachedAssetNames.push(asset.name);
           parts.push({
-            text: `ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}). ${instruction?.usage || 'Include this prominently in the design'}:`,
+            text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. ${instruction?.usage || 'Include this prominently in the design with high fidelity and accuracy'}. This is not optional - the attached image below must be reproduced in the output.`,
           });
           parts.push({
             inline_data: {
@@ -1306,6 +1413,13 @@ Deno.serve(async (req: Request) => {
         }
       }
 
+      // Add explicit instruction tying attached assets to the prompt
+      if (attachedAssetNames.length > 0) {
+        parts.push({
+          text: `\n\nCRITICAL REQUIREMENT: The ${attachedAssetNames.length} image${attachedAssetNames.length > 1 ? 's' : ''} attached above (${attachedAssetNames.join(', ')}) ${attachedAssetNames.length > 1 ? 'are' : 'is'} REQUIRED and MUST be included in the final design. These are high-fidelity assets that must appear accurately in the output. Do not generate the design without including ${attachedAssetNames.length > 1 ? 'these assets' : 'this asset'}.`,
+        });
+      }
+
       // Add the optimized prompt
       parts.push({ text: finalPrompt });
     }
@@ -1316,7 +1430,11 @@ Deno.serve(async (req: Request) => {
     // Determine which aspect ratio to use
     let aspectRatioToUse: string | null = null;
     
-    if (aspectRatio && aspectRatio !== 'auto') {
+    if (editMode && originalAspectRatio) {
+      // Edit mode: Always preserve the original aspect ratio
+      aspectRatioToUse = originalAspectRatio;
+      console.log(`Edit mode: Preserving original aspect ratio: ${aspectRatioToUse}`);
+    } else if (aspectRatio && aspectRatio !== 'auto') {
       // User specified an aspect ratio - use it
       aspectRatioToUse = aspectRatio;
       console.log(`Using user-specified aspect ratio: ${aspectRatioToUse}`);
@@ -1495,19 +1613,35 @@ Deno.serve(async (req: Request) => {
           }
         }
       } else {
-        // For new generations, store GPT prompt info in metadata
+        // For new generations, store GPT prompt info and aspect ratio in metadata
+        const { data: currentImage } = await supabase
+          .from('images')
+          .select('metadata')
+          .eq('id', imageId)
+          .single();
+        
+        const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
+        const newMetadata: Record<string, unknown> = {
+          ...existingMetadata,
+        };
+        
         if (gptPromptInfo) {
-          const { data: currentImage } = await supabase
-            .from('images')
-            .select('metadata')
-            .eq('id', imageId)
-            .single();
-          
-          const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
-          updateData.metadata = {
-            ...existingMetadata,
-            gpt_prompt_info: gptPromptInfo,
-          };
+          newMetadata.gpt_prompt_info = gptPromptInfo;
+        }
+        
+        // Store the aspect ratio that was used (for future edits)
+        if (validatedAspectRatio) {
+          newMetadata.aspect_ratio = validatedAspectRatio;
+        } else if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
+          // Store GPT's recommended aspect ratio if we used it
+          newMetadata.aspect_ratio = renderPlan.aspect_ratio;
+        } else if (aspectRatio && aspectRatio !== 'auto') {
+          // Store user-specified aspect ratio
+          newMetadata.aspect_ratio = aspectRatio;
+        }
+        
+        if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || validatedAspectRatio) {
+          updateData.metadata = newMetadata;
         }
       }
 

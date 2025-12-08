@@ -5,10 +5,12 @@ import { BrandsList } from './pages/BrandsList';
 import { BrandKitEditor } from './pages/BrandKitEditor';
 import { Studio } from './pages/Studio';
 import { StylesAdmin } from './pages/StylesAdmin';
+import { AdminImages } from './pages/AdminImages';
 import { Navbar } from './components/Navbar';
 import { supabase, Brand, generateSlug } from './lib/supabase';
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
+import { isAdminUser } from './lib/admin';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -23,6 +25,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+// Admin-only route wrapper
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+      </div>
+    );
+  }
+
+  if (!user || !isAdminUser(user.id)) {
     return <Navigate to="/" replace />;
   }
 
@@ -341,6 +362,19 @@ function AppRoutes() {
               </div>
             </>
           </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/images" 
+        element={
+          <AdminRoute>
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <AdminImages />
+              </div>
+            </>
+          </AdminRoute>
         } 
       />
     </Routes>
