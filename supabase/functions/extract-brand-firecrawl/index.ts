@@ -148,28 +148,74 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Extracting brand with Firecrawl for domain: ${domain}`);
 
-    // Call Firecrawl API v2 with branding format
-    const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${firecrawlApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url.startsWith('http') ? url : `https://${url}`,
-        formats: ['branding', 'screenshot', 'markdown'],
-        // Additional options for better extraction
-        waitFor: 5000, // Wait longer for JS to load
-        timeout: 60000, // Increased timeout for slow websites
-      }),
-    });
+    // Retry function for transient errors
+    const callFirecrawlWithRetry = async (maxRetries = 3, retryDelay = 2000): Promise<Response> => {
+      const targetUrl = url.startsWith('http') ? url : `https://${url}`;
+      
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const firecrawlResponse = await fetch('https://api.firecrawl.dev/v1/scrape', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${firecrawlApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              url: targetUrl,
+              formats: ['branding', 'screenshot', 'markdown'],
+              // Additional options for better extraction
+              waitFor: 5000, // Wait longer for JS to load
+              timeout: 60000, // Increased timeout for slow websites
+            }),
+          });
+
+          // If successful, return immediately
+          if (firecrawlResponse.ok) {
+            return firecrawlResponse;
+          }
+
+          const errorText = await firecrawlResponse.text();
+          const status = firecrawlResponse.status;
+          
+          // Transient server errors that should be retried
+          const isTransientError = status === 502 || status === 503 || status === 504;
+          
+          if (isTransientError && attempt < maxRetries) {
+            const delay = retryDelay * attempt; // Exponential backoff
+            console.warn(`Firecrawl API returned ${status} (attempt ${attempt}/${maxRetries}). Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+
+          // If not retrying, return the response for error handling
+          return firecrawlResponse;
+        } catch (error) {
+          // Network errors - retry if not last attempt
+          if (attempt < maxRetries) {
+            const delay = retryDelay * attempt;
+            console.warn(`Firecrawl API network error (attempt ${attempt}/${maxRetries}): ${error instanceof Error ? error.message : 'Unknown error'}. Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          // Last attempt failed, throw
+          throw error;
+        }
+      }
+      
+      // Should never reach here, but TypeScript needs it
+      throw new Error('Failed to call Firecrawl API after retries');
+    };
+
+    // Call Firecrawl API with retry logic
+    const firecrawlResponse = await callFirecrawlWithRetry();
 
     if (!firecrawlResponse.ok) {
       const errorText = await firecrawlResponse.text();
-      console.error(`Firecrawl API error: ${firecrawlResponse.status} - ${errorText}`);
+      const status = firecrawlResponse.status;
+      console.error(`Firecrawl API error: ${status} - ${errorText}`);
       
-      // Handle timeout errors with a user-friendly message
-      if (firecrawlResponse.status === 408) {
+      // Handle specific error types with user-friendly messages
+      if (status === 408) {
         return new Response(
           JSON.stringify({ 
             error: 'The website took too long to load. This can happen with slow or heavily protected websites. Please try again or use the alternative extraction.',
@@ -179,7 +225,42 @@ Deno.serve(async (req: Request) => {
         );
       }
       
-      throw new Error(`Firecrawl API error: ${firecrawlResponse.status}`);
+      // Server errors (after retries exhausted)
+      if (status === 502 || status === 503 || status === 504) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Firecrawl service is temporarily unavailable. This is usually a temporary issue. Please try again in a few moments or use the alternative extraction method.',
+            code: 'SERVICE_UNAVAILABLE',
+            status
+          }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Rate limiting
+      if (status === 429) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Too many requests to Firecrawl. Please wait a moment and try again.',
+            code: 'RATE_LIMITED'
+          }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Authentication errors
+      if (status === 401 || status === 403) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'Firecrawl authentication failed. Please contact support.',
+            code: 'AUTH_ERROR'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Generic error
+      throw new Error(`Firecrawl API error: ${status}${errorText ? ` - ${errorText.substring(0, 200)}` : ''}`);
     }
 
     const firecrawlData: FirecrawlBrandingResponse = await firecrawlResponse.json();

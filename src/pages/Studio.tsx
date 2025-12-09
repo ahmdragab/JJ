@@ -129,11 +129,15 @@ export function Studio({ brand }: { brand: Brand }) {
       setLoadingPresets(true);
       generateSmartPresets(brand)
         .then(presets => {
-          setSmartPresets(presets);
+          // Only update if we got presets (don't clear existing ones on error)
+          if (presets && presets.length > 0) {
+            setSmartPresets(presets);
+          }
           setLoadingPresets(false);
         })
         .catch(error => {
           console.error('Failed to load presets:', error);
+          // Don't clear existing presets on error - keep what we have
           setLoadingPresets(false);
         });
     }
