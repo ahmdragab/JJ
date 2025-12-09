@@ -7,7 +7,7 @@ import { Studio } from './pages/Studio';
 import { StylesAdmin } from './pages/StylesAdmin';
 import { AdminImages } from './pages/AdminImages';
 import { Navbar } from './components/Navbar';
-import { supabase, Brand, generateSlug } from './lib/supabase';
+import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain } from './lib/supabase';
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { isAdminUser } from './lib/admin';
@@ -234,6 +234,12 @@ function LandingWrapper() {
     if (!user) return;
 
     try {
+      // Validate domain format
+      if (!isValidDomain(input)) {
+        alert('Please enter a valid domain name (e.g., example.com)');
+        return;
+      }
+
       let domain: string;
       let url: string;
       
@@ -241,11 +247,11 @@ function LandingWrapper() {
         domain = new URL(input).hostname;
         url = input;
       } else {
-        domain = input.replace(/^www\./, '').trim();
+        domain = normalizeDomain(input);
         url = `https://${domain}`;
       }
       
-      domain = domain.replace(/^www\./, '');
+      domain = normalizeDomain(domain);
 
       // Generate a slug for the brand
       const slug = generateSlug(domain);

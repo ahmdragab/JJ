@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowUp, FolderOpen, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { isValidDomain } from '../lib/supabase';
 import backgroundVideo from '../video.mp4';
 
 export function Landing({ 
@@ -19,6 +20,7 @@ export function Landing({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  const [domainError, setDomainError] = useState('');
 
   // Word slider for "designs"
   const words = ['designs', 'assets', 'ads', 'creatives', 'infographics', 'illustrations', 'posters'];
@@ -106,21 +108,33 @@ export function Landing({
     }
   };
 
+
   const handleStart = (e: React.FormEvent) => {
     e.preventDefault();
+    setDomainError('');
+    
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) {
+      setDomainError('Please enter a domain name');
+      return;
+    }
+    
+    // Validate domain format
+    if (!isValidDomain(trimmedUrl)) {
+      setDomainError('Please enter a valid domain name (e.g., example.com)');
+      return;
+    }
+    
     if (!user) {
       // Save the URL so we can start extraction after signup
-      if (url.trim()) {
-        setPendingUrl(url.trim());
-      }
+      setPendingUrl(trimmedUrl);
       setIsSignUp(true);
       setShowAuth(true);
       setError('');
       return;
     }
-    if (url.trim()) {
-      onStart(url.trim());
-    }
+    
+    onStart(trimmedUrl);
   };
 
   return (
@@ -186,24 +200,33 @@ export function Landing({
 
         {/* Input box */}
         <form onSubmit={handleStart} className="w-full">
-          <div className="flex gap-2 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/60 p-1.5">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="yourwebsite.com"
-              className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
-              style={{ fontFamily: "'Inter', sans-serif" }}
-              required
-            />
-            <button
-              type="submit"
-              className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/60 p-1.5">
+              <input
+                type="text"
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  setDomainError(''); // Clear error on input change
+                }}
+                placeholder="yourwebsite.com"
+                className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
+                style={{ fontFamily: "'Inter', sans-serif" }}
+                required
+              />
+              <button
+                type="submit"
+                className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600"
+              >
+                <ArrowUp className="w-4 h-4" />
+              </button>
+            </div>
+            {domainError && (
+              <p className="text-sm text-red-200 bg-red-500/20 px-3 py-2 rounded-lg backdrop-blur-sm">
+                {domainError}
+              </p>
+            )}
           </div>
-
         </form>
       </div>
 

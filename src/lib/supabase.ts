@@ -15,6 +15,41 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+// Validate domain format
+export function isValidDomain(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+  
+  // Remove protocol if present
+  let domain = trimmed.replace(/^https?:\/\//i, '');
+  // Remove www. if present
+  domain = domain.replace(/^www\./i, '');
+  // Remove trailing slash
+  domain = domain.replace(/\/$/, '');
+  // Remove path if present (for validation purposes)
+  domain = domain.split('/')[0];
+  
+  // Domain regex: must have at least one dot and a valid TLD
+  // Matches: example.com, subdomain.example.com, example.co.uk, etc.
+  const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
+  
+  return domainRegex.test(domain);
+}
+
+// Normalize domain input (remove protocol, www, trailing slash, path)
+export function normalizeDomain(input: string): string {
+  let domain = input.trim();
+  // Remove protocol if present
+  domain = domain.replace(/^https?:\/\//i, '');
+  // Remove www. if present
+  domain = domain.replace(/^www\./i, '');
+  // Remove trailing slash
+  domain = domain.replace(/\/$/, '');
+  // Remove path if present
+  domain = domain.split('/')[0];
+  return domain.toLowerCase();
+}
+
 // Generate a slug from domain name
 export function generateSlug(domain: string): string {
   // Clean the domain
