@@ -5,6 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+  "Access-Control-Max-Age": "86400",
 };
 
 // API Configuration
@@ -462,9 +463,11 @@ Based on this request and the brand context, create a detailed render plan and f
   };
 
   // Log the prompt for reference
-  console.log("=== GPT PROMPT SENT ===");
-  console.log(promptInfo.full_prompt);
-  console.log("=== END GPT PROMPT ===");
+  // Consolidated GPT prompt logging (truncate if too long)
+  const promptPreview = promptInfo.full_prompt.length > 200 
+    ? promptInfo.full_prompt.substring(0, 200) + '...' 
+    : promptInfo.full_prompt;
+  console.log(`[GPT Prompt] ${promptPreview}`);
 
   try {
     console.log("Calling GPT-5.1 for prompt optimization...");
@@ -939,9 +942,10 @@ async function uploadToStorage(
 // ============================================================================
 
 Deno.serve(async (req: Request) => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, {
-      status: 200,
+      status: 204,
       headers: corsHeaders,
     });
   }
@@ -1118,9 +1122,8 @@ Deno.serve(async (req: Request) => {
       console.log(`Credit deducted for user ${userId}: ${currentCredits} -> ${currentCredits - 1}`);
     }
 
-    console.log("Mode:", editMode ? "EDIT" : "GENERATE");
-    console.log("Prompt:", prompt);
-    console.log("Assets:", assets.length, "References:", references.length);
+    // Consolidated request logging
+    console.log(`[${editMode ? "EDIT" : "GENERATE"}] Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
 
     // Validate Gemini 3 Pro Image limits
     const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
@@ -1152,7 +1155,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`Image count validation: ${(assets as AssetInput[]).length} assets, ${(references as AssetInput[]).length} references, ${autoIncludedCount} auto-included = ${totalImages}/${MAX_TOTAL_IMAGES} total`);
+    // Consolidated into main request log above
 
     // Build the request parts for Gemini
     const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
@@ -1176,7 +1179,7 @@ Deno.serve(async (req: Request) => {
         const metadata = imageData.metadata as Record<string, unknown>;
         if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
           originalAspectRatio = metadata.aspect_ratio;
-          console.log(`Edit mode: Found aspect ratio in metadata: ${originalAspectRatio}`);
+          // Logged below with other edit mode info
         }
       }
       
@@ -1190,18 +1193,17 @@ Deno.serve(async (req: Request) => {
           );
           if (detectedRatio) {
             originalAspectRatio = detectedRatio;
-            console.log(`Edit mode: Detected aspect ratio from dimensions: ${originalAspectRatio} (${previousImageData.width}x${previousImageData.height})`);
+            // Logged below with other edit mode info
           }
         }
       }
       
-      if (originalAspectRatio) {
-        console.log(`Edit mode: Will preserve original aspect ratio: ${originalAspectRatio}`);
-      } else {
-        console.log(`Edit mode: Could not determine original aspect ratio - model will decide`);
-      }
+      // Logged below with resolution info
     }
 
+    // For edit mode, declare asset names array early
+    const attachedAssetNamesEdit: string[] = [];
+    
     // For edit mode, include the previous image
     if (editMode && previousImageUrl) {
       const previousImageData = await fetchImageAsBase64(previousImageUrl);
@@ -1253,7 +1255,6 @@ Deno.serve(async (req: Request) => {
       }
 
       // Add user-selected assets (must_include)
-      const attachedAssetNamesEdit: string[] = [];
       for (const asset of (assets as AssetInput[])) {
         const assetData = await fetchImageAsBase64(asset.url);
         if (assetData) {
@@ -1286,8 +1287,21 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Note: We no longer pass raw screenshot - we use the style profile instead
-      // The style profile is already incorporated into the prompt via soft guidelines
+      // Add homepage screenshot as style reference (in addition to style profile analysis)
+      if (brand?.screenshot) {
+        const screenshotData = await fetchImageAsBase64(brand.screenshot);
+        if (screenshotData) {
+          parts.push({
+            text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
+          });
+          parts.push({
+            inline_data: {
+              mime_type: screenshotData.mimeType,
+              data: screenshotData.data,
+            },
+          });
+        }
+      }
 
       // Add user-selected references (style_reference)
       for (const ref of (references as AssetInput[])) {
@@ -1329,10 +1343,13 @@ Deno.serve(async (req: Request) => {
         gptPromptInfo = gptResult.promptInfo;
         finalPrompt = renderPlan.final_prompt;
         
-        console.log("Using GPT-5.1 optimized prompt");
-        console.log("Channel:", renderPlan.channel);
-        if (renderPlan.headline) console.log("Headline:", renderPlan.headline);
-        if (renderPlan.resolution) console.log("GPT recommended resolution:", renderPlan.resolution);
+        // Consolidated GPT optimization logging
+        const gptInfo = [
+          `Channel: ${renderPlan.channel}`,
+          renderPlan.headline ? `Headline: ${renderPlan.headline}` : null,
+          renderPlan.resolution ? `Resolution: ${renderPlan.resolution}` : null,
+        ].filter(Boolean).join(' | ');
+        console.log(`[GPT-5.1 Optimized] ${gptInfo}`);
       } else {
         finalPrompt = prompt;
       }
@@ -1391,8 +1408,21 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // Note: We no longer pass raw screenshot - we use the style profile instead
-      // The style profile is already incorporated into the prompt via soft guidelines
+      // Add homepage screenshot as style reference (in addition to style profile analysis)
+      if (brand?.screenshot) {
+        const screenshotData = await fetchImageAsBase64(brand.screenshot);
+        if (screenshotData) {
+          parts.push({
+            text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
+          });
+          parts.push({
+            inline_data: {
+              mime_type: screenshotData.mimeType,
+              data: screenshotData.data,
+            },
+          });
+        }
+      }
 
       // Add user-selected references (style_reference)
       for (const ref of (references as AssetInput[])) {
@@ -1433,18 +1463,13 @@ Deno.serve(async (req: Request) => {
     if (editMode && originalAspectRatio) {
       // Edit mode: Always preserve the original aspect ratio
       aspectRatioToUse = originalAspectRatio;
-      console.log(`Edit mode: Preserving original aspect ratio: ${aspectRatioToUse}`);
     } else if (aspectRatio && aspectRatio !== 'auto') {
       // User specified an aspect ratio - use it
       aspectRatioToUse = aspectRatio;
-      console.log(`Using user-specified aspect ratio: ${aspectRatioToUse}`);
     } else if (aspectRatio === 'auto' || !aspectRatio) {
       // Auto mode: use GPT's recommended aspect ratio if available
       if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
         aspectRatioToUse = renderPlan.aspect_ratio;
-        console.log(`Auto mode: Using GPT-recommended aspect ratio: ${aspectRatioToUse}`);
-      } else {
-        console.log(`Auto mode: No GPT aspect ratio recommendation - model will decide based on prompt`);
       }
     }
     
@@ -1462,13 +1487,6 @@ Deno.serve(async (req: Request) => {
       ? getResolution(aspectRatioToUse as AspectRatioValue, finalResolution)
       : null;
     
-    // Log resolution info
-    if (resolutionDims) {
-      console.log(`Target resolution: ${resolutionDims.width}x${resolutionDims.height} for aspect ratio ${aspectRatioToUse} at ${finalResolution}`);
-    } else {
-      console.log(`Aspect ratio will be determined by model. Resolution: ${finalResolution}`);
-    }
-    
     // Build generation config according to Gemini API documentation
     // For gemini-3-pro-image-preview, use image_config with aspect_ratio and image_size
     // Reference: https://ai.google.dev/gemini-api/docs/image-generation
@@ -1482,23 +1500,44 @@ Deno.serve(async (req: Request) => {
         aspect_ratio: validatedAspectRatio,
         image_size: finalResolution, // Always 2K
       };
-      console.log(`Using image_config: aspect_ratio=${validatedAspectRatio}, image_size=${finalResolution}`);
-    } else {
-      // No valid aspect ratio specified - model decides based on prompt
-      console.log(`No image_config - model will determine aspect ratio from prompt content`);
     }
+    
+    // Consolidated resolution/config logging
+    const resolutionInfo = resolutionDims 
+      ? `${resolutionDims.width}x${resolutionDims.height} @ ${finalResolution}`
+      : `model-determined @ ${finalResolution}`;
+    const aspectInfo = validatedAspectRatio 
+      ? `aspect_ratio=${validatedAspectRatio}` 
+      : 'aspect_ratio=auto';
+    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}${editMode && originalAspectRatio ? ` | preserving original` : ''}`);
 
     // Call Gemini API
-    console.log("Calling Gemini API with", parts.length, "parts...");
+    // Create a sanitized summary for logging
+    const partsSummary = parts.map((part, index) => {
+      if ('text' in part) {
+        const textPreview = part.text.length > 80 ? part.text.substring(0, 80) + '...' : part.text;
+        return `[${index}] text: "${textPreview}"`;
+      } else if ('inline_data' in part) {
+        return `[${index}] image: ${part.inline_data.mime_type} (${Math.round(part.inline_data.data.length / 1024)}KB)`;
+      } else if ('inlineData' in part) {
+        return `[${index}] image: ${part.inlineData.mimeType} (${Math.round(part.inlineData.data.length / 1024)}KB)`;
+      }
+      return `[${index}] unknown`;
+    }).join(' | ');
+    
+    console.log(`[Gemini API] Calling with ${parts.length} parts: ${partsSummary}`);
+    
+    const geminiRequestBody = {
+      contents: [{ parts }],
+      generationConfig,
+    };
+    
     const geminiResponse = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig,
-        }),
+        body: JSON.stringify(geminiRequestBody),
       }
     );
 
@@ -1509,7 +1548,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const geminiData = await geminiResponse.json();
-    console.log("Gemini response received");
+    const responseParts = geminiData.candidates?.[0]?.content?.parts?.length || 0;
+    console.log(`[Gemini Response] Received with ${responseParts} part(s)`);
 
     // Check for errors or blocked content
     if (geminiData.candidates?.[0]?.finishReason) {
@@ -1535,18 +1575,21 @@ Deno.serve(async (req: Request) => {
     let textResponse: string | null = null;
 
     if (geminiData.candidates?.[0]?.content?.parts) {
-      console.log("Number of parts:", geminiData.candidates[0].content.parts.length);
       for (const part of geminiData.candidates[0].content.parts) {
         if (part.text) {
           textResponse = part.text;
-          console.log("Text response:", textResponse?.substring(0, 100) ?? '');
         } else if (part.inlineData?.data) {
           imageBase64 = part.inlineData.data;
-          console.log("Image data found, length:", part.inlineData.data.length);
         } else if (part.inline_data?.data) {
           imageBase64 = part.inline_data.data;
-          console.log("Image data found (alt), length:", part.inline_data.data.length);
         }
+      }
+      
+      if (textResponse) {
+        console.log(`[Gemini Response] Text: "${textResponse.substring(0, 100)}${textResponse.length > 100 ? '...' : ''}"`);
+      }
+      if (imageBase64) {
+        console.log(`[Gemini Response] Image: ${Math.round(imageBase64.length / 1024)}KB extracted`);
       }
     } else {
       console.error("No candidates or parts in response");
@@ -1561,7 +1604,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(errorMsg);
     }
 
-    console.log("Successfully extracted image data, length:", imageBase64.length);
+    // Already logged above
 
     // Upload to storage
     let imageUrl: string | null = null;

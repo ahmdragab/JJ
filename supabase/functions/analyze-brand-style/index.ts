@@ -63,9 +63,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const systemPrompt = `You are an expert brand design analyst. Analyze the provided website screenshot and homepage images to extract structured style information about the brand's visual design language.
+    const systemPrompt = `You are an expert brand design analyst. Your PRIMARY task is to analyze the HOMEPAGE SCREENSHOT in detail. The screenshot is the most important image - it shows the actual website design and visual style. Pay close attention to every detail in the screenshot: layout, spacing, colors, typography, shapes, imagery, and overall aesthetic.
 
-Your task is to analyze the visual design and return a JSON object with the following structure:
+Your task is to analyze the visual design (especially the homepage screenshot) and return a JSON object with the following structure:
 
 {
   "layout_density": "minimal" | "medium" | "dense" - How much content/elements are packed into the design
@@ -97,11 +97,11 @@ Be specific and accurate. Base your analysis on what you actually see in the ima
     const imageContent: Array<{ type: string; image_url?: { url: string }; text?: string }> = [
       {
         type: "text",
-        text: "Analyze the brand's website design. The first image is the homepage screenshot. Additional images are key homepage visuals."
+        text: "Analyze the brand's website design. CRITICAL: The first image is the HOMEPAGE SCREENSHOT - this is the primary image you must analyze in detail. Pay special attention to the screenshot's layout, visual style, design patterns, and overall aesthetic. Additional images are key homepage visuals that provide supplementary context."
       }
     ];
 
-    // Add screenshot
+    // Add screenshot (PRIMARY - must be analyzed first)
     imageContent.push({
       type: "image_url",
       image_url: { url: screenshotUrl }
