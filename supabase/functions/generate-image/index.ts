@@ -203,7 +203,7 @@ function buildBrandContext(brand: Brand): { hardConstraints: string; softGuideli
   }
 
   // Logo requirement
-  hardConstraints.push(`\nLOGO: The brand logo MUST be included in every design. This is non-negotiable.`);
+  hardConstraints.push(`\nLOGO: The brand logo MUST be included in every design. This is non-negotiable. Use the provided logo exactly as-is: do not alter its colors, proportions, shapes, or typography. No recoloring, restyling, or substitutions.`);
 
   // Typography category (identity level)
   if (brand.fonts?.heading || brand.fonts?.body) {
@@ -1242,7 +1242,7 @@ Deno.serve(async (req: Request) => {
           const logoData = await fetchImageAsBase64(bestLogoUrl);
           if (logoData) {
             parts.push({
-              text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
+            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
             });
             parts.push({
               inline_data: {
@@ -1361,7 +1361,7 @@ Deno.serve(async (req: Request) => {
           const logoData = await fetchImageAsBase64(bestLogoUrl);
           if (logoData) {
             parts.push({
-              text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
+            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
             });
             parts.push({
               inline_data: {
