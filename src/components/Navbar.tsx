@@ -102,18 +102,24 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
   };
 
   const loadBrands = async () => {
+    if (!user) return;
+    
     const { data } = await supabase
       .from('brands')
       .select('*')
+      .eq('user_id', user.id)
       .order('updated_at', { ascending: false })
       .limit(5);
     if (data) setBrands(data);
   };
 
   const loadLastBrand = async () => {
+    if (!user) return;
+    
     const { data } = await supabase
       .from('brands')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();

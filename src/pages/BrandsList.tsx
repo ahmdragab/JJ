@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Sparkles, Loader2, X } from 'lucide-react';
 import { supabase, Brand } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 export function BrandsList({
   onSelectBrand,
@@ -10,6 +11,7 @@ export function BrandsList({
   onSelectBrand: (slug: string) => void;
   onCreateNew: () => void;
 }) {
+  const { user } = useAuth();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -19,14 +21,19 @@ export function BrandsList({
   });
 
   useEffect(() => {
-    loadBrands();
-  }, []);
+    if (user) {
+      loadBrands();
+    }
+  }, [user]);
 
   const loadBrands = async () => {
+    if (!user) return;
+    
     try {
       const { data, error } = await supabase
         .from('brands')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
