@@ -49,10 +49,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async () => {
+    // Use current origin to ensure redirect works in both dev and production
+    // IMPORTANT: Also configure in Supabase Dashboard:
+    // 1. Go to Authentication → URL Configuration
+    // 2. Set "Site URL" to your production domain (e.g., https://yourdomain.com)
+    // 3. Add your production domain to "Redirect URLs" whitelist
+    const redirectTo = window.location.origin;
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}`,
+        redirectTo: redirectTo,
       },
     });
     if (error) throw error;
