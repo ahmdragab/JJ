@@ -820,33 +820,34 @@ export function BrandKitEditor({
   return (
     <div className="min-h-screen bg-[#fafafa]">
       {/* Action Bar */}
-      <div className="sticky top-16 z-40 px-6 py-4">
+      <div className="sticky top-16 z-40 px-3 sm:px-4 md:px-6 py-3 sm:py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-end">
           <button
             onClick={handleSaveAndContinue}
             disabled={saving}
-            className="px-6 py-2.5 rounded-full text-white text-sm font-medium shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50"
+            className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-white text-xs sm:text-sm font-medium shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50"
             style={{ 
               background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
             }}
           >
-            {saving ? 'Saving...' : 'Continue to Create'}
+            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Continue to Create'}</span>
+            <span className="sm:hidden">{saving ? 'Saving...' : 'Continue'}</span>
           </button>
         </div>
       </div>
 
       {/* Hero Section with Brand Identity */}
       <header 
-        className="relative pt-8 pb-20 px-6 overflow-hidden"
+        className="relative pt-6 sm:pt-8 pb-12 sm:pb-20 px-4 sm:px-6 overflow-hidden"
         style={{
           background: `linear-gradient(135deg, ${primaryColor}08 0%, ${secondaryColor}05 50%, transparent 100%)`,
         }}
       >
         <div className="max-w-7xl mx-auto">
-          <div className="flex items-start gap-12">
+          <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8 md:gap-12">
             {/* Logo Display */}
             <div 
-              className="flex-shrink-0 w-32 h-32 rounded-2xl flex items-center justify-center p-4 shadow-2xl"
+              className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 rounded-xl sm:rounded-2xl flex items-center justify-center p-3 sm:p-4 shadow-2xl mx-auto sm:mx-0"
               style={{
                 background: localBrand.styleguide?.mode === 'dark' 
                   ? 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%)'
@@ -870,12 +871,12 @@ export function BrandKitEditor({
             </div>
 
             {/* Brand Info */}
-            <div className="flex-1 pt-2">
-              <h1 className="text-5xl font-light text-slate-900 tracking-tight mb-2">
+            <div className="flex-1 pt-0 sm:pt-2 text-center sm:text-left w-full">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-slate-900 tracking-tight mb-2">
                 {localBrand.name}
               </h1>
-              <p className="text-slate-400 text-lg mb-4">{localBrand.domain}</p>
-              <div className="flex items-start gap-3 mb-4">
+              <p className="text-slate-400 text-base sm:text-lg mb-4">{localBrand.domain}</p>
+              <div className="flex items-start justify-center sm:justify-start gap-3 mb-4">
                 {localBrand.slogan ? (
                   <>
                     <p className="text-xl text-slate-600 font-light italic max-w-xl">
@@ -917,21 +918,21 @@ export function BrandKitEditor({
               )}
               
               {/* Quick Stats */}
-              <div className="flex gap-8 mt-8">
+              <div className="flex gap-6 sm:gap-8 mt-6 sm:mt-8 justify-center sm:justify-start">
                 <div>
-                  <div className="text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
                     {localBrand.all_logos?.length || 1}
                   </div>
                   <div className="text-xs text-slate-400 uppercase tracking-wider">Logos</div>
                 </div>
                 <div>
-                  <div className="text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
                     {Object.values(localBrand.colors).filter(Boolean).length}
                   </div>
                   <div className="text-xs text-slate-400 uppercase tracking-wider">Colors</div>
                 </div>
                 <div>
-                  <div className="text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
                     {[localBrand.fonts.heading, localBrand.fonts.body].filter(Boolean).length}
                   </div>
                   <div className="text-xs text-slate-400 uppercase tracking-wider">Fonts</div>
@@ -942,11 +943,11 @@ export function BrandKitEditor({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 pb-20">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-12 sm:pb-20">
         {/* Color Palette - Full Width */}
-        <section className="mb-16">
-          <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Color Palette</h2>
-          <div className="flex gap-4 h-36">
+        <section className="mb-12 sm:mb-16">
+          <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Color Palette</h2>
+          <div className="flex gap-2 sm:gap-3 md:gap-4 h-28 sm:h-32 md:h-36 overflow-x-auto pb-2">
             {['primary', 'secondary', 'background', 'surface', 'text_primary'].map((key) => {
               const color = localBrand.colors[key as keyof typeof localBrand.colors] || '#e5e5e5';
               const isLight = isLightColor(color);
@@ -987,11 +988,11 @@ export function BrandKitEditor({
           </div>
         </section>
 
-        <div className="grid lg:grid-cols-2 gap-12">
+        <div className="grid lg:grid-cols-2 gap-8 sm:gap-10 md:gap-12">
           {/* Typography */}
           <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Typography</h2>
-            <div className="space-y-8">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Typography</h2>
+            <div className="space-y-6 sm:space-y-8">
               {/* Heading Font */}
               <div 
                 className="p-8 rounded-2xl"
@@ -1041,8 +1042,8 @@ export function BrandKitEditor({
 
           {/* Logo & Icon */}
           <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Brand Assets</h2>
-            <div className="grid grid-cols-2 gap-6">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Brand Assets</h2>
+            <div className="grid grid-cols-2 gap-4 sm:gap-6">
               {/* Primary Logo */}
               <div className="space-y-3">
                 <label 
@@ -1154,10 +1155,10 @@ export function BrandKitEditor({
 
         {/* Brand Voice - Horizontal */}
         {localBrand.voice && (localBrand.voice.formality || localBrand.voice.energy || (localBrand.voice.keywords && localBrand.voice.keywords.length > 0)) && (
-          <section className="mt-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Brand Voice</h2>
+          <section className="mt-12 sm:mt-16">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Brand Voice</h2>
             <div 
-              className="p-8 rounded-2xl flex items-center gap-12"
+              className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-8 md:gap-12"
               style={{
                 background: `linear-gradient(90deg, ${primaryColor}05 0%, ${secondaryColor}08 100%)`,
               }}

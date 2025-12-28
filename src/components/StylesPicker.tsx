@@ -216,17 +216,17 @@ export function StylesPicker({
       
       {/* Modal Content - Matching prompt text box style */}
       <div 
-        className="relative bg-white/95 backdrop-blur-xl rounded-2xl border shadow-xl w-full max-w-4xl max-h-[85vh] flex flex-col transition-all duration-300"
+        className="relative bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] flex flex-col transition-all duration-300"
         style={{
           borderColor: `${primaryColor}40`,
         }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 mb-1">Choose a Style</h2>
-            <p className="text-sm text-slate-500">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-100 gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-900 mb-1">Choose a Style</h2>
+            <p className="text-xs sm:text-sm text-slate-500">
               Select a style reference (max {MAX_STYLES})
             </p>
             {!canAddMore && (
@@ -245,7 +245,7 @@ export function StylesPicker({
 
         {/* Tag Filters */}
         {Object.keys(tagsByCategory).some(cat => tagsByCategory[cat].length > 0) && (
-          <div className="p-4 border-b border-slate-100 bg-slate-50/50 relative">
+          <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/50 relative">
             <div className="flex items-center gap-2 flex-wrap">
               {(['businessModel', 'industry', 'visualType', 'contentFormat', 'mood'] as const).map((category) => {
                 const tags = tagsByCategory[category];
@@ -267,7 +267,7 @@ export function StylesPicker({
                   <div key={category} className="relative tag-filter-dropdown">
                     <button
                       onClick={() => setOpenCategory(openCategory === category ? null : category)}
-                      className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                      className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-lg transition-colors ${
                         openCategory === category
                           ? 'text-white'
                           : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -286,7 +286,7 @@ export function StylesPicker({
 
                     {/* Dropdown for this category */}
                     {openCategory === category && (
-                      <div className="absolute top-full left-0 mt-2 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-3 min-w-[200px] max-w-[300px] max-h-[300px] overflow-y-auto tag-filter-dropdown">
+                      <div className="absolute top-full left-0 mt-2 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-2 sm:p-3 min-w-[180px] sm:min-w-[200px] max-w-[calc(100vw-2rem)] sm:max-w-[300px] max-h-[300px] overflow-y-auto tag-filter-dropdown">
                         <div className="space-y-2">
                           {tags.map(tag => {
                             // Find the original tag (case-insensitive) for matching
@@ -338,17 +338,17 @@ export function StylesPicker({
 
         {/* Styles Grid */}
         {loading ? (
-          <div className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 flex items-center justify-center">
             <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
           </div>
         ) : filteredStyles.length > 0 ? (
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
             {selectedTags.size > 0 && (
-              <div className="mb-4 text-sm text-slate-600">
+              <div className="mb-3 sm:mb-4 text-xs sm:text-sm text-slate-600">
                 Showing {filteredStyles.length} of {styles.length} styles
               </div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
               {filteredStyles.map((style) => {
                 const isSelected = localSelection.some(s => s.id === style.id);
                 return (
@@ -429,8 +429,8 @@ export function StylesPicker({
         )}
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div className="text-sm text-slate-600">
+        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-slate-600">
             {localSelection.length > 0 ? (
               <>
                 <span className="font-medium">{localSelection.length}</span>
@@ -449,17 +449,17 @@ export function StylesPicker({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl border border-slate-200 text-slate-600 font-medium hover:bg-white transition-colors"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-white transition-colors"
             >
               Cancel
             </button>
             {localSelection.length > 0 && (
               <button
                 onClick={handleAdd}
-                className="px-5 py-2.5 rounded-2xl text-white font-medium transition-all hover:shadow-lg"
+                className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-white text-sm font-medium transition-all hover:shadow-lg"
                 style={{ backgroundColor: primaryColor }}
               >
                 Add Style

@@ -157,24 +157,24 @@ export function BrandsList({
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
       </div>
 
-      <div className="relative z-10 pt-8 md:pt-12 pb-8 md:pb-12">
+      <div className="relative z-10 pt-6 sm:pt-8 md:pt-12 pb-6 sm:pb-8 md:pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           {/* Header */}
-          <div className="mb-12 md:mb-16">
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+          <div className="mb-8 sm:mb-12 md:mb-16">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 sm:gap-6">
               <div>
-                <h1 className="text-3xl md:text-5xl font-bold mb-4 text-slate-900 leading-tight font-playful">
+                <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold mb-2 sm:mb-4 text-slate-900 leading-tight font-playful">
                   Your Brands
                 </h1>
-                <p className="text-lg md:text-xl text-slate-600/80 font-light">
+                <p className="text-base sm:text-lg md:text-xl text-slate-600/80 font-light">
                   A collection of your creative identities
                 </p>
               </div>
               <button
                 onClick={onCreateNew}
-                className="group relative px-6 py-3 bg-slate-900 text-white font-medium text-base rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden"
+                className="group relative px-4 sm:px-6 py-2 sm:py-3 bg-slate-900 text-white font-medium text-sm sm:text-base rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden w-full sm:w-auto"
               >
-                <span className="relative z-10 flex items-center gap-2">
+                <span className="relative z-10 flex items-center justify-center gap-2">
                   <Plus className="w-4 h-4" />
                   New Brand
                 </span>
@@ -206,7 +206,7 @@ export function BrandsList({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10">
               {brands.map((brand, index) => {
                 const primaryColor = brand.colors?.primary || '#64748b';
                 const secondaryColor = brand.colors?.secondary || '#94a3b8';
@@ -234,10 +234,10 @@ export function BrandsList({
                       </div>
 
                       {/* Content */}
-                      <div className="relative p-6 md:p-8">
+                      <div className="relative p-4 sm:p-6 md:p-8">
                         {/* Brand Preview - Organic shape */}
                         <div 
-                          className="relative mb-6 h-48 rounded-[2.5rem] overflow-hidden group-hover:scale-105 transition-transform duration-500"
+                          className="relative mb-4 sm:mb-6 h-40 sm:h-48 rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden group-hover:scale-105 transition-transform duration-500"
                           style={{
                             clipPath: 'polygon(0% 0%, 100% 0%, 98% 100%, 2% 100%)',
                           }}
@@ -284,17 +284,17 @@ export function BrandsList({
                         </div>
 
                         {/* Brand Info */}
-                        <div className="space-y-4">
+                        <div className="space-y-3 sm:space-y-4">
                           <div>
                             <h3 
-                              className="text-2xl font-bold mb-1.5"
+                              className="text-xl sm:text-2xl font-bold mb-1 sm:mb-1.5"
                               style={{
                                 color: primaryColor,
                               }}
                             >
                               {brand.name}
                             </h3>
-                            <p className="text-sm text-slate-600 font-light">{brand.domain}</p>
+                            <p className="text-xs sm:text-sm text-slate-600 font-light">{brand.domain}</p>
                           </div>
 
                           {brand.slogan && (

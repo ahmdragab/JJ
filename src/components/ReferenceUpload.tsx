@@ -217,14 +217,14 @@ export function ReferenceUpload({
       
       {/* Modal Content */}
       <div 
-        className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col border border-slate-200/50"
+        className="relative bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col border border-slate-200/50"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 mb-1">Upload Reference</h2>
-            <p className="text-sm text-slate-500">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-100 gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-900 mb-1">Upload Reference</h2>
+            <p className="text-xs sm:text-sm text-slate-500">
               Upload style inspiration images to guide your design
               {maxSelection && ` (max ${maxSelection})`}
             </p>
@@ -243,13 +243,13 @@ export function ReferenceUpload({
         </div>
 
         {/* Upload Area */}
-        <div className="p-6 border-b border-slate-100">
+        <div className="p-4 sm:p-6 border-b border-slate-100">
           <label
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-colors group ${
+            className={`flex flex-col items-center justify-center w-full h-40 sm:h-48 border-2 border-dashed rounded-xl sm:rounded-2xl cursor-pointer transition-colors group ${
               isDragging 
                 ? 'border-blue-400 bg-blue-50' 
                 : localSelection.length > 0 
@@ -299,12 +299,12 @@ export function ReferenceUpload({
             <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
           </div>
         ) : allReferences.length > 0 ? (
-          <div className="flex-1 overflow-y-auto p-6">
-            <h3 className="text-sm font-medium text-slate-700 mb-4">
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
+            <h3 className="text-xs sm:text-sm font-medium text-slate-700 mb-3 sm:mb-4">
               {existingReferences.length > 0 ? 'Available References' : 'Uploaded References'} 
               ({localSelection.length}{maxSelection ? `/${maxSelection}` : ''} selected)
             </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
               {allReferences.map((reference) => {
                 const isSelected = localSelection.some(r => r.id === reference.id);
                 return (
@@ -362,8 +362,8 @@ export function ReferenceUpload({
         ) : null}
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div className="text-sm text-slate-600">
+        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-slate-600">
             {localSelection.length > 0 ? (
               <>
                 <span className="font-medium">{localSelection.length}</span>
@@ -384,17 +384,17 @@ export function ReferenceUpload({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl border border-slate-200 text-slate-600 font-medium hover:bg-white transition-colors"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-white transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirm}
               disabled={localSelection.length === 0}
-              className="px-5 py-2.5 rounded-2xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-white text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: primaryColor }}
             >
               Confirm

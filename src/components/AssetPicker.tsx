@@ -249,14 +249,14 @@ export function AssetPicker({
       
       {/* Modal Content */}
       <div 
-        className="relative bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col border border-slate-200/50"
+        className="relative bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col border border-slate-200/50"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-100">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900 mb-1">{title}</h2>
-            <p className="text-sm text-slate-500">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-100 gap-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-xl font-semibold text-slate-900 mb-1">{title}</h2>
+            <p className="text-xs sm:text-sm text-slate-500">
               {localSelection.length > 0 
                 ? `${localSelection.length} ${localSelection.length === 1 ? 'item' : 'items'} selected${
                     maxSelection ? ` / ${maxSelection} max` : ''
@@ -284,8 +284,8 @@ export function AssetPicker({
         </div>
 
         {/* Search & Upload Bar */}
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center gap-3">
+        <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             {/* Search */}
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -294,7 +294,7 @@ export function AssetPicker({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search media..."
-                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition-all text-sm"
+                className="w-full pl-10 pr-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl bg-white border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition-all text-sm"
                 style={{
                   focusRingColor: `${primaryColor}20`,
                 }}
@@ -303,10 +303,10 @@ export function AssetPicker({
 
             {/* Upload Type Toggle (only if filterType is 'all') */}
             {filterType === 'all' && (
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => setUploadType('asset')}
-                  className={`px-4 py-2.5 rounded-2xl text-xs font-medium transition-all ${
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-medium transition-all ${
                     uploadType === 'asset' 
                       ? 'text-white shadow-md' 
                       : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'
@@ -317,7 +317,7 @@ export function AssetPicker({
                 </button>
                 <button
                   onClick={() => setUploadType('reference')}
-                  className={`px-4 py-2.5 rounded-2xl text-xs font-medium transition-all ${
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs font-medium transition-all ${
                     uploadType === 'reference' 
                       ? 'text-white shadow-md' 
                       : 'text-slate-600 hover:bg-slate-100 bg-white border border-slate-200'
@@ -335,7 +335,7 @@ export function AssetPicker({
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-white font-medium cursor-pointer transition-all hover:shadow-lg shrink-0 ${
+              className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-white text-sm font-medium cursor-pointer transition-all hover:shadow-lg shrink-0 ${
                 isDragging ? 'ring-2 ring-offset-2 ring-white' : ''
               }`}
               style={{ 
@@ -365,7 +365,7 @@ export function AssetPicker({
         </div>
 
         {/* Assets Grid */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
@@ -391,7 +391,7 @@ export function AssetPicker({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
               {filteredAssets.map((asset) => {
                 const isSelected = localSelection.some(a => a.id === asset.id);
                 return (
@@ -471,8 +471,8 @@ export function AssetPicker({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
-          <div className="text-sm text-slate-600">
+        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-slate-600">
             {localSelection.length > 0 ? (
               <>
                 <span className="font-medium">{localSelection.length}</span> {localSelection.length === 1 ? 'item' : 'items'} selected
@@ -495,17 +495,17 @@ export function AssetPicker({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 rounded-2xl border border-slate-200 text-slate-600 font-medium hover:bg-white transition-colors"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-white transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirm}
               disabled={localSelection.length === 0}
-              className="px-5 py-2.5 rounded-2xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-white text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: primaryColor }}
             >
               Confirm

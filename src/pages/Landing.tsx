@@ -162,9 +162,9 @@ export function Landing({
       <div className="absolute inset-0 bg-black/20 backdrop-blur-[1px]"></div>
 
       {/* Centered content */}
-      <div className="relative z-10 w-full max-w-md px-6 text-center -mt-16">
+      <div className="relative z-10 w-full max-w-md px-4 sm:px-6 text-center -mt-12 sm:-mt-16">
         {/* Subheading */}
-        <p className="text-xl md:text-2xl text-white/90 mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>
+        <p className="text-lg sm:text-xl md:text-2xl text-white/90 mb-4 sm:mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>
           <span style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>
             Create <span className="font-bold">on-brand</span>{' '}
             <span 
@@ -201,7 +201,7 @@ export function Landing({
         {/* Input box */}
         <form onSubmit={handleStart} className="w-full">
           <div className="flex flex-col gap-2">
-            <div className="flex gap-2 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/60 p-1.5">
+            <div className="flex gap-1.5 sm:gap-2 bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/60 p-1 sm:p-1.5">
               <input
                 type="text"
                 value={url}
@@ -210,15 +210,15 @@ export function Landing({
                   setDomainError(''); // Clear error on input change
                 }}
                 placeholder="yourwebsite.com"
-                className="flex-1 px-3 py-2.5 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
+                className="flex-1 px-2 sm:px-3 py-2 sm:py-2.5 text-xs sm:text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
                 style={{ fontFamily: "'Inter', sans-serif" }}
                 required
               />
               <button
                 type="submit"
-                className="px-4 py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600"
+                className="px-3 sm:px-4 py-2 sm:py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[40px] sm:min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600 shrink-0"
               >
-                <ArrowUp className="w-4 h-4" />
+                <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>
             </div>
             {domainError && (
@@ -231,21 +231,22 @@ export function Landing({
       </div>
 
       {/* Minimal header - top right */}
-      <div className="absolute top-6 right-6 z-20 flex items-center gap-3">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20 flex items-center gap-2 sm:gap-3">
         {user ? (
           <>
             {onViewBrands && (
               <button
                 onClick={onViewBrands}
-                className="flex items-center gap-2 text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg"
               >
-                <FolderOpen className="w-4 h-4" />
-                My Brands
+                <FolderOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">My Brands</span>
+                <span className="sm:hidden">Brands</span>
               </button>
             )}
             <button
               onClick={signOut}
-              className="text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg"
+              className="text-xs sm:text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg"
             >
               Sign Out
             </button>
@@ -257,7 +258,7 @@ export function Landing({
               setShowAuth(true);
               setError('');
             }}
-            className="text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-4 py-2 rounded-lg"
+            className="text-xs sm:text-sm text-slate-700 hover:text-slate-900 transition-colors bg-white/80 backdrop-blur-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg"
           >
             Sign In
           </button>
@@ -279,7 +280,7 @@ export function Landing({
           
           {/* Modal */}
           <div 
-            className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl max-w-md w-full p-8 border border-slate-200/50"
+            className="relative bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl max-w-md w-full p-4 sm:p-6 md:p-8 border border-slate-200/50 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}

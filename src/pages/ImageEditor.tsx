@@ -139,7 +139,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
           headers: {
@@ -150,9 +150,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             prompt: promptText,
             brandId: brand.id,
             imageId: image.id,
-            editMode: true,
             previousImageUrl: image.image_url,
-            conversation: updatedConversation.slice(-5), // Send last 5 messages for context
           }),
         }
       );

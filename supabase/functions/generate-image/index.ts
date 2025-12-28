@@ -91,13 +91,6 @@ interface AssetInput {
   style_description?: string; // Optional: for style library references
 }
 
-interface ConversationMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  image_url?: string;
-  timestamp: string;
-}
-
 // GPT-5.1 Output Schema
 interface RenderPlan {
   channel: string;
@@ -977,12 +970,9 @@ Deno.serve(async (req: Request) => {
       prompt, 
       brandId, 
       imageId,
-      editMode = false,
-      previousImageUrl,
-      conversation = [],
       includeLogoReference = true,
-      assets = [],      // New: assets to include
-      references = [],  // New: style references
+      assets = [],      // Assets to include
+      references = [],  // Style references
       aspectRatio,     // Aspect ratio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto'
       // Default to 2K resolution (same token cost as 1K but better quality)
       resolution: resolutionLevel = '2K', // Resolution level: '1K' | '2K' | '4K'
@@ -1032,34 +1022,8 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Credit deduction logic:
-    // - New generations: Always deduct 1 credit
-    // - Edits: First edit is free, subsequent edits cost 1 credit
-    let shouldDeductCredit = false;
-    
-    if (!editMode && userId) {
-      // New generation - always deduct
-      shouldDeductCredit = true;
-    } else if (editMode && userId && imageId) {
-      // For edits, check if this is the first edit (edit_count === 0 means first edit is free)
-      const { data: imageData } = await supabase
-        .from("images")
-        .select("edit_count")
-        .eq("id", imageId)
-        .single();
-      
-      const currentEditCount = imageData?.edit_count ?? 0;
-      // Only deduct if this is NOT the first edit (edit_count >= 1 means this will be 2nd+ edit)
-      shouldDeductCredit = currentEditCount >= 1;
-      
-      if (shouldDeductCredit) {
-        console.log(`Edit #${currentEditCount + 1} - will deduct credit (first edit was free)`);
-      } else {
-        console.log(`First edit - free (no credit deduction)`);
-      }
-    }
-
-    if (shouldDeductCredit && userId) {
+    // Credit deduction logic: Always deduct 1 credit for new generations
+    if (userId) {
       // First, check current credits
       const { data: creditsData, error: creditsError } = await supabase
         .from("user_credits")
@@ -1112,7 +1076,7 @@ Deno.serve(async (req: Request) => {
             amount: -1,
             balance_after: currentCredits - 1,
             source: 'usage',
-            description: editMode ? 'Credit used for image edit' : 'Credit used for image generation'
+            description: 'Credit used for image generation'
           });
       } catch (txError) {
         console.warn("Failed to log credit transaction:", txError);
@@ -1123,7 +1087,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Consolidated request logging
-    console.log(`[${editMode ? "EDIT" : "GENERATE"}] Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
+    console.log(`[GENERATE] Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
 
     // Validate Gemini 3 Pro Image limits
     const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
@@ -1160,299 +1124,140 @@ Deno.serve(async (req: Request) => {
     // Build the request parts for Gemini
     const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
     
-    // Store GPT prompt info for response (used in non-edit mode)
+    // Store GPT prompt info for response
     let gptPromptInfo: GPTPromptInfo | null = null;
     let renderPlan: RenderPlan | null = null; // Store render plan for resolution recommendation
-
-    // For edit mode, preserve the original image's aspect ratio
-    let originalAspectRatio: string | null = null;
+      
+    // ================================================================
+    // GPT-5.1 PROMPTING LAYER
+    // ================================================================
     
-    if (editMode && imageId) {
-      // Try to get aspect ratio from image metadata
-      const { data: imageData } = await supabase
-        .from('images')
-        .select('metadata')
-        .eq('id', imageId)
-        .single();
+    let finalPrompt: string;
+
+    if (brand) {
+      // Use GPT-5.1 to generate optimized prompt
+      // Pass aspectRatio only if user specified one (not 'auto' or undefined)
+      const aspectRatioToPass = aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined;
+      const gptResult = await callGPT51(
+        prompt,
+        brand,
+        assets as AssetInput[],
+        references as AssetInput[],
+        aspectRatioToPass
+      );
+      renderPlan = gptResult.renderPlan;
+      gptPromptInfo = gptResult.promptInfo;
+      finalPrompt = renderPlan.final_prompt;
       
-      if (imageData?.metadata && typeof imageData.metadata === 'object') {
-        const metadata = imageData.metadata as Record<string, unknown>;
-        if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
-          originalAspectRatio = metadata.aspect_ratio;
-          // Logged below with other edit mode info
-        }
-      }
-      
-      // If not found in metadata, try to detect from image dimensions
-      if (!originalAspectRatio && previousImageUrl) {
-        const previousImageData = await fetchImageAsBase64(previousImageUrl);
-        if (previousImageData?.width && previousImageData?.height) {
-          const detectedRatio = detectAspectRatioFromDimensions(
-            previousImageData.width,
-            previousImageData.height
-          );
-          if (detectedRatio) {
-            originalAspectRatio = detectedRatio;
-            // Logged below with other edit mode info
-          }
-        }
-      }
-      
-      // Logged below with resolution info
+      // Consolidated GPT optimization logging
+      const gptInfo = [
+        `Channel: ${renderPlan.channel}`,
+        renderPlan.headline ? `Headline: ${renderPlan.headline}` : null,
+        renderPlan.resolution ? `Resolution: ${renderPlan.resolution}` : null,
+      ].filter(Boolean).join(' | ');
+      console.log(`[GPT-5.1 Optimized] ${gptInfo}`);
+    } else {
+      finalPrompt = prompt;
     }
 
-    // For edit mode, declare asset names array early
-    const attachedAssetNamesEdit: string[] = [];
-    
-    // For edit mode, include the previous image
-    if (editMode && previousImageUrl) {
-      const previousImageData = await fetchImageAsBase64(previousImageUrl);
-      if (previousImageData) {
+    // Add logo reference (always included unless disabled)
+    if (brand && includeLogoReference) {
+      const bestLogoUrl = getBestLogoUrl(brand);
+      if (bestLogoUrl) {
+        const logoData = await fetchImageAsBase64(bestLogoUrl);
+        if (logoData) {
+          parts.push({
+            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
+          });
+          parts.push({
+            inline_data: {
+              mime_type: logoData.mimeType,
+              data: logoData.data,
+            },
+          });
+        }
+      }
+    }
+
+    // Add user-selected assets (must_include)
+    const attachedAssetNames: string[] = [];
+    for (const asset of (assets as AssetInput[])) {
+      const assetData = await fetchImageAsBase64(asset.url);
+      if (assetData) {
+        const instruction = renderPlan?.asset_instructions.find(ai => ai.asset_id === asset.id);
+        attachedAssetNames.push(asset.name);
         parts.push({
-          text: "Here is the current image. Please modify it according to the user's request:",
+          text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. ${instruction?.usage || 'Include this prominently in the design with high fidelity and accuracy'}. This is not optional - the attached image below must be reproduced in the output.`,
         });
         parts.push({
           inline_data: {
-            mime_type: previousImageData.mimeType,
-            data: previousImageData.data,
+            mime_type: assetData.mimeType,
+            data: assetData.data,
           },
         });
-        
-        // Add aspect ratio preservation instruction if we know it
-        const aspectRatioInstruction = originalAspectRatio
-          ? `\n\nCRITICAL: Maintain the exact same aspect ratio (${originalAspectRatio}) as the original image. The output must have the same dimensions and proportions.`
-          : '';
-        
-        // Add explicit instruction about attached assets in edit mode
-        let assetInstructionEdit = '';
-        if (attachedAssetNamesEdit.length > 0) {
-          assetInstructionEdit = `\n\nCRITICAL: The ${attachedAssetNamesEdit.length} image${attachedAssetNamesEdit.length > 1 ? 's' : ''} attached above (${attachedAssetNamesEdit.join(', ')}) ${attachedAssetNamesEdit.length > 1 ? 'are' : 'is'} REQUIRED and MUST be included in the edited design. These are high-fidelity assets that must appear accurately in the output.`;
-        }
-        
-        parts.push({
-          text: `USER'S EDIT REQUEST: ${prompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.${aspectRatioInstruction}${assetInstructionEdit}`,
-        });
       }
-
-      // Add assets and references in edit mode too
-      // Add logo reference (always included unless disabled)
-      if (brand && includeLogoReference) {
-        const bestLogoUrl = getBestLogoUrl(brand);
-        if (bestLogoUrl) {
-          const logoData = await fetchImageAsBase64(bestLogoUrl);
-          if (logoData) {
-            parts.push({
-            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
-            });
-            parts.push({
-              inline_data: {
-                mime_type: logoData.mimeType,
-                data: logoData.data,
-              },
-            });
-          }
-        }
-      }
-
-      // Add user-selected assets (must_include)
-      for (const asset of (assets as AssetInput[])) {
-        const assetData = await fetchImageAsBase64(asset.url);
-        if (assetData) {
-          attachedAssetNamesEdit.push(asset.name);
-          parts.push({
-            text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. Include this prominently in the design with high fidelity and accuracy. This is not optional - the attached image below must be reproduced in the output.`,
-          });
-          parts.push({
-            inline_data: {
-              mime_type: assetData.mimeType,
-              data: assetData.data,
-            },
-          });
-        }
-      }
-
-      // Add backdrop/style references
-      if (brand?.backdrops?.length) {
-        const backdropData = await fetchImageAsBase64(brand.backdrops[0].url);
-        if (backdropData) {
-          parts.push({
-            text: "STYLE REFERENCE - Example of the brand's visual style. Use this for mood and style inspiration only, do not copy elements directly:",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: backdropData.mimeType,
-              data: backdropData.data,
-            },
-          });
-        }
-      }
-
-      // Add homepage screenshot as style reference (in addition to style profile analysis)
-      if (brand?.screenshot) {
-        const screenshotData = await fetchImageAsBase64(brand.screenshot);
-        if (screenshotData) {
-          parts.push({
-            text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: screenshotData.mimeType,
-              data: screenshotData.data,
-            },
-          });
-        }
-      }
-
-      // Add user-selected references (style_reference)
-      for (const ref of (references as AssetInput[])) {
-        const refData = await fetchImageAsBase64(ref.url);
-        if (refData) {
-          const styleDesc = ref.style_description 
-            ? ` Style: ${ref.style_description}.` 
-            : '';
-          parts.push({
-            text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
-          });
-          parts.push({
-            inline_data: {
-              mime_type: refData.mimeType,
-              data: refData.data,
-            },
-          });
-        }
-      }
-    } else {
-      // ================================================================
-      // NEW: GPT-5.1 PROMPTING LAYER
-      // ================================================================
-      
-      let finalPrompt: string;
-
-      if (brand) {
-        // Use GPT-5.1 to generate optimized prompt
-        // Pass aspectRatio only if user specified one (not 'auto' or undefined)
-        const aspectRatioToPass = aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined;
-        const gptResult = await callGPT51(
-          prompt,
-          brand,
-          assets as AssetInput[],
-          references as AssetInput[],
-          aspectRatioToPass
-        );
-        renderPlan = gptResult.renderPlan;
-        gptPromptInfo = gptResult.promptInfo;
-        finalPrompt = renderPlan.final_prompt;
-        
-        // Consolidated GPT optimization logging
-        const gptInfo = [
-          `Channel: ${renderPlan.channel}`,
-          renderPlan.headline ? `Headline: ${renderPlan.headline}` : null,
-          renderPlan.resolution ? `Resolution: ${renderPlan.resolution}` : null,
-        ].filter(Boolean).join(' | ');
-        console.log(`[GPT-5.1 Optimized] ${gptInfo}`);
-      } else {
-        finalPrompt = prompt;
-      }
-
-      // Add logo reference (always included unless disabled)
-      if (brand && includeLogoReference) {
-        const bestLogoUrl = getBestLogoUrl(brand);
-        if (bestLogoUrl) {
-          const logoData = await fetchImageAsBase64(bestLogoUrl);
-          if (logoData) {
-            parts.push({
-            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
-            });
-            parts.push({
-              inline_data: {
-                mime_type: logoData.mimeType,
-                data: logoData.data,
-              },
-            });
-          }
-        }
-      }
-
-      // Add user-selected assets (must_include)
-      const attachedAssetNames: string[] = [];
-      for (const asset of (assets as AssetInput[])) {
-        const assetData = await fetchImageAsBase64(asset.url);
-        if (assetData) {
-          const instruction = renderPlan?.asset_instructions.find(ai => ai.asset_id === asset.id);
-          attachedAssetNames.push(asset.name);
-          parts.push({
-            text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. ${instruction?.usage || 'Include this prominently in the design with high fidelity and accuracy'}. This is not optional - the attached image below must be reproduced in the output.`,
-          });
-          parts.push({
-            inline_data: {
-              mime_type: assetData.mimeType,
-              data: assetData.data,
-            },
-          });
-        }
-      }
-
-      // Add backdrop/style references
-      if (brand?.backdrops?.length) {
-        const backdropData = await fetchImageAsBase64(brand.backdrops[0].url);
-        if (backdropData) {
-          parts.push({
-            text: "STYLE REFERENCE - Example of the brand's visual style. Use this for mood and style inspiration only, do not copy elements directly:",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: backdropData.mimeType,
-              data: backdropData.data,
-            },
-          });
-        }
-      }
-
-      // Add homepage screenshot as style reference (in addition to style profile analysis)
-      if (brand?.screenshot) {
-        const screenshotData = await fetchImageAsBase64(brand.screenshot);
-        if (screenshotData) {
-          parts.push({
-            text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: screenshotData.mimeType,
-              data: screenshotData.data,
-            },
-          });
-        }
-      }
-
-      // Add user-selected references (style_reference)
-      for (const ref of (references as AssetInput[])) {
-        const refData = await fetchImageAsBase64(ref.url);
-        if (refData) {
-          const styleDesc = ref.style_description 
-            ? ` Style: ${ref.style_description}.` 
-            : '';
-          parts.push({
-            text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
-          });
-          parts.push({
-            inline_data: {
-              mime_type: refData.mimeType,
-              data: refData.data,
-            },
-          });
-        }
-      }
-
-      // Add explicit instruction tying attached assets to the prompt
-      if (attachedAssetNames.length > 0) {
-        parts.push({
-          text: `\n\nCRITICAL REQUIREMENT: The ${attachedAssetNames.length} image${attachedAssetNames.length > 1 ? 's' : ''} attached above (${attachedAssetNames.join(', ')}) ${attachedAssetNames.length > 1 ? 'are' : 'is'} REQUIRED and MUST be included in the final design. These are high-fidelity assets that must appear accurately in the output. Do not generate the design without including ${attachedAssetNames.length > 1 ? 'these assets' : 'this asset'}.`,
-        });
-      }
-
-      // Add the optimized prompt
-      parts.push({ text: finalPrompt });
     }
+
+    // Add backdrop/style references
+    if (brand?.backdrops?.length) {
+      const backdropData = await fetchImageAsBase64(brand.backdrops[0].url);
+      if (backdropData) {
+        parts.push({
+          text: "STYLE REFERENCE - Example of the brand's visual style. Use this for mood and style inspiration only, do not copy elements directly:",
+        });
+        parts.push({
+          inline_data: {
+            mime_type: backdropData.mimeType,
+            data: backdropData.data,
+          },
+        });
+      }
+    }
+
+    // Add homepage screenshot as style reference (in addition to style profile analysis)
+    if (brand?.screenshot) {
+      const screenshotData = await fetchImageAsBase64(brand.screenshot);
+      if (screenshotData) {
+        parts.push({
+          text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
+        });
+        parts.push({
+          inline_data: {
+            mime_type: screenshotData.mimeType,
+            data: screenshotData.data,
+          },
+        });
+      }
+    }
+
+    // Add user-selected references (style_reference)
+    for (const ref of (references as AssetInput[])) {
+      const refData = await fetchImageAsBase64(ref.url);
+      if (refData) {
+        const styleDesc = ref.style_description 
+          ? ` Style: ${ref.style_description}.` 
+          : '';
+        parts.push({
+          text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
+        });
+        parts.push({
+          inline_data: {
+            mime_type: refData.mimeType,
+            data: refData.data,
+          },
+        });
+      }
+    }
+
+    // Add explicit instruction tying attached assets to the prompt
+    if (attachedAssetNames.length > 0) {
+      parts.push({
+        text: `\n\nCRITICAL REQUIREMENT: The ${attachedAssetNames.length} image${attachedAssetNames.length > 1 ? 's' : ''} attached above (${attachedAssetNames.join(', ')}) ${attachedAssetNames.length > 1 ? 'are' : 'is'} REQUIRED and MUST be included in the final design. These are high-fidelity assets that must appear accurately in the output. Do not generate the design without including ${attachedAssetNames.length > 1 ? 'these assets' : 'this asset'}.`,
+      });
+    }
+
+    // Add the optimized prompt
+    parts.push({ text: finalPrompt });
 
     // Resolution is always fixed at 2K
     const finalResolution: ResolutionLevel = '2K';
@@ -1460,10 +1265,7 @@ Deno.serve(async (req: Request) => {
     // Determine which aspect ratio to use
     let aspectRatioToUse: string | null = null;
     
-    if (editMode && originalAspectRatio) {
-      // Edit mode: Always preserve the original aspect ratio
-      aspectRatioToUse = originalAspectRatio;
-    } else if (aspectRatio && aspectRatio !== 'auto') {
+    if (aspectRatio && aspectRatio !== 'auto') {
       // User specified an aspect ratio - use it
       aspectRatioToUse = aspectRatio;
     } else if (aspectRatio === 'auto' || !aspectRatio) {
@@ -1509,7 +1311,7 @@ Deno.serve(async (req: Request) => {
     const aspectInfo = validatedAspectRatio 
       ? `aspect_ratio=${validatedAspectRatio}` 
       : 'aspect_ratio=auto';
-    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}${editMode && originalAspectRatio ? ` | preserving original` : ''}`);
+    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}`);
 
     // Call Gemini API
     // Create a sanitized summary for logging
@@ -1519,8 +1321,6 @@ Deno.serve(async (req: Request) => {
         return `[${index}] text: "${textPreview}"`;
       } else if ('inline_data' in part) {
         return `[${index}] image: ${part.inline_data.mime_type} (${Math.round(part.inline_data.data.length / 1024)}KB)`;
-      } else if ('inlineData' in part) {
-        return `[${index}] image: ${part.inlineData.mimeType} (${Math.round(part.inlineData.data.length / 1024)}KB)`;
       }
       return `[${index}] unknown`;
     }).join(' | ');
@@ -1623,69 +1423,35 @@ Deno.serve(async (req: Request) => {
         updateData.image_url = imageUrl;
       }
 
-      if (editMode) {
-        const assistantMessage: ConversationMessage = {
-          role: 'assistant',
-          content: textResponse ?? 'Image updated',
-          image_url: imageUrl || undefined,
-          timestamp: new Date().toISOString(),
-        };
-
-        const { data: currentImage } = await supabase
-          .from('images')
-          .select('conversation, edit_count, image_url, version_history, metadata')
-          .eq('id', imageId)
-          .single();
-
-        if (currentImage) {
-          updateData.conversation = [...(currentImage.conversation || []), assistantMessage];
-          updateData.edit_count = (currentImage.edit_count || 0) + 1;
-          
-          if (currentImage.image_url) {
-            const versionHistory = Array.isArray(currentImage.version_history) 
-              ? currentImage.version_history 
-              : [];
-            
-            const versionEntry = {
-              image_url: currentImage.image_url,
-              timestamp: new Date().toISOString(),
-              edit_prompt: prompt,
-            };
-            
-            updateData.version_history = [...versionHistory, versionEntry];
-          }
-        }
-      } else {
-        // For new generations, store GPT prompt info and aspect ratio in metadata
-        const { data: currentImage } = await supabase
-          .from('images')
-          .select('metadata')
-          .eq('id', imageId)
-          .single();
-        
-        const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
-        const newMetadata: Record<string, unknown> = {
-          ...existingMetadata,
-        };
-        
-        if (gptPromptInfo) {
-          newMetadata.gpt_prompt_info = gptPromptInfo;
-        }
-        
-        // Store the aspect ratio that was used (for future edits)
-        if (validatedAspectRatio) {
-          newMetadata.aspect_ratio = validatedAspectRatio;
-        } else if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
-          // Store GPT's recommended aspect ratio if we used it
-          newMetadata.aspect_ratio = renderPlan.aspect_ratio;
-        } else if (aspectRatio && aspectRatio !== 'auto') {
-          // Store user-specified aspect ratio
-          newMetadata.aspect_ratio = aspectRatio;
-        }
-        
-        if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || validatedAspectRatio) {
-          updateData.metadata = newMetadata;
-        }
+      // For new generations, store GPT prompt info and aspect ratio in metadata
+      const { data: currentImage } = await supabase
+        .from('images')
+        .select('metadata')
+        .eq('id', imageId)
+        .single();
+      
+      const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
+      const newMetadata: Record<string, unknown> = {
+        ...existingMetadata,
+      };
+      
+      if (gptPromptInfo) {
+        newMetadata.gpt_prompt_info = gptPromptInfo;
+      }
+      
+      // Store the aspect ratio that was used (for future edits)
+      if (validatedAspectRatio) {
+        newMetadata.aspect_ratio = validatedAspectRatio;
+      } else if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
+        // Store GPT's recommended aspect ratio if we used it
+        newMetadata.aspect_ratio = renderPlan.aspect_ratio;
+      } else if (aspectRatio && aspectRatio !== 'auto') {
+        // Store user-specified aspect ratio
+        newMetadata.aspect_ratio = aspectRatio;
+      }
+      
+      if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || validatedAspectRatio) {
+        updateData.metadata = newMetadata;
       }
 
       await supabase

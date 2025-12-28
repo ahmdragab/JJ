@@ -515,7 +515,7 @@ export function Studio({ brand }: { brand: Brand }) {
       
       // Make the API call - this blocks until the image is generated
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
           headers: {
@@ -526,9 +526,7 @@ export function Studio({ brand }: { brand: Brand }) {
             prompt: editPromptText,
             brandId: brand.id,
             imageId: imageId,
-            editMode: true,
             previousImageUrl: selectedImage.image_url,
-            conversation: updatedConversation.slice(-5),
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -808,8 +806,8 @@ export function Studio({ brand }: { brand: Brand }) {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 pb-40">
-        <div className="p-6 md:p-12">
+      <div className="relative z-10 pb-32 sm:pb-40">
+        <div className="p-4 sm:p-6 md:p-12">
           <div className="max-w-7xl mx-auto">
             {/* TEMPLATES COMMENTED OUT */}
             {/* Templates Section - Collapsible when images exist */}
@@ -883,10 +881,10 @@ export function Studio({ brand }: { brand: Brand }) {
                   {loadingPresets ? (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                      <span className="ml-3 text-slate-600">Generating smart presets...</span>
+                      <span className="ml-3 text-slate-600 text-sm sm:text-base">Generating smart presets...</span>
                     </div>
                   ) : smartPresets.length > 0 ? (
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                       {smartPresets.map((preset) => (
                         <button
                           key={preset.id}
@@ -964,7 +962,7 @@ export function Studio({ brand }: { brand: Brand }) {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                 {images.map((image) => (
                   <div
                     key={image.id}
@@ -1056,10 +1054,10 @@ export function Studio({ brand }: { brand: Brand }) {
       <div 
         ref={inputContainerRef}
         className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${
-          inputFocused ? 'pb-6' : 'pb-6'
+          inputFocused ? 'pb-4 sm:pb-6' : 'pb-4 sm:pb-6'
         }`}
       >
-        <div className="max-w-3xl mx-auto px-4">
+        <div className="max-w-3xl mx-auto px-3 sm:px-4">
           {/* Editing Badge */}
           {editingImage && (
             <div className="mb-3 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl p-2 border border-slate-200">
@@ -1096,7 +1094,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
           {/* Main Input */}
           <div 
-            className={`bg-white/95 backdrop-blur-xl rounded-2xl border shadow-xl transition-all duration-300 ${
+            className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 ${
               inputFocused 
                 ? 'border-slate-300 shadow-2xl' 
                 : 'border-slate-200/80'
@@ -1105,8 +1103,8 @@ export function Studio({ brand }: { brand: Brand }) {
               borderColor: inputFocused ? `${primaryColor}40` : undefined,
             }}
           >
-            <div className={`flex gap-3 p-3 ${prompt.trim() ? 'flex-col' : 'items-center'}`}>
-              <div className="flex items-start gap-3 flex-1">
+            <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 ${prompt.trim() ? 'flex-col' : 'items-center'}`}>
+              <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                 <textarea
                   ref={inputRef}
                   value={prompt}
@@ -1119,10 +1117,10 @@ export function Studio({ brand }: { brand: Brand }) {
                     }
                   }}
                   placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
-                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-sm text-base py-2 resize-none overflow-y-auto ${
+                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 ${
                     prompt.trim() 
-                      ? 'min-h-[3rem] max-h-[6rem]' 
-                      : 'h-[2.5rem]'
+                      ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[5rem] sm:max-h-[6rem]' 
+                      : 'h-[2rem] sm:h-[2.5rem]'
                   }`}
                   rows={prompt.trim() ? 2 : 1}
                 />
@@ -1132,12 +1130,15 @@ export function Studio({ brand }: { brand: Brand }) {
                   <button
                     onClick={editingImage ? handleEdit : handleGenerate}
                     disabled={(generating || editing) || !prompt.trim()}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                     style={{ backgroundColor: primaryColor }}
                   >
                     {(generating || editing) && (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                     )}
+                    <span className="sm:hidden">
+                      {editingImage ? 'Apply' : 'Go'}
+                    </span>
                     <span className="hidden sm:inline">
                       {editingImage ? 'Apply' : 'Create'}
                     </span>
@@ -1147,17 +1148,17 @@ export function Studio({ brand }: { brand: Brand }) {
 
               {/* Actions Row - Moves to bottom when typing */}
               {prompt.trim() && (
-                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 sm:gap-2 pt-2 border-t border-slate-100 flex-wrap">
                   {/* Ratio Dropdown (only for new images) */}
                   {!editingImage && (
                     <div className="relative" ref={ratioDropdownRef}>
                       <button
                         onClick={() => setShowRatioDropdown(!showRatioDropdown)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
+                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
                       >
-                        <Grid3x3 className="w-3.5 h-3.5" />
+                        <Grid3x3 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         <span className="hidden sm:inline">{selectedAspectRatio === 'auto' ? 'Auto' : selectedAspectRatio}</span>
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
                       </button>
 
                       {showRatioDropdown && (
@@ -1242,12 +1243,12 @@ export function Studio({ brand }: { brand: Brand }) {
                   <div className="relative" ref={mediaPopoverRef}>
                       <button
                         onClick={() => setShowMediaPopover(!showMediaPopover)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
                         title="Attach files"
                       >
-                        <FolderOpen className="w-3.5 h-3.5" />
+                        <FolderOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         <span className="hidden sm:inline">Attach</span>
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
                         {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
                           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
                             style={{ 
@@ -1309,10 +1310,10 @@ export function Studio({ brand }: { brand: Brand }) {
                   {/* Styles Button - Next to Attach */}
                   <button
                     onClick={() => setShowStylesPicker(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
                     title="Choose a style"
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
+                    <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     <span className="hidden sm:inline">Styles</span>
                     {selectedStyles.length > 0 && (
                       <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
@@ -1373,7 +1374,7 @@ export function Studio({ brand }: { brand: Brand }) {
           
           {/* Modal Content */}
           <div 
-            className="relative bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col md:flex-row"
+            className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col md:flex-row"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
@@ -1436,9 +1437,9 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
 
             {/* Info Panel */}
-            <div className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col">
+            <div className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto">
               {/* Header */}
-              <div className="p-6 border-b border-slate-100">
+              <div className="p-4 sm:p-6 border-b border-slate-100">
                 <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
                   <Calendar className="w-3.5 h-3.5" />
                   {formatDate(selectedImage.created_at)}
@@ -1542,23 +1543,23 @@ export function Studio({ brand }: { brand: Brand }) {
               )}
 
               {/* Actions */}
-              <div className="p-4 border-t border-slate-100 flex items-center gap-2">
+              <div className="p-3 sm:p-4 border-t border-slate-100 flex items-center gap-2">
                 <button
                   onClick={() => {
                     setShowModalEditPrompt(true);
                   }}
                   disabled={modalEditing || selectedImage.edit_count >= selectedImage.max_edits}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-white text-sm sm:text-base font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{ backgroundColor: primaryColor }}
                 >
-                  <Edit3 className="w-4 h-4" />
-                  Edit
+                  <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <span className="hidden sm:inline">Edit</span>
                 </button>
                 <button
                   onClick={() => handleDownload(selectedImage)}
-                  className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium transition-colors"
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 bg-slate-100 hover:bg-slate-200 rounded-lg sm:rounded-xl text-slate-700 font-medium transition-colors"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -1567,16 +1568,16 @@ export function Studio({ brand }: { brand: Brand }) {
           {/* Floating Edit Prompt Box */}
           {showModalEditPrompt && (
             <div 
-              className="relative w-full max-w-2xl mt-4 z-[60]"
+              className="relative w-full max-w-2xl mt-4 z-[60] px-2 sm:px-0"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white/95 backdrop-blur-xl rounded-2xl border border-slate-200 shadow-2xl p-4">
-                <div className="flex items-center gap-3">
+              <div className="bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xl p-3 sm:p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <div 
-                    className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${primaryColor}15` }}
                   >
-                    <Edit3 className="w-5 h-5" style={{ color: primaryColor }} />
+                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: primaryColor }} />
                   </div>
                   
                   <input
@@ -1608,22 +1609,22 @@ export function Studio({ brand }: { brand: Brand }) {
                       }
                     }}
                     placeholder="What would you like to change?"
-                    className="flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-sm text-base py-2"
+                    className="flex-1 w-full min-w-0 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2"
                     disabled={modalEditing}
                   />
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
                     {/* Attach Button for Modal Edit */}
                     <div className="relative" ref={mediaPopoverRef}>
                       <button
                         onClick={() => setShowMediaPopover(!showMediaPopover)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
                         title="Attach files"
                         disabled={modalEditing}
                       >
                         <FolderOpen className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Attach</span>
-                        <ChevronDown className={`w-3 h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
                         {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
                           <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
                             style={{ 
@@ -1685,7 +1686,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     {/* Styles Button - Next to Attach (Modal Edit) */}
                     <button
                       onClick={() => setShowStylesPicker(true)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                      className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
                       title="Choose a style"
                       disabled={modalEditing}
                     >
@@ -1708,7 +1709,7 @@ export function Studio({ brand }: { brand: Brand }) {
                         setShowModalEditPrompt(false);
                         setModalEditPrompt('');
                       }}
-                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors"
+                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors shrink-0"
                       disabled={modalEditing}
                     >
                       <X className="w-4 h-4" />
@@ -1716,14 +1717,15 @@ export function Studio({ brand }: { brand: Brand }) {
                     <button
                       onClick={handleModalEdit}
                       disabled={modalEditing || !modalEditPrompt.trim() || selectedImage.edit_count >= selectedImage.max_edits}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl text-white font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-white text-sm sm:text-base font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 min-w-[80px] sm:min-w-0"
                       style={{ backgroundColor: primaryColor }}
                     >
                       {modalEditing ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                       ) : (
-                        <Send className="w-4 h-4" />
+                        <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                       )}
+                      <span className="sm:hidden">Go</span>
                       <span className="hidden sm:inline">Apply</span>
                     </button>
                   </div>
@@ -1882,36 +1884,36 @@ export function Studio({ brand }: { brand: Brand }) {
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           
           <div 
-            className="relative bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <div>
-                <h3 className="text-xl font-bold text-slate-900 mb-1">
+            <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-200 gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
                   Smart Presets
                 </h3>
-                <p className="text-sm text-slate-600">
+                <p className="text-xs sm:text-sm text-slate-600">
                   Personalized suggestions for <span className="font-semibold">{brand.name}</span>
                 </p>
               </div>
               <button
                 onClick={() => setShowPresetsModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Presets Grid */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
               {loadingPresets ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                  <span className="ml-3 text-slate-600">Loading presets...</span>
+                  <span className="ml-3 text-slate-600 text-sm">Loading presets...</span>
                 </div>
               ) : smartPresets.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
                   {smartPresets.map((preset) => (
                     <button
                       key={preset.id}
