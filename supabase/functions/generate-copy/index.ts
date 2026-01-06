@@ -1,4 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,6 +9,10 @@ const corsHeaders = {
 };
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('generate-copy');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -15,6 +21,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    logger.setContext({ request_id: requestId });
     const { brandVoice, templateType, brief, slots } = await req.json();
 
     if (!brandVoice || !templateType || !brief || !slots) {
@@ -44,6 +51,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    const duration = performance.now() - startTime;
+    logger.info("Copy generation completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
     return new Response(
       JSON.stringify({ success: true, copy: generatedCopy }),
       {
@@ -52,8 +65,23 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Generate copy error", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'generate-copy',
+      request_id: requestId,
+    });
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorObj.message }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

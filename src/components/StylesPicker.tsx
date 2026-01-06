@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Loader2, Check, Sparkles, XCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Loader2, Check, Sparkles, XCircle, Filter, Upload, ImageIcon } from 'lucide-react';
 import { Style, supabase } from '../lib/supabase';
 
 interface StylesPickerProps {
@@ -16,13 +16,15 @@ export function StylesPicker({
   onClose,
   onSelect,
   selectedStyles,
-  primaryColor = '#1a1a1a',
+  primaryColor = PRIMARY_COLOR,
 }: StylesPickerProps) {
   const [styles, setStyles] = useState<Style[]>([]);
   const [loading, setLoading] = useState(false);
   const [localSelection, setLocalSelection] = useState<Style[]>(selectedStyles);
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Maximum 1 style allowed
   const MAX_STYLES = 1;
@@ -37,6 +39,7 @@ export function StylesPicker({
         .from('styles')
         .select('*')
         .eq('is_active', true)
+        .order('created_at', { ascending: false }) // Newest first (user uploads will appear first)
         .order('category')
         .order('display_order', { ascending: true });
 
@@ -112,7 +115,7 @@ export function StylesPicker({
 
   // Filter styles by selected tags
   // OR within same category, AND across different categories
-  const filteredStyles = styles.filter(style => {
+  const filteredStylesUnordered = styles.filter(style => {
     if (selectedTags.size === 0) return true;
     
     if (!style.tags) return false;
@@ -156,6 +159,21 @@ export function StylesPicker({
       );
     });
   });
+
+  // Reorder filtered styles: selected style first, then others
+  const filteredStyles = (() => {
+    const selectedStyle = filteredStylesUnordered.find(style => 
+      localSelection.some(s => s.id === style.id)
+    );
+    const otherStyles = filteredStylesUnordered.filter(style => 
+      !localSelection.some(s => s.id === style.id)
+    );
+    
+    if (selectedStyle) {
+      return [selectedStyle, ...otherStyles];
+    }
+    return filteredStylesUnordered;
+  })();
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => {
@@ -204,6 +222,98 @@ export function StylesPicker({
     onClose();
   };
 
+  // Handle file upload
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const SUPPORTED_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/jpg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
+
+    const validFiles = files.filter(f => SUPPORTED_TYPES.includes(f.type.toLowerCase()));
+    if (validFiles.length === 0) {
+      alert('Please upload valid image files (PNG, JPEG, WEBP, HEIC, HEIF, GIF)');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const uploadPromises = validFiles.map(async (file) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        // Upload to storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('styles')
+          .upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('styles')
+          .getPublicUrl(uploadData.path);
+
+        // Insert into styles table
+        const { data: styleData, error: styleError } = await supabase
+          .from('styles')
+          .insert({
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            url: urlData.publicUrl,
+            category: 'user_uploaded',
+            file_size: file.size,
+            mime_type: file.type,
+            display_order: 0,
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (styleError) throw styleError;
+        return styleData as Style;
+      });
+
+      await Promise.all(uploadPromises);
+      
+      // Reload styles to show the new uploads
+      const { data, error } = await supabase
+        .from('styles')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .order('category')
+        .order('display_order', { ascending: true });
+
+      if (!error && data) {
+        setStyles(data as Style[]);
+      }
+
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('Failed to upload. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -245,7 +355,16 @@ export function StylesPicker({
 
         {/* Tag Filters */}
         {Object.keys(tagsByCategory).some(cat => tagsByCategory[cat].length > 0) && (
-          <div className="p-3 sm:p-4 border-b border-slate-100 bg-slate-50/50 relative">
+          <div className="p-3 sm:p-4 border-b border-slate-100 relative">
+            <div className="mb-3 flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-500" />
+              <h3 className="text-sm font-semibold text-slate-700">Filters</h3>
+              {selectedTags.size > 0 && (
+                <span className="ml-auto text-xs text-slate-500">
+                  {selectedTags.size} {selectedTags.size === 1 ? 'filter' : 'filters'} active
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               {(['businessModel', 'industry', 'visualType', 'contentFormat', 'mood'] as const).map((category) => {
                 const tags = tagsByCategory[category];
@@ -349,6 +468,37 @@ export function StylesPicker({
               </div>
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+              {/* Upload Button - First item */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="group relative rounded-2xl overflow-hidden border-2 border-dashed border-slate-300 hover:border-slate-400 transition-all bg-slate-50 hover:bg-slate-100 aspect-square flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="w-8 h-8 text-slate-400 animate-spin" />
+                    <span className="text-xs text-slate-500">Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-12 h-12 rounded-full bg-slate-200 group-hover:bg-slate-300 flex items-center justify-center transition-colors"
+                      style={{ backgroundColor: `${primaryColor}15` }}
+                    >
+                      <Upload className="w-6 h-6" style={{ color: primaryColor }} />
+                    </div>
+                    <span className="text-xs font-medium text-slate-600">Upload Style</span>
+                  </>
+                )}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp,image/heic,image/heif,image/gif"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
               {filteredStyles.map((style) => {
                 const isSelected = localSelection.some(s => s.id === style.id);
                 return (
@@ -367,7 +517,7 @@ export function StylesPicker({
                       borderColor: primaryColor,
                       boxShadow: `0 0 0 2px ${primaryColor}30`,
                     } : {}}
-                    title={!isSelected && !canAddMore ? 'Selection limit reached' : style.name}
+                    aria-label={!isSelected && !canAddMore ? 'Selection limit reached' : style.name}
                   >
                     {/* Image */}
                     <div 
@@ -381,7 +531,7 @@ export function StylesPicker({
                     >
                       <img
                         src={style.url}
-                        alt={style.name}
+                        alt=""
                         className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
                       />
                       
@@ -468,6 +618,11 @@ export function StylesPicker({
           </div>
         </div>
       </div>
+      
+      <style>{`
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+      `}</style>
     </div>
   );
 }

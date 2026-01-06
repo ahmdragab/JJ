@@ -216,7 +216,10 @@ export function Landing({
               />
               <button
                 type="submit"
-                className="px-3 sm:px-4 py-2 sm:py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[40px] sm:min-w-[45px] hover:opacity-90 bg-indigo-500 hover:bg-indigo-600 shrink-0"
+                className="px-3 sm:px-4 py-2 sm:py-2.5 text-white font-medium rounded-lg transition-all flex items-center justify-center min-w-[40px] sm:min-w-[45px] hover:opacity-90 shrink-0"
+                style={{ backgroundColor: '#3531B7' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3531B7'}
               >
                 <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </button>

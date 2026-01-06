@@ -19,14 +19,28 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  Palette
+  Palette,
+  FlaskConical,
+  Columns,
+  Zap,
+  Megaphone,
+  BarChart3,
+  Monitor,
+  Mail,
+  Camera,
+  Share2,
+  Play,
+  Package
 } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style } from '../lib/supabase';
+import { PRIMARY_COLOR } from '../lib/colors';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AssetPicker } from '../components/AssetPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
 import { StylesPicker } from '../components/StylesPicker';
 import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
+import { logger } from '../lib/logger';
+import { useAuth } from '../contexts/AuthContext';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -38,7 +52,15 @@ type EditingImage = {
 
 export function Studio({ brand }: { brand: Brand }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [images, setImages] = useState<GeneratedImage[]>([]);
+  
+  // Set logger context
+  useEffect(() => {
+    if (user && brand) {
+      logger.setContext({ user_id: user.id, brand_id: brand.id });
+    }
+  }, [user, brand]);
   // TEMPLATES COMMENTED OUT
   // const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,8 +71,75 @@ export function Studio({ brand }: { brand: Brand }) {
   const [generating, setGenerating] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<AspectRatio>('auto');
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
   const [showRatioDropdown, setShowRatioDropdown] = useState(false);
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const [editingImage, setEditingImage] = useState<EditingImage>(null);
+  
+  // Platform groups with favicons and sizes
+  const platformGroups = [
+    {
+      name: 'Facebook',
+      favicon: 'https://www.facebook.com/favicon.ico',
+      sizes: [
+        { label: 'Square', ratio: '1:1' as AspectRatio },
+        { label: 'Portrait', ratio: '4:5' as AspectRatio },
+        { label: 'Story', ratio: '9:16' as AspectRatio },
+      ],
+    },
+    {
+      name: 'Instagram',
+      favicon: 'https://www.instagram.com/favicon.ico',
+      sizes: [
+        { label: 'Square', ratio: '1:1' as AspectRatio },
+        { label: 'Portrait', ratio: '4:5' as AspectRatio },
+        { label: 'Story', ratio: '9:16' as AspectRatio },
+        { label: 'Reels', ratio: '9:16' as AspectRatio },
+      ],
+    },
+    {
+      name: 'LinkedIn',
+      favicon: 'https://www.linkedin.com/favicon.ico',
+      sizes: [
+        { label: 'Square', ratio: '1:1' as AspectRatio },
+        { label: 'Portrait', ratio: '4:5' as AspectRatio },
+      ],
+    },
+    {
+      name: 'TikTok',
+      favicon: 'https://www.tiktok.com/favicon.ico',
+      sizes: [
+        { label: 'Vertical', ratio: '9:16' as AspectRatio },
+      ],
+    },
+    {
+      name: 'Snapchat',
+      favicon: 'https://www.snapchat.com/favicon.ico',
+      sizes: [
+        { label: 'Full Screen', ratio: '9:16' as AspectRatio },
+      ],
+    },
+    {
+      name: 'Twitter/X',
+      favicon: 'https://abs.twimg.com/favicons/twitter.3.ico',
+      sizes: [
+        { label: 'Square', ratio: '1:1' as AspectRatio },
+        { label: 'Landscape', ratio: '16:9' as AspectRatio },
+      ],
+    },
+  ];
+  
+  const togglePlatformExpand = (platformName: string) => {
+    setExpandedPlatforms(prev => {
+      const next = new Set(prev);
+      if (next.has(platformName)) {
+        next.delete(platformName);
+      } else {
+        next.add(platformName);
+      }
+      return next;
+    });
+  };
   
   // Modal state
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
@@ -84,10 +173,29 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showReferenceUpload, setShowReferenceUpload] = useState(false);
   const [showStylesPicker, setShowStylesPicker] = useState(false);
   
+  // Available styles for thumbnail selection
+  const [availableStyles, setAvailableStyles] = useState<Style[]>([]);
+  const [loadingStyles, setLoadingStyles] = useState(false);
+  
   // Smart presets state
   const [smartPresets, setSmartPresets] = useState<SmartPreset[]>([]);
   const [loadingPresets, setLoadingPresets] = useState(false);
   const [showPresetsModal, setShowPresetsModal] = useState(false);
+  
+  // Prompt version toggle (v1 = current, v2 = experimental, v3 = lean/direct)
+  const [promptVersion, setPromptVersion] = useState<'v1' | 'v2' | 'v3'>('v1');
+  const [compareMode, setCompareMode] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [savingComparison, setSavingComparison] = useState<string | null>(null);
+  const [comparisonResults, setComparisonResults] = useState<{
+    v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
+    v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
+    v3: { image_base64: string; prompt_used?: string } | null;
+  } | null>(null);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+  
+  // GPT Prompt Info type for comparison
+  type GPTPromptInfo = { system_prompt: string; user_message: string; full_prompt: string; design_type?: string };
   
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -95,7 +203,8 @@ export function Studio({ brand }: { brand: Brand }) {
   const modalEditInputRef = useRef<HTMLInputElement>(null);
   const mediaPopoverRef = useRef<HTMLDivElement>(null);
 
-  const primaryColor = brand.colors?.primary || '#1a1a1a';
+  // Use fixed brand color instead of brand's extracted color
+  const primaryColor = PRIMARY_COLOR;
 
   // Calculate auto-included images (logo, backdrop, screenshot)
   const autoIncludedImages = [
@@ -136,11 +245,29 @@ export function Studio({ brand }: { brand: Brand }) {
           setLoadingPresets(false);
         })
         .catch(error => {
-          console.error('Failed to load presets:', error);
+          logger.error('Failed to load presets', error instanceof Error ? error : new Error(String(error)));
           // Don't clear existing presets on error - keep what we have
           setLoadingPresets(false);
         });
     }
+    
+    // Load available styles for thumbnail selection
+    const loadStyles = async () => {
+      setLoadingStyles(true);
+      const { data, error } = await supabase
+        .from('styles')
+        .select('*')
+        .eq('is_active', true)
+        .order('category')
+        .order('display_order', { ascending: true });
+      
+      if (!error && data) {
+        setAvailableStyles(data as Style[]);
+      }
+      setLoadingStyles(false);
+    };
+    
+    loadStyles();
   }, [brand.id]);
 
   // Save prompt to localStorage whenever it changes
@@ -152,6 +279,13 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   }, [prompt, STORAGE_KEY]);
 
+  // Auto-focus input when there are no images
+  useEffect(() => {
+    if (images.length === 0 && !editingImage) {
+      setInputFocused(true);
+    }
+  }, [images.length, editingImage]);
+
   useEffect(() => {
     // Poll for generating images
     const generatingImages = images.filter(img => img.status === 'generating');
@@ -161,13 +295,24 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   }, [images]);
 
+  // Sync selectedImage with updated images array
+  useEffect(() => {
+    if (selectedImage) {
+      const updatedImage = images.find(img => img.id === selectedImage.id);
+      if (updatedImage && updatedImage !== selectedImage) {
+        setSelectedImage(updatedImage);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [images]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (ratioDropdownRef.current && !ratioDropdownRef.current.contains(event.target as Node)) {
         setShowRatioDropdown(false);
       }
       if (inputContainerRef.current && !inputContainerRef.current.contains(event.target as Node)) {
-        if (!prompt.trim() && !editingImage) {
+        if (!prompt.trim() && !editingImage && images.length > 0) {
           setInputFocused(false);
         }
       }
@@ -196,7 +341,7 @@ export function Studio({ brand }: { brand: Brand }) {
       if (error) throw error;
       setImages(data || []);
     } catch (error) {
-      console.error('Failed to load images:', error);
+      logger.error('Failed to load images', error instanceof Error ? error : new Error(String(error)));
     }
   };
 
@@ -254,24 +399,183 @@ export function Studio({ brand }: { brand: Brand }) {
         setSelectedImage(null);
       }
     } catch (error) {
-      console.error('Failed to delete image:', error);
+      logger.error('Failed to delete image', error instanceof Error ? error : new Error(String(error)), {
+        image_id: imageId,
+      });
     } finally {
       setDeleting(null);
       setConfirmDelete({ isOpen: false, imageId: null });
     }
   };
 
-  const handlePresetClick = (preset: SmartPreset) => {
+  // Helper function to get icon and tag for preset category
+  const getPresetIconAndTag = (category: string, label: string) => {
+    const categoryLower = category.toLowerCase();
+    const labelLower = label.toLowerCase();
+    
+    // Determine tag
+    let tag = category;
+    if (categoryLower.includes('ad') || categoryLower.includes('advertising') || labelLower.includes('ad')) {
+      tag = 'Ad';
+    } else if (categoryLower.includes('social') || labelLower.includes('social') || labelLower.includes('post')) {
+      tag = 'Social Post';
+    } else if (categoryLower.includes('infographic') || labelLower.includes('infographic')) {
+      tag = 'Infographic';
+    } else if (categoryLower.includes('email') || labelLower.includes('email')) {
+      tag = 'Email';
+    } else if (categoryLower.includes('video') || labelLower.includes('youtube') || labelLower.includes('thumbnail')) {
+      tag = 'Video';
+    } else if (categoryLower.includes('product') || labelLower.includes('product')) {
+      tag = 'Product';
+    } else if (categoryLower.includes('professional') || categoryLower.includes('linkedin')) {
+      tag = 'Professional';
+    } else if (categoryLower.includes('marketing')) {
+      tag = 'Marketing';
+    }
+    
+    // Determine icon component
+    let IconComponent: React.ComponentType<{ className?: string; style?: React.CSSProperties }> = ImageIcon;
+    if (categoryLower.includes('ad') || categoryLower.includes('advertising') || labelLower.includes('ad')) {
+      IconComponent = Megaphone;
+    } else if (categoryLower.includes('infographic') || labelLower.includes('infographic') || categoryLower.includes('chart')) {
+      IconComponent = BarChart3;
+    } else if (categoryLower.includes('social') || labelLower.includes('social') || labelLower.includes('post') || labelLower.includes('instagram') || labelLower.includes('facebook') || labelLower.includes('twitter')) {
+      IconComponent = Share2;
+    } else if (categoryLower.includes('email') || labelLower.includes('email')) {
+      IconComponent = Mail;
+    } else if (categoryLower.includes('video') || labelLower.includes('youtube') || labelLower.includes('thumbnail')) {
+      IconComponent = Play;
+    } else if (categoryLower.includes('product') || labelLower.includes('product')) {
+      IconComponent = Package;
+    } else if (categoryLower.includes('story') || labelLower.includes('story')) {
+      IconComponent = Camera;
+    } else {
+      IconComponent = Monitor;
+    }
+    
+    return { tag, IconComponent };
+  };
+
+  const handlePresetClick = async (preset: SmartPreset) => {
+    if (generating) return; // Don't allow multiple generations at once
+    
     // Set the prompt and aspect ratio
     setPrompt(preset.prompt);
     setSelectedAspectRatio(preset.aspectRatio);
-    setInputFocused(true);
+    setSelectedPlatform(null); // Clear platform when preset is selected
     
-    // Focus input and scroll to it
-    setTimeout(() => {
-      inputRef.current?.focus();
-      inputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 100);
+    // Immediately start generating with V1
+    setGenerating(true);
+    
+    try {
+      const { data: imageRecord, error: insertError } = await supabase
+        .from('images')
+        .insert({
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          brand_id: brand.id,
+          template_id: null,
+          prompt: preset.prompt,
+          status: 'generating',
+          metadata: {
+            aspect_ratio: preset.aspectRatio === 'auto' ? undefined : preset.aspectRatio,
+          },
+          conversation: [],
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Add to images list optimistically
+      setImages(prev => [imageRecord, ...prev]);
+      setPrompt('');
+      localStorage.removeItem(STORAGE_KEY);
+      setInputFocused(false);
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
+      setSelectedPlatform(null);
+
+      // Combine references and styles
+      const allReferences = [
+        ...selectedReferences.map(r => ({
+          id: r.id,
+          url: r.url,
+          name: r.name,
+          category: r.category,
+          role: 'style_reference' as const,
+        })),
+        ...selectedStyles.map(s => ({
+          id: s.id,
+          url: s.url,
+          name: s.name,
+          category: s.category,
+          role: 'style_reference' as const,
+          style_description: s.style_description,
+        })),
+      ];
+
+      // Always use V1 for presets
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            prompt: preset.prompt,
+            brandId: brand.id,
+            imageId: imageRecord.id,
+            aspectRatio: preset.aspectRatio === 'auto' ? undefined : preset.aspectRatio,
+            assets: selectedAssets.map(a => ({
+              id: a.id,
+              url: a.url,
+              name: a.name,
+              category: a.category,
+              role: 'must_include',
+            })),
+            references: allReferences,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        // Handle credit errors specifically
+        if (response.status === 402) {
+          alert(`Insufficient credits. You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+          // Remove the image record that was created
+          await supabase.from('images').delete().eq('id', imageRecord.id);
+          setImages(prev => prev.filter(img => img.id !== imageRecord.id));
+        } else {
+          throw new Error(errorData.error || 'Failed to generate image');
+        }
+        return;
+      }
+
+      // Capture GPT prompt info if available
+      const responseData = await response.json();
+      if (responseData.gpt_prompt_info) {
+        setGptPromptInfo(responseData.gpt_prompt_info);
+        console.log('GPT Prompt Info captured:', responseData.gpt_prompt_info);
+      }
+
+      // Reload to get the generated image
+      await loadImages();
+      
+    } catch (error) {
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      logger.error('Failed to generate image from preset', errorObj, {
+        brand_id: brand.id,
+        preset_id: preset.id,
+        prompt_preview: preset.prompt.substring(0, 100),
+      });
+      alert(errorObj.message);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -310,6 +614,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedAssets([]);
       setSelectedReferences([]);
       setSelectedStyles([]);
+      setSelectedPlatform(null);
 
       // Combine references and styles
       const allReferences = [
@@ -330,8 +635,11 @@ export function Studio({ brand }: { brand: Brand }) {
         })),
       ];
 
+      // Use selected prompt version (v1 or v2)
+      const endpoint = promptVersion === 'v3' ? 'generate-image-v3' : promptVersion === 'v2' ? 'generate-image-v2' : 'generate-image';
+      
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
           method: 'POST',
           headers: {
@@ -380,10 +688,212 @@ export function Studio({ brand }: { brand: Brand }) {
       await loadImages();
       
     } catch (error) {
-      console.error('Failed to generate:', error);
-      alert(error instanceof Error ? error.message : 'Failed to generate image');
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      logger.error('Failed to generate image', errorObj, {
+        brand_id: brand.id,
+        prompt_preview: prompt.substring(0, 100),
+      });
+      alert(errorObj.message);
     } finally {
       setGenerating(false);
+    }
+  };
+
+  // Comparison mode: generate with both v1 and v2 to compare outputs
+  const handleCompare = async () => {
+    if (!prompt.trim() || comparing) return;
+
+    setComparing(true);
+    setComparisonResults(null);
+    
+    try {
+      // Combine references and styles
+      const allReferences = [
+        ...selectedReferences.map(r => ({
+          id: r.id,
+          url: r.url,
+          name: r.name,
+          category: r.category,
+          role: 'style_reference' as const,
+        })),
+        ...selectedStyles.map(s => ({
+          id: s.id,
+          url: s.url,
+          name: s.name,
+          category: s.category,
+          role: 'style_reference' as const,
+          style_description: s.style_description,
+        })),
+      ];
+
+      const requestBody = {
+        prompt,
+        brandId: brand.id,
+        aspectRatio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
+        assets: selectedAssets.map(a => ({
+          id: a.id,
+          url: a.url,
+          name: a.name,
+          category: a.category,
+          role: 'must_include',
+        })),
+        references: allReferences,
+        // Note: No imageId means no DB save, just generate and return
+      };
+
+      // Generate with all 3 versions in parallel
+      // V1 will deduct credit, V2 and V3 skip credits
+      const [v1Response, v2Response, v3Response] = await Promise.all([
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(requestBody), // V1 deducts 1 credit
+        }),
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V2 skips credit
+        }),
+        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V3 skips credit
+        }),
+      ]);
+
+      const [v1Data, v2Data, v3Data] = await Promise.all([
+        v1Response.json(),
+        v2Response.json(),
+        v3Response.json(),
+      ]);
+
+      setComparisonResults({
+        v1: v1Response.ok ? {
+          image_base64: v1Data.image_base64,
+          gpt_prompt_info: v1Data.gpt_prompt_info,
+        } : null,
+        v2: v2Response.ok ? {
+          image_base64: v2Data.image_base64,
+          design_type: v2Data.design_type,
+          gpt_prompt_info: v2Data.gpt_prompt_info,
+        } : null,
+        v3: v3Response.ok ? {
+          image_base64: v3Data.image_base64,
+          prompt_used: v3Data.prompt_used,
+        } : null,
+      });
+      setShowComparisonModal(true);
+
+    } catch (error) {
+      console.error('Comparison failed:', error);
+      alert(error instanceof Error ? error.message : 'Failed to compare versions');
+    } finally {
+      setComparing(false);
+    }
+  };
+
+  // Save a comparison result image to the database and storage
+  const handleSaveComparisonImage = async (version: 'v1' | 'v2' | 'v3') => {
+    if (!comparisonResults || savingComparison) return;
+    
+    const result = comparisonResults[version];
+    if (!result || !result.image_base64) {
+      alert(`No image available for ${version.toUpperCase()}`);
+      return;
+    }
+
+    setSavingComparison(version);
+
+    try {
+      // Create image record in database
+      const { data: imageRecord, error: insertError } = await supabase
+        .from('images')
+        .insert({
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          brand_id: brand.id,
+          template_id: null,
+          prompt,
+          status: 'generating',
+          metadata: {
+            aspect_ratio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
+            prompt_version: version,
+            ...(result.gpt_prompt_info && { gpt_prompt_info: result.gpt_prompt_info }),
+            ...(result.design_type && { design_type: result.design_type }),
+            ...(result.prompt_used && { prompt_used: result.prompt_used }),
+          },
+          conversation: [],
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Upload base64 image to storage
+      const binaryString = atob(result.image_base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const fileName = `${brand.id}/${imageRecord.id}-${Date.now()}.png`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('brand-images')
+        .upload(fileName, bytes, {
+          contentType: 'image/png',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        // Clean up the image record if upload fails
+        await supabase.from('images').delete().eq('id', imageRecord.id);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('brand-images')
+        .getPublicUrl(fileName);
+
+      // Update image record with URL and status
+      const { error: updateError } = await supabase
+        .from('images')
+        .update({
+          image_url: urlData.publicUrl,
+          status: 'ready',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', imageRecord.id);
+
+      if (updateError) throw updateError;
+
+      // Reload images to show the new one
+      await loadImages();
+
+      // Close modal and reset comparison mode
+      setShowComparisonModal(false);
+      setCompareMode(false);
+      setPrompt('');
+      localStorage.removeItem(STORAGE_KEY);
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
+      setSelectedPlatform(null);
+
+    } catch (error) {
+      console.error('Failed to save comparison image:', error);
+      alert(error instanceof Error ? error.message : 'Failed to save image');
+    } finally {
+      setSavingComparison(null);
     }
   };
 
@@ -461,6 +971,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedAssets([]);
       setSelectedReferences([]);
       setSelectedStyles([]);
+      setSelectedPlatform(null);
       await loadImages();
       
     } catch (error) {
@@ -604,6 +1115,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedAssets([]);
       setSelectedReferences([]);
       setSelectedStyles([]);
+      setSelectedPlatform(null);
     } finally {
       setModalEditing(false);
     }
@@ -614,16 +1126,56 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!image.image_url) return;
 
     try {
-      const response = await fetch(image.image_url);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Extract the file path from the Supabase Storage URL
+      // Supabase Storage URLs are like: https://[project].supabase.co/storage/v1/object/public/brand-images/[path]
+      const urlParts = image.image_url.split('/brand-images/');
+      if (urlParts.length === 2) {
+        const filePath = urlParts[1];
+        
+        // Download directly from storage with no transformations
+        // Use the download method to get the original file
+        const { data, error } = await supabase.storage
+          .from('brand-images')
+          .download(filePath);
+        
+        if (error) {
+          console.error('Storage download error:', error);
+          // Fallback to fetching from URL
+          const response = await fetch(image.image_url);
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+        
+        // Create download link with the original file
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // Fallback for non-Supabase URLs
+        const response = await fetch(image.image_url);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('Download failed:', error);
     }
@@ -770,7 +1322,7 @@ export function Studio({ brand }: { brand: Brand }) {
   }, [selectedImage, showModalEditPrompt, modalEditing]);
 
   const aspectRatios: { value: AspectRatio; label: string }[] = [
-    { value: 'auto', label: 'Auto (AI decides)' },
+    { value: 'auto', label: 'Auto' },
     { value: '1:1', label: 'Square (1:1)' },
     { value: '2:3', label: 'Portrait (2:3)' },
     { value: '3:4', label: 'Portrait (3:4)' },
@@ -792,7 +1344,7 @@ export function Studio({ brand }: { brand: Brand }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 relative">
+    <div className={`${images.length === 0 ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'min-h-screen'} bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 relative`}>
       {/* Subtle background texture */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div 
@@ -806,8 +1358,8 @@ export function Studio({ brand }: { brand: Brand }) {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 pb-32 sm:pb-40">
-        <div className="p-4 sm:p-6 md:p-12">
+      <div className={`relative z-10 ${images.length === 0 ? 'pt-4 sm:pt-6 pb-2' : 'pt-8 sm:pt-10 md:pt-12 pb-32 sm:pb-40'}`}>
+        <div className={`${images.length === 0 ? 'p-4 sm:p-6 md:p-6' : 'p-4 sm:p-6 md:p-8'}`}>
           <div className="max-w-7xl mx-auto">
             {/* TEMPLATES COMMENTED OUT */}
             {/* Templates Section - Collapsible when images exist */}
@@ -866,99 +1418,575 @@ export function Studio({ brand }: { brand: Brand }) {
 
             {/* Gallery Grid or Empty State */}
             {images.length === 0 ? (
-              <div className="space-y-12">
+              <div className="space-y-6 overflow-visible">
+                {/* Input Bar - Moved here when no images */}
+                <div 
+                  ref={inputContainerRef}
+                  className="max-w-3xl mx-auto overflow-visible"
+                >
+                  {/* Prompt Version Toggle */}
+                  {!editingImage && (
+                    <div className="mb-2 flex items-center justify-center gap-3">
+                      <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200 p-0.5">
+                        <button
+                          onClick={() => setPromptVersion('v1')}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                            promptVersion === 'v1'
+                              ? 'bg-slate-900 text-white shadow-sm'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          V1
+                        </button>
+                        <button
+                          onClick={() => setPromptVersion('v2')}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                            promptVersion === 'v2'
+                              ? 'bg-emerald-500 text-white shadow-sm'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          <FlaskConical className="w-3 h-3" />
+                          V2
+                        </button>
+                        <button
+                          onClick={() => setPromptVersion('v3')}
+                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                            promptVersion === 'v3'
+                              ? 'bg-amber-500 text-white shadow-sm'
+                              : 'text-slate-500 hover:text-slate-700'
+                          }`}
+                        >
+                          <Zap className="w-3 h-3" />
+                          V3
+                        </button>
+                      </div>
+                      
+                      {promptVersion === 'v2' && (
+                        <span className="text-xs text-emerald-600">
+                          Design-type aware
+                        </span>
+                      )}
+                      {promptVersion === 'v3' && (
+                        <span className="text-xs text-amber-600">
+                          Lean & direct
+                        </span>
+                      )}
+                      
+                      {/* Compare Mode Toggle */}
+                      <button
+                        onClick={() => setCompareMode(!compareMode)}
+                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
+                          compareMode 
+                            ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Columns className="w-3 h-3" />
+                        <span className="hidden sm:inline">Compare</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Main Input */}
+                  <div 
+                    className={`bg-white rounded-xl sm:rounded-2xl border transition-all duration-300 overflow-visible ${
+                      inputFocused 
+                        ? 'border-slate-300' 
+                        : 'border-slate-200'
+                    }`}
+                    style={{
+                      borderColor: inputFocused ? `${PRIMARY_COLOR}40` : undefined,
+                    }}
+                  >
+                    <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 overflow-visible ${(prompt.trim() || inputFocused) ? 'flex-col' : 'items-center'}`}>
+                      <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
+                        <textarea
+                          ref={inputRef}
+                          value={prompt}
+                          onChange={(e) => setPrompt(e.target.value)}
+                          onFocus={() => setInputFocused(true)}
+                          onBlur={() => {
+                            // Only blur if there's no text and there are images, otherwise keep it focused
+                            if (!prompt.trim() && images.length > 0) {
+                              setInputFocused(false);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              editingImage ? handleEdit() : handleGenerate();
+                            }
+                          }}
+                          placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
+                          className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
+                            (prompt.trim() || inputFocused)
+                              ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
+                              : 'h-[2rem] sm:h-[2.5rem]'
+                          }`}
+                          rows={(prompt.trim() || inputFocused) ? 5 : 1}
+                        />
+
+                        {/* Submit Button - Always visible on right when there's text */}
+                        {prompt.trim() && !compareMode && (
+                          <button
+                            onClick={editingImage ? handleEdit : handleGenerate}
+                            disabled={(generating || editing) || !prompt.trim()}
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                            style={{ backgroundColor: primaryColor }}
+                          >
+                            {(generating || editing) && (
+                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                            )}
+                            <span className="sm:hidden">
+                              {editingImage ? 'Apply' : 'Go'}
+                            </span>
+                            <span className="hidden sm:inline">
+                              {editingImage ? 'Apply' : 'Create'}
+                            </span>
+                          </button>
+                        )}
+                        
+                        {/* Compare Button - Shows when compare mode is enabled */}
+                        {prompt.trim() && compareMode && !editingImage && (
+                          <button
+                            onClick={handleCompare}
+                            disabled={comparing || !prompt.trim()}
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 bg-gradient-to-r from-amber-500 to-orange-500"
+                          >
+                            {comparing ? (
+                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                            ) : (
+                              <Columns className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            )}
+                            <span className="sm:hidden">Compare</span>
+                            <span className="hidden sm:inline">
+                              {comparing ? 'Comparing...' : 'Compare All Versions'}
+                            </span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Actions Row - Moves to bottom when typing or focused */}
+                      {(prompt.trim() || inputFocused) && (
+                        <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-slate-100 flex-wrap overflow-visible">
+                          {/* Ratio Dropdown (only for new images) */}
+                          {!editingImage && (
+                            <div className="relative overflow-visible" ref={ratioDropdownRef}>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                  // Prevent blur on textarea
+                                  e.preventDefault();
+                                }}
+                                onClick={() => {
+                                  setShowRatioDropdown(!showRatioDropdown);
+                                  // Keep input focused
+                                  inputRef.current?.focus();
+                                }}
+                                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300"
+                                style={{
+                                  borderColor: showRatioDropdown ? `${primaryColor}40` : undefined,
+                                }}
+                              >
+                                <Grid3x3 className="w-4 h-4 sm:w-4 sm:h-4" />
+                                <span>
+                                  {selectedPlatform 
+                                    ? selectedPlatform 
+                                    : selectedAspectRatio === 'auto' 
+                                      ? 'Size/Platform' 
+                                      : `Size: ${selectedAspectRatio}`
+                                  }
+                                </span>
+                                <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {showRatioDropdown && (
+                                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-80 overflow-y-auto">
+                                  {/* Auto Option */}
+                                  <div className="px-3 py-2">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedAspectRatio('auto');
+                                        setSelectedPlatform(null);
+                                        setShowRatioDropdown(false);
+                                      }}
+                                      className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <Grid3x3 className="w-4 h-4 text-slate-400" />
+                                        <span>Auto</span>
+                                      </div>
+                                      {selectedAspectRatio === 'auto' && !selectedPlatform && (
+                                        <Check className="w-4 h-4 text-slate-600" />
+                                      )}
+                                    </button>
+                                  </div>
+                                  <div className="border-t border-slate-100 my-1" />
+                                  
+                                  {/* Platforms Section */}
+                                  <div className="px-3 py-2">
+                                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                      Platforms
+                                    </div>
+                                    <div className="space-y-1">
+                                      {platformGroups.map((platform) => {
+                                        const isExpanded = expandedPlatforms.has(platform.name);
+                                        const hasPlatformSelected = platform.sizes.some(
+                                          size => selectedPlatform === `${platform.name} - ${size.label}`
+                                        );
+                                        
+                                        return (
+                                          <div key={platform.name}>
+                                            {/* Platform Header */}
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                togglePlatformExpand(platform.name);
+                                              }}
+                                              className={`w-full px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded ${
+                                                hasPlatformSelected ? 'bg-slate-50' : ''
+                                              }`}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <img 
+                                                  src={platform.favicon} 
+                                                  alt="" 
+                                                  className="w-4 h-4 rounded-sm"
+                                                  onError={(e) => {
+                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                  }}
+                                                />
+                                                <span className="font-medium">{platform.name}</span>
+                                                {hasPlatformSelected && (
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                                )}
+                                              </div>
+                                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                            </button>
+                                            
+                                            {/* Expanded Sizes */}
+                                            {isExpanded && (
+                                              <div className="ml-6 mt-1 space-y-0.5 pb-1">
+                                                {platform.sizes.map((size) => {
+                                                  const fullName = `${platform.name} - ${size.label}`;
+                                                  const isSelected = selectedPlatform === fullName;
+                                                  
+                                                  return (
+                                                    <button
+                                                      key={size.label}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedPlatform(fullName);
+                                                        setSelectedAspectRatio(size.ratio);
+                                                        setShowRatioDropdown(false);
+                                                      }}
+                                                      className="w-full px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center justify-between rounded"
+                                                    >
+                                                      <span>{size.label} ({size.ratio})</span>
+                                                      {isSelected && (
+                                                        <Check className="w-4 h-4 text-blue-500" />
+                                                      )}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="border-t border-slate-100 my-1" />
+                                  
+                                  {/* Sizes Section */}
+                                  <div className="px-3 py-2">
+                                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                      Custom Sizes
+                                    </div>
+                                    {/* Portrait/Square Ratios */}
+                                    <div className="space-y-1">
+                                      {[
+                                        { value: '1:1', label: 'Square (1:1)' },
+                                        { value: '2:3', label: 'Portrait (2:3)' },
+                                        { value: '3:4', label: 'Portrait (3:4)' },
+                                        { value: '4:5', label: 'Social (4:5)' },
+                                        { value: '9:16', label: 'Mobile (9:16)' },
+                                      ].map((ratio) => {
+                                        const isSelected = selectedAspectRatio === ratio.value && !selectedPlatform;
+                                        return (
+                                          <button
+                                            key={ratio.value}
+                                            onClick={() => {
+                                              setSelectedAspectRatio(ratio.value as AspectRatio);
+                                              setSelectedPlatform(null);
+                                              setShowRatioDropdown(false);
+                                            }}
+                                            className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                          >
+                                            <span>{ratio.label}</span>
+                                            {isSelected && (
+                                              <Check className="w-4 h-4 text-slate-600" />
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                    
+                                    <div className="border-t border-slate-100 my-1.5" />
+                                    
+                                    {/* Landscape Ratios */}
+                                    <div className="space-y-1">
+                                      {[
+                                        { value: '3:2', label: 'Landscape (3:2)' },
+                                        { value: '4:3', label: 'Landscape (4:3)' },
+                                        { value: '5:4', label: 'Classic (5:4)' },
+                                        { value: '16:9', label: 'Widescreen (16:9)' },
+                                        { value: '21:9', label: 'Cinematic (21:9)' },
+                                      ].map((ratio) => {
+                                        const isSelected = selectedAspectRatio === ratio.value && !selectedPlatform;
+                                        return (
+                                          <button
+                                            key={ratio.value}
+                                            onClick={() => {
+                                              setSelectedAspectRatio(ratio.value as AspectRatio);
+                                              setSelectedPlatform(null);
+                                              setShowRatioDropdown(false);
+                                            }}
+                                            className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                          >
+                                            <span>{ratio.label}</span>
+                                            {isSelected && (
+                                              <Check className="w-4 h-4 text-slate-600" />
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Attach Assets Button - Opens asset modal directly */}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              // Prevent blur on textarea
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
+                              setShowMediaLibrary(true);
+                              // Keep input focused
+                              inputRef.current?.focus();
+                            }}
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300 relative"
+                            title="Attach assets"
+                          >
+                            <FolderOpen className="w-4 h-4 sm:w-4 sm:h-4" />
+                            <span>Attach Assets</span>
+                            {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
+                              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold"
+                                style={{ 
+                                  backgroundColor: primaryColor,
+                                  color: 'white',
+                                }}
+                              >
+                                {selectedAssets.length + selectedReferences.length}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* Spacer to push submit button to right if needed, or keep it here */}
+                          <div className="flex-1" />
+                        </div>
+                      )}
+
+                      {/* Style Thumbnails - Attached to input box */}
+                      {(inputFocused || prompt.trim()) && !editingImage && availableStyles.length > 0 && (
+                        <div 
+                          className="pt-2 group/thumbnails relative"
+                          onMouseDown={(e) => {
+                            // Prevent blur on textarea when clicking thumbnails
+                            e.preventDefault();
+                          }}
+                        >
+                          <div className="mb-2 text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Quick Style Selection</span>
+                            {selectedStyles.length > 0 && (
+                              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                style={{ 
+                                  backgroundColor: primaryColor,
+                                  color: 'white',
+                                }}
+                              >
+                                {selectedStyles.length} selected
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide relative">
+                            {availableStyles.map((style) => {
+                              const isSelected = selectedStyles.some(s => s.id === style.id);
+                              return (
+                                <button
+                                  key={style.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    // Prevent blur on textarea by preventing default mousedown
+                                    e.preventDefault();
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Keep input focused
+                                    inputRef.current?.focus();
+                                    // Open the modal
+                                    setShowStylesPicker(true);
+                                  }}
+                                  className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                                    isSelected 
+                                      ? 'ring-2 ring-offset-1' 
+                                      : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                                  }`}
+                                  style={isSelected ? {
+                                    borderColor: primaryColor,
+                                    boxShadow: `0 0 0 2px ${primaryColor}30`,
+                                  } : {}}
+                                  aria-label={style.name}
+                                >
+                                  {/* Thumbnail Image */}
+                                  <div 
+                                    className="w-14 h-14 sm:w-16 sm:h-16 relative overflow-hidden"
+                                    style={{
+                                      backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
+                                      backgroundSize: '8px 8px',
+                                      backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                                      backgroundColor: '#fafafa',
+                                    }}
+                                  >
+                                    <img
+                                      src={style.url}
+                                      alt={style.name}
+                                      className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-200"
+                                    />
+                                    
+                                    {/* Overlay on hover */}
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                                  </div>
+
+                                  {/* Selection Indicator */}
+                                  {isSelected && (
+                                    <div 
+                                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10"
+                                      style={{ backgroundColor: primaryColor }}
+                                    >
+                                      <Check className="w-2.5 h-2.5 text-white" />
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
+                          <div className="absolute left-0 right-0 top-8 bottom-0 bg-slate-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
+                            <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
+                              <Sparkles className="w-4 h-4" />
+                              <span>Click to browse all styles</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Smart Presets Section */}
                 <div>
-                  <div className="mb-6">
-                    <h3 className="text-2xl font-bold text-slate-800 mb-2">
-                      Quick Start with Smart Presets
+                  <div className="mb-4 text-center">
+                    <h3 className="text-sm sm:text-base font-medium text-slate-600">
+                      Some ideas to get started
                     </h3>
-                    <p className="text-slate-600">
-                      Personalized suggestions based on <span className="font-semibold">{brand.name}</span>
-                    </p>
                   </div>
                   
                   {loadingPresets ? (
-                    <div className="flex items-center justify-center py-12">
+                    <div className="flex items-center justify-center py-8">
                       <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
                       <span className="ml-3 text-slate-600 text-sm sm:text-base">Generating smart presets...</span>
                     </div>
                   ) : smartPresets.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                      {smartPresets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          onClick={() => handlePresetClick(preset)}
-                          className="group relative bg-white rounded-xl p-4 border-2 border-slate-200 hover:shadow-lg transition-all text-left"
-                          style={{
-                            borderColor: 'rgb(226 232 240)',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.borderColor = primaryColor;
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = 'rgb(226 232 240)';
-                          }}
-                        >
-                          {/* Icon & Aspect Ratio */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div 
-                              className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              {preset.icon}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {smartPresets.slice(0, 3).map((preset) => {
+                        const { tag, IconComponent } = getPresetIconAndTag(preset.category, preset.label);
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={() => handlePresetClick(preset)}
+                            className="group relative bg-white rounded-2xl p-4 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                          >
+                            {/* Tag */}
+                            <div className="absolute top-3 left-3">
+                              <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                                {tag}
+                              </span>
                             </div>
-                            <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                              {preset.aspectRatio}
-                            </span>
-                          </div>
-                          
-                          {/* Label & Category */}
-                          <h4 className="font-semibold text-slate-900 mb-1 text-sm">
-                            {preset.label}
-                          </h4>
-                          <p className="text-xs text-slate-500 mb-3">
-                            {preset.category}
-                          </p>
-                          
-                          {/* Smart Indicator */}
-                          {preset.smartContext?.whyRelevant && (
-                            <div 
-                              className="flex items-center gap-1 text-xs"
-                              style={{ color: primaryColor }}
-                            >
-                              <Sparkles className="w-3 h-3" />
-                              <span>{preset.smartContext.whyRelevant}</span>
+                            
+                            {/* Icon */}
+                            <div className="flex items-center justify-center mb-4 mt-1">
+                              <div 
+                                className="w-16 h-16 rounded-xl flex items-center justify-center"
+                                style={{ 
+                                  backgroundColor: `${PRIMARY_COLOR}08`,
+                                  color: PRIMARY_COLOR
+                                }}
+                              >
+                                <IconComponent className="w-8 h-8" style={{ color: PRIMARY_COLOR }} />
+                              </div>
                             </div>
-                          )}
-                          
-                          {/* Hover Effect */}
-                          <div 
-                            className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-50 group-hover:to-transparent rounded-xl transition-all pointer-events-none" 
-                            style={{ 
-                              background: `linear-gradient(to bottom right, ${primaryColor}15, transparent)`
-                            }}
-                          />
-                        </button>
-                      ))}
+                            
+                            {/* Title */}
+                            <h4 className="font-semibold text-slate-900 mb-1.5 text-sm leading-tight">
+                              {preset.label}
+                            </h4>
+                            
+                            {/* Description */}
+                            {preset.smartContext?.whyRelevant ? (
+                              <p className="text-xs text-slate-600 mb-3 flex-1 leading-relaxed line-clamp-2">
+                                {preset.smartContext.whyRelevant}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-slate-600 mb-3 flex-1 leading-relaxed">
+                                {preset.category}
+                              </p>
+                            )}
+                            
+                            {/* Create Button */}
+                            <div className="mt-auto pt-3 border-t border-slate-100">
+                              <button
+                                className="w-full py-2.5 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
+                                style={{ backgroundColor: PRIMARY_COLOR }}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePresetClick(preset);
+                                }}
+                              >
+                                Create
+                              </button>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-slate-500">
                       <p>Unable to load presets. You can still create images using the input below.</p>
                     </div>
                   )}
-                </div>
-                
-                {/* Divider */}
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-4 bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 text-slate-500">
-                      Or write your own prompt below
-                    </span>
-                  </div>
                 </div>
               </div>
             ) : (
@@ -1050,14 +2078,15 @@ export function Studio({ brand }: { brand: Brand }) {
         </div>
       </div>
 
-      {/* Floating Input Bar */}
+      {/* Floating Input Bar - Only show when there are images */}
+      {images.length > 0 && (
       <div 
         ref={inputContainerRef}
-        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${
+        className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 overflow-visible ${
           inputFocused ? 'pb-4 sm:pb-6' : 'pb-4 sm:pb-6'
         }`}
       >
-        <div className="max-w-3xl mx-auto px-3 sm:px-4">
+        <div className="max-w-3xl mx-auto px-3 sm:px-4 overflow-visible">
           {/* Editing Badge */}
           {editingImage && (
             <div className="mb-3 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl p-2 border border-slate-200">
@@ -1092,9 +2121,73 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
           )}
 
+          {/* Prompt Version Toggle */}
+          {!editingImage && (
+            <div className="mb-2 flex items-center justify-center gap-3">
+              <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200 p-0.5">
+                <button
+                  onClick={() => setPromptVersion('v1')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    promptVersion === 'v1'
+                      ? 'bg-slate-900 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  V1
+                </button>
+                <button
+                  onClick={() => setPromptVersion('v2')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                    promptVersion === 'v2'
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <FlaskConical className="w-3 h-3" />
+                  V2
+                </button>
+                <button
+                  onClick={() => setPromptVersion('v3')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
+                    promptVersion === 'v3'
+                      ? 'bg-amber-500 text-white shadow-sm'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Zap className="w-3 h-3" />
+                  V3
+                </button>
+              </div>
+              
+              {promptVersion === 'v2' && (
+                <span className="text-xs text-emerald-600">
+                  Design-type aware
+                </span>
+              )}
+              {promptVersion === 'v3' && (
+                <span className="text-xs text-amber-600">
+                  Lean & direct
+                </span>
+              )}
+              
+              {/* Compare Mode Toggle */}
+              <button
+                onClick={() => setCompareMode(!compareMode)}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
+                  compareMode 
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300' 
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <Columns className="w-3 h-3" />
+                <span className="hidden sm:inline">Compare</span>
+              </button>
+            </div>
+          )}
+
           {/* Main Input */}
           <div 
-            className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 ${
+            className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 overflow-visible ${
               inputFocused 
                 ? 'border-slate-300 shadow-2xl' 
                 : 'border-slate-200/80'
@@ -1103,13 +2196,19 @@ export function Studio({ brand }: { brand: Brand }) {
               borderColor: inputFocused ? `${primaryColor}40` : undefined,
             }}
           >
-            <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 ${prompt.trim() ? 'flex-col' : 'items-center'}`}>
+            <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 overflow-visible ${(prompt.trim() || inputFocused) ? 'flex-col' : 'items-center'}`}>
               <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                 <textarea
                   ref={inputRef}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   onFocus={() => setInputFocused(true)}
+                  onBlur={() => {
+                    // Only blur if there's no text, otherwise keep it focused
+                    if (!prompt.trim()) {
+                      setInputFocused(false);
+                    }
+                  }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -1117,16 +2216,16 @@ export function Studio({ brand }: { brand: Brand }) {
                     }
                   }}
                   placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
-                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 ${
-                    prompt.trim() 
-                      ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[5rem] sm:max-h-[6rem]' 
+                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
+                    (prompt.trim() || inputFocused)
+                      ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
                       : 'h-[2rem] sm:h-[2.5rem]'
                   }`}
-                  rows={prompt.trim() ? 2 : 1}
+                  rows={(prompt.trim() || inputFocused) ? 5 : 1}
                 />
 
                 {/* Submit Button - Always visible on right when there's text */}
-                {prompt.trim() && (
+                {prompt.trim() && !compareMode && (
                   <button
                     onClick={editingImage ? handleEdit : handleGenerate}
                     disabled={(generating || editing) || !prompt.trim()}
@@ -1144,185 +2243,256 @@ export function Studio({ brand }: { brand: Brand }) {
                     </span>
                   </button>
                 )}
+                
+                {/* Compare Button - Shows when compare mode is enabled */}
+                {prompt.trim() && compareMode && !editingImage && (
+                  <button
+                    onClick={handleCompare}
+                    disabled={comparing || !prompt.trim()}
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 bg-gradient-to-r from-amber-500 to-orange-500"
+                  >
+                    {comparing ? (
+                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
+                    ) : (
+                      <Columns className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    )}
+                    <span className="sm:hidden">Compare</span>
+                    <span className="hidden sm:inline">
+                      {comparing ? 'Comparing...' : 'Compare All Versions'}
+                    </span>
+                  </button>
+                )}
               </div>
 
-              {/* Actions Row - Moves to bottom when typing */}
-              {prompt.trim() && (
-                <div className="flex items-center gap-1.5 sm:gap-2 pt-2 border-t border-slate-100 flex-wrap">
+              {/* Actions Row - Moves to bottom when typing or focused */}
+              {(prompt.trim() || inputFocused) && (
+                <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-slate-100 flex-wrap overflow-visible">
                   {/* Ratio Dropdown (only for new images) */}
                   {!editingImage && (
                     <div className="relative" ref={ratioDropdownRef}>
                       <button
-                        onClick={() => setShowRatioDropdown(!showRatioDropdown)}
-                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
+                        type="button"
+                        onMouseDown={(e) => {
+                          // Prevent blur on textarea
+                          e.preventDefault();
+                        }}
+                        onClick={() => {
+                          setShowRatioDropdown(!showRatioDropdown);
+                          // Keep input focused
+                          inputRef.current?.focus();
+                        }}
+                        className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300"
+                        style={{
+                          borderColor: showRatioDropdown ? `${primaryColor}40` : undefined,
+                        }}
                       >
-                        <Grid3x3 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span className="hidden sm:inline">{selectedAspectRatio === 'auto' ? 'Auto' : selectedAspectRatio}</span>
-                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
+                        <Grid3x3 className="w-4 h-4 sm:w-4 sm:h-4" />
+                        <span>
+                          {selectedPlatform 
+                            ? selectedPlatform 
+                            : selectedAspectRatio === 'auto' 
+                              ? 'Size/Platform' 
+                              : `Size: ${selectedAspectRatio}`
+                          }
+                        </span>
+                        <ChevronDown className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform ${showRatioDropdown ? 'rotate-180' : ''}`} />
                       </button>
 
                       {showRatioDropdown && (
-                        <div className="absolute bottom-full left-0 mb-2 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-96 overflow-y-auto">
+                        <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-80 overflow-y-auto">
                           {/* Auto Option */}
                           <div className="px-3 py-2">
                             <button
                               onClick={() => {
                                 setSelectedAspectRatio('auto');
+                                setSelectedPlatform(null);
                                 setShowRatioDropdown(false);
                               }}
                               className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
                             >
                               <div className="flex items-center gap-2">
                                 <Grid3x3 className="w-4 h-4 text-slate-400" />
-                                <span>Auto (AI decides)</span>
+                                <span>Auto</span>
                               </div>
-                              {selectedAspectRatio === 'auto' && (
+                              {selectedAspectRatio === 'auto' && !selectedPlatform && (
                                 <Check className="w-4 h-4 text-slate-600" />
                               )}
                             </button>
                           </div>
                           <div className="border-t border-slate-100 my-1" />
                           
-                          {/* Portrait/Square Ratios */}
+                          {/* Platforms Section */}
                           <div className="px-3 py-2">
-                            {[
-                              { value: '1:1', label: 'Square (1:1)' },
-                              { value: '2:3', label: 'Portrait (2:3)' },
-                              { value: '3:4', label: 'Portrait (3:4)' },
-                              { value: '4:5', label: 'Social (4:5)' },
-                              { value: '9:16', label: 'Mobile (9:16)' },
-                            ].map((ratio) => (
-                              <button
-                                key={ratio.value}
-                                onClick={() => {
-                                  setSelectedAspectRatio(ratio.value as AspectRatio);
-                                  setShowRatioDropdown(false);
-                                }}
-                                className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
-                              >
-                                <span>{ratio.label}</span>
-                                {selectedAspectRatio === ratio.value && (
-                                  <Check className="w-4 h-4 text-slate-600" />
-                                )}
-                              </button>
-                            ))}
+                            <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                              Platforms
+                            </div>
+                            <div className="space-y-1">
+                              {platformGroups.map((platform) => {
+                                const isExpanded = expandedPlatforms.has(platform.name);
+                                const hasPlatformSelected = platform.sizes.some(
+                                  size => selectedPlatform === `${platform.name} - ${size.label}`
+                                );
+                                
+                                return (
+                                  <div key={platform.name}>
+                                    {/* Platform Header */}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        e.preventDefault();
+                                        togglePlatformExpand(platform.name);
+                                      }}
+                                      className={`w-full px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded ${
+                                        hasPlatformSelected ? 'bg-slate-50' : ''
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <img 
+                                          src={platform.favicon} 
+                                          alt="" 
+                                          className="w-4 h-4 rounded-sm"
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                          }}
+                                        />
+                                        <span className="font-medium">{platform.name}</span>
+                                        {hasPlatformSelected && (
+                                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                        )}
+                                      </div>
+                                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    
+                                    {/* Expanded Sizes */}
+                                    {isExpanded && (
+                                      <div className="ml-6 mt-1 space-y-0.5 pb-1">
+                                        {platform.sizes.map((size) => {
+                                          const fullName = `${platform.name} - ${size.label}`;
+                                          const isSelected = selectedPlatform === fullName;
+                                          
+                                          return (
+                                            <button
+                                              key={size.label}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setSelectedPlatform(fullName);
+                                                setSelectedAspectRatio(size.ratio);
+                                                setShowRatioDropdown(false);
+                                              }}
+                                              className="w-full px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center justify-between rounded"
+                                            >
+                                              <span>{size.label} ({size.ratio})</span>
+                                              {isSelected && (
+                                                <Check className="w-4 h-4 text-blue-500" />
+                                              )}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                           
                           <div className="border-t border-slate-100 my-1" />
                           
-                          {/* Landscape Ratios */}
+                          {/* Sizes Section */}
                           <div className="px-3 py-2">
-                            {[
-                              { value: '3:2', label: 'Landscape (3:2)' },
-                              { value: '4:3', label: 'Landscape (4:3)' },
-                              { value: '5:4', label: 'Classic (5:4)' },
-                              { value: '16:9', label: 'Widescreen (16:9)' },
-                              { value: '21:9', label: 'Cinematic (21:9)' },
-                            ].map((ratio) => (
-                              <button
-                                key={ratio.value}
-                                onClick={() => {
-                                  setSelectedAspectRatio(ratio.value as AspectRatio);
-                                  setShowRatioDropdown(false);
-                                }}
-                                className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
-                              >
-                                <span>{ratio.label}</span>
-                                {selectedAspectRatio === ratio.value && (
-                                  <Check className="w-4 h-4 text-slate-600" />
-                                )}
-                              </button>
-                            ))}
+                            <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                              Custom Sizes
+                            </div>
+                            {/* Portrait/Square Ratios */}
+                            <div className="space-y-1">
+                              {[
+                                { value: '1:1', label: 'Square (1:1)' },
+                                { value: '2:3', label: 'Portrait (2:3)' },
+                                { value: '3:4', label: 'Portrait (3:4)' },
+                                { value: '4:5', label: 'Social (4:5)' },
+                                { value: '9:16', label: 'Mobile (9:16)' },
+                              ].map((ratio) => {
+                                const isSelected = selectedAspectRatio === ratio.value && !selectedPlatform;
+                                return (
+                                  <button
+                                    key={ratio.value}
+                                    onClick={() => {
+                                      setSelectedAspectRatio(ratio.value as AspectRatio);
+                                      setSelectedPlatform(null);
+                                      setShowRatioDropdown(false);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                  >
+                                    <span>{ratio.label}</span>
+                                    {isSelected && (
+                                      <Check className="w-4 h-4 text-slate-600" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            
+                            <div className="border-t border-slate-100 my-1.5" />
+                            
+                            {/* Landscape Ratios */}
+                            <div className="space-y-1">
+                              {[
+                                { value: '3:2', label: 'Landscape (3:2)' },
+                                { value: '4:3', label: 'Landscape (4:3)' },
+                                { value: '5:4', label: 'Classic (5:4)' },
+                                { value: '16:9', label: 'Widescreen (16:9)' },
+                                { value: '21:9', label: 'Cinematic (21:9)' },
+                              ].map((ratio) => {
+                                const isSelected = selectedAspectRatio === ratio.value && !selectedPlatform;
+                                return (
+                                  <button
+                                    key={ratio.value}
+                                    onClick={() => {
+                                      setSelectedAspectRatio(ratio.value as AspectRatio);
+                                      setSelectedPlatform(null);
+                                      setShowRatioDropdown(false);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                  >
+                                    <span>{ratio.label}</span>
+                                    {isSelected && (
+                                      <Check className="w-4 h-4 text-slate-600" />
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* Media Button with Popover - Available for both new and edit modes */}
-                  <div className="relative" ref={mediaPopoverRef}>
-                      <button
-                        onClick={() => setShowMediaPopover(!showMediaPopover)}
-                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                        title="Attach files"
-                      >
-                        <FolderOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        <span className="hidden sm:inline">Attach</span>
-                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
-                        {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
-                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
-                            style={{ 
-                              backgroundColor: primaryColor,
-                              color: 'white',
-                            }}
-                          >
-                            {selectedAssets.length + selectedReferences.length + selectedStyles.length}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Media Popover */}
-                      {showMediaPopover && (
-                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
-                          <button
-                            onClick={() => {
-                              setShowMediaLibrary(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
-                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
-                            </div>
-                          </button>
-                          
-                          <div className="h-px bg-slate-100 mx-2" />
-                          
-                          <button
-                            onClick={() => {
-                              setShowReferenceUpload(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Add Reference</p>
-                              <p className="text-xs text-slate-500">Inspo / style images</p>
-                            </div>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                  {/* Styles Button - Next to Attach */}
+                  {/* Attach Assets Button - Opens asset modal directly */}
                   <button
-                    onClick={() => setShowStylesPicker(true)}
-                    className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                    title="Choose a style"
+                    type="button"
+                    onMouseDown={(e) => {
+                      // Prevent blur on textarea
+                      e.preventDefault();
+                    }}
+                    onClick={() => {
+                      setShowMediaLibrary(true);
+                      // Keep input focused
+                      inputRef.current?.focus();
+                    }}
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300 relative"
+                    title="Attach assets"
                   >
-                    <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                    <span className="hidden sm:inline">Styles</span>
-                    {selectedStyles.length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
+                    <FolderOpen className="w-4 h-4 sm:w-4 sm:h-4" />
+                    <span>Attach Assets</span>
+                    {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
+                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold"
                         style={{ 
                           backgroundColor: primaryColor,
                           color: 'white',
                         }}
                       >
-                        {selectedStyles.length}
+                        {selectedAssets.length + selectedReferences.length}
                       </span>
                     )}
                   </button>
@@ -1345,10 +2515,107 @@ export function Studio({ brand }: { brand: Brand }) {
 
               {/* Actions - Show on right side when no text (original behavior) */}
               {/* Removed: Auto, Media, and Enhance buttons now only show when user types something */}
+              
+              {/* Style Thumbnails - Attached to input box */}
+              {(inputFocused || prompt.trim()) && !editingImage && availableStyles.length > 0 && images.length > 0 && (
+                <div 
+                  className="pt-2 group/thumbnails relative"
+                  onMouseDown={(e) => {
+                    // Prevent blur on textarea when clicking thumbnails
+                    e.preventDefault();
+                  }}
+                >
+                  <div className="mb-2 text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Quick Style Selection</span>
+                    {selectedStyles.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ 
+                          backgroundColor: primaryColor,
+                          color: 'white',
+                        }}
+                      >
+                        {selectedStyles.length} selected
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide relative">
+                    {availableStyles.map((style) => {
+                      const isSelected = selectedStyles.some(s => s.id === style.id);
+                      return (
+                        <button
+                          key={style.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            // Prevent blur on textarea by preventing default mousedown
+                            e.preventDefault();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Keep input focused
+                            inputRef.current?.focus();
+                            // Open the modal
+                            setShowStylesPicker(true);
+                          }}
+                          className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'ring-2 ring-offset-1' 
+                              : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                          }`}
+                          style={isSelected ? {
+                            borderColor: primaryColor,
+                            boxShadow: `0 0 0 2px ${primaryColor}30`,
+                          } : {}}
+                          aria-label={style.name}
+                        >
+                          {/* Thumbnail Image */}
+                          <div 
+                            className="w-14 h-14 sm:w-16 sm:h-16 relative overflow-hidden"
+                            style={{
+                              backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
+                              backgroundSize: '8px 8px',
+                              backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
+                              backgroundColor: '#fafafa',
+                            }}
+                          >
+                            <img
+                              src={style.url}
+                              alt={style.name}
+                              className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-200"
+                            />
+                            
+                            {/* Overlay on hover */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                          </div>
+
+                          {/* Selection Indicator */}
+                          {isSelected && (
+                            <div 
+                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10"
+                              style={{ backgroundColor: primaryColor }}
+                            >
+                              <Check className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
+                  <div className="absolute left-0 right-0 top-8 bottom-0 bg-slate-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
+                    <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Click to browse all styles</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
+      )}
 
       {/* Image Modal */}
       {selectedImage && (
@@ -1614,92 +2881,23 @@ export function Studio({ brand }: { brand: Brand }) {
                   />
 
                   <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
-                    {/* Attach Button for Modal Edit */}
-                    <div className="relative" ref={mediaPopoverRef}>
-                      <button
-                        onClick={() => setShowMediaPopover(!showMediaPopover)}
-                        className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                        title="Attach files"
-                        disabled={modalEditing}
-                      >
-                        <FolderOpen className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Attach</span>
-                        <ChevronDown className={`w-2.5 h-2.5 sm:w-3 sm:h-3 transition-transform ${showMediaPopover ? 'rotate-180' : ''}`} />
-                        {(selectedAssets.length > 0 || selectedReferences.length > 0 || selectedStyles.length > 0) && (
-                          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
-                            style={{ 
-                              backgroundColor: primaryColor,
-                              color: 'white',
-                            }}
-                          >
-                            {selectedAssets.length + selectedReferences.length + selectedStyles.length}
-                          </span>
-                        )}
-                      </button>
-
-                      {/* Media Popover */}
-                      {showMediaPopover && (
-                        <div className="absolute bottom-full left-0 mb-2 w-52 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50">
-                          <button
-                            onClick={() => {
-                              setShowMediaLibrary(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <FolderOpen className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Select Assets</p>
-                              <p className="text-xs text-slate-500">Use logos, icons, etc.</p>
-                            </div>
-                          </button>
-                          
-                          <div className="h-px bg-slate-100 mx-2" />
-                          
-                          <button
-                            onClick={() => {
-                              setShowReferenceUpload(true);
-                              setShowMediaPopover(false);
-                            }}
-                            className="w-full px-3 py-2 flex items-center gap-2.5 hover:bg-slate-50 transition-colors text-left group"
-                          >
-                            <div 
-                              className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                              style={{ backgroundColor: `${primaryColor}10` }}
-                            >
-                              <Palette className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900">Add Reference</p>
-                              <p className="text-xs text-slate-500">Inspo / style images</p>
-                            </div>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Styles Button - Next to Attach (Modal Edit) */}
+                    {/* Attach Assets Button for Modal Edit */}
                     <button
-                      onClick={() => setShowStylesPicker(true)}
+                      onClick={() => setShowMediaLibrary(true)}
                       className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
-                      title="Choose a style"
+                      title="Attach assets"
                       disabled={modalEditing}
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Styles</span>
-                      {selectedStyles.length > 0 && (
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Attach Assets</span>
+                      {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
                         <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
                           style={{ 
                             backgroundColor: primaryColor,
                             color: 'white',
                           }}
                         >
-                          {selectedStyles.length}
+                          {selectedAssets.length + selectedReferences.length}
                         </span>
                       )}
                     </button>
@@ -1913,72 +3111,298 @@ export function Studio({ brand }: { brand: Brand }) {
                   <span className="ml-3 text-slate-600 text-sm">Loading presets...</span>
                 </div>
               ) : smartPresets.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-                  {smartPresets.map((preset) => (
-                    <button
-                      key={preset.id}
-                      onClick={() => {
-                        handlePresetClick(preset);
-                        setShowPresetsModal(false);
-                      }}
-                      className="group relative bg-white rounded-xl p-4 border-2 border-slate-200 hover:shadow-lg transition-all text-left"
-                      style={{
-                        borderColor: 'rgb(226 232 240)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = primaryColor;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = 'rgb(226 232 240)';
-                      }}
-                    >
-                      {/* Icon & Aspect Ratio */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div 
-                          className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl"
-                          style={{ backgroundColor: `${primaryColor}10` }}
-                        >
-                          {preset.icon}
-                        </div>
-                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">
-                          {preset.aspectRatio}
-                        </span>
-                      </div>
-                      
-                      {/* Label & Category */}
-                      <h4 className="font-semibold text-slate-900 mb-1 text-sm">
-                        {preset.label}
-                      </h4>
-                      <p className="text-xs text-slate-500 mb-3">
-                        {preset.category}
-                      </p>
-                      
-                      {/* Smart Indicator */}
-                      {preset.smartContext?.whyRelevant && (
-                        <div 
-                          className="flex items-center gap-1 text-xs"
-                          style={{ color: primaryColor }}
-                        >
-                          <Sparkles className="w-3 h-3" />
-                          <span>{preset.smartContext.whyRelevant}</span>
-                        </div>
-                      )}
-                      
-                      {/* Hover Effect */}
-                      <div 
-                        className="absolute inset-0 bg-gradient-to-br opacity-0 group-hover:opacity-50 group-hover:to-transparent rounded-xl transition-all pointer-events-none" 
-                        style={{ 
-                          background: `linear-gradient(to bottom right, ${primaryColor}15, transparent)`
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {smartPresets.map((preset) => {
+                    const { tag, IconComponent } = getPresetIconAndTag(preset.category, preset.label);
+                    return (
+                      <button
+                        key={preset.id}
+                        onClick={() => {
+                          handlePresetClick(preset);
+                          setShowPresetsModal(false);
                         }}
-                      />
-                    </button>
-                  ))}
+                        className="group relative bg-white rounded-2xl p-6 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                      >
+                        {/* Tag */}
+                        <div className="absolute top-4 left-4">
+                          <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
+                            {tag}
+                          </span>
+                        </div>
+                        
+                        {/* Icon */}
+                        <div className="flex items-center justify-center mb-6 mt-2">
+                          <div 
+                            className="w-20 h-20 rounded-2xl flex items-center justify-center"
+                            style={{ 
+                              backgroundColor: `${PRIMARY_COLOR}08`,
+                              color: PRIMARY_COLOR
+                            }}
+                          >
+                            <IconComponent className="w-10 h-10" style={{ color: PRIMARY_COLOR }} />
+                          </div>
+                        </div>
+                        
+                        {/* Title */}
+                        <h4 className="font-semibold text-slate-900 mb-2 text-base leading-tight">
+                          {preset.label}
+                        </h4>
+                        
+                        {/* Description */}
+                        {preset.smartContext?.whyRelevant ? (
+                          <p className="text-sm text-slate-600 mb-4 flex-1 leading-relaxed">
+                            {preset.smartContext.whyRelevant}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-slate-600 mb-4 flex-1 leading-relaxed">
+                            {preset.category}
+                          </p>
+                        )}
+                        
+                        {/* Create Button */}
+                        <div className="mt-auto pt-4 border-t border-slate-100">
+                          <button
+                            className="w-full py-2.5 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
+                            style={{ backgroundColor: PRIMARY_COLOR }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePresetClick(preset);
+                              setShowPresetsModal(false);
+                            }}
+                          >
+                            Create
+                          </button>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center py-12 text-slate-500">
                   <p>No presets available. You can still create images using the input below.</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comparison Modal */}
+      {showComparisonModal && comparisonResults && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+          onClick={() => setShowComparisonModal(false)}
+        >
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          
+          <div 
+            className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <Columns className="w-5 h-5" />
+                  Side-by-Side Comparison
+                </h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Prompt: "{prompt.substring(0, 60)}{prompt.length > 60 ? '...' : ''}"
+                </p>
+              </div>
+              <button
+                onClick={() => setShowComparisonModal(false)}
+                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Comparison Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                {/* V1 Result */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-md">
+                      V1
+                    </span>
+                    <span className="text-xs text-slate-500">GPT + Complex</span>
+                  </div>
+                  
+                  {comparisonResults.v1 ? (
+                    <div className="space-y-3">
+                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                        <img 
+                          src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
+                          alt="V1 Result"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                      
+                      {comparisonResults.v1.gpt_prompt_info && (
+                        <details className="bg-slate-50 rounded-lg border border-slate-200">
+                          <summary className="px-3 py-2 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100">
+                            View Prompt
+                          </summary>
+                          <div className="px-3 pb-3">
+                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                              {comparisonResults.v1.gpt_prompt_info.full_prompt}
+                            </pre>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                </div>
+
+                {/* V2 Result */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-emerald-500 text-white text-xs font-medium rounded-md flex items-center gap-1">
+                      <FlaskConical className="w-3 h-3" />
+                      V2
+                    </span>
+                    <span className="text-xs text-slate-500">Design-type aware</span>
+                  </div>
+                  
+                  {comparisonResults.v2 ? (
+                    <div className="space-y-3">
+                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-emerald-200">
+                        <img 
+                          src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
+                          alt="V2 Result"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                      
+                      {comparisonResults.v2.gpt_prompt_info && (
+                        <details className="bg-emerald-50 rounded-lg border border-emerald-200">
+                          <summary className="px-3 py-2 text-xs font-medium text-emerald-700 cursor-pointer hover:bg-emerald-100">
+                            View Prompt
+                          </summary>
+                          <div className="px-3 pb-3">
+                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                              {comparisonResults.v2.gpt_prompt_info.full_prompt}
+                            </pre>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                </div>
+
+                {/* V3 Result */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 bg-amber-500 text-white text-xs font-medium rounded-md flex items-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      V3
+                    </span>
+                    <span className="text-xs text-slate-500">Lean & Direct</span>
+                  </div>
+                  
+                  {comparisonResults.v3 ? (
+                    <div className="space-y-3">
+                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-amber-200">
+                        <img 
+                          src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
+                          alt="V3 Result"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                      
+                      {comparisonResults.v3.prompt_used && (
+                        <details className="bg-amber-50 rounded-lg border border-amber-200">
+                          <summary className="px-3 py-2 text-xs font-medium text-amber-700 cursor-pointer hover:bg-amber-100">
+                            View Prompt
+                          </summary>
+                          <div className="px-3 pb-3">
+                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                              {comparisonResults.v3.prompt_used}
+                            </pre>
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-4 sm:p-6 border-t border-slate-200 bg-slate-50">
+              <p className="text-xs text-slate-500">
+                Comparison uses 1 credit. Select a version to save it to your gallery.
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setShowComparisonModal(false);
+                    setCompareMode(false);
+                  }}
+                  className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                  disabled={!!savingComparison}
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => handleSaveComparisonImage('v1')}
+                  disabled={!comparisonResults?.v1 || !!savingComparison}
+                  className="px-3 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {savingComparison === 'v1' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Use V1'
+                  )}
+                </button>
+                <button
+                  onClick={() => handleSaveComparisonImage('v2')}
+                  disabled={!comparisonResults?.v2 || !!savingComparison}
+                  className="px-3 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {savingComparison === 'v2' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Use V2'
+                  )}
+                </button>
+                <button
+                  onClick={() => handleSaveComparisonImage('v3')}
+                  disabled={!comparisonResults?.v3 || !!savingComparison}
+                  className="px-3 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {savingComparison === 'v3' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Use V3'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

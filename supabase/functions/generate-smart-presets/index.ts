@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,16 +72,18 @@ interface PresetTemplate {
   aspectRatio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9';
 }
 
-// Available preset templates
+// Available preset templates - All focused on ads with specific platforms and objectives
 const PRESET_TEMPLATES: PresetTemplate[] = [
-  { id: 'instagram-post', icon: '📱', label: 'Instagram Post', category: 'Social', aspectRatio: '1:1' },
-  { id: 'linkedin-banner', icon: '💼', label: 'LinkedIn Banner', category: 'Professional', aspectRatio: '16:9' },
-  { id: 'email-header', icon: '📧', label: 'Email Header', category: 'Marketing', aspectRatio: '16:9' },
-  { id: 'instagram-story', icon: '📸', label: 'Instagram Story', category: 'Social', aspectRatio: '9:16' },
-  { id: 'facebook-ad', icon: '📢', label: 'Facebook Ad', category: 'Advertising', aspectRatio: '4:5' },
-  { id: 'twitter-post', icon: '🐦', label: 'Twitter Post', category: 'Social', aspectRatio: '16:9' },
-  { id: 'youtube-thumbnail', icon: '▶️', label: 'YouTube Thumbnail', category: 'Video', aspectRatio: '16:9' },
-  { id: 'product-showcase', icon: '🎯', label: 'Product Showcase', category: 'Product', aspectRatio: '1:1' },
+  { id: 'facebook-ad-awareness', icon: '📢', label: 'Facebook Ad - Brand Awareness', category: 'Advertising', aspectRatio: '4:5' },
+  { id: 'facebook-ad-conversion', icon: '💰', label: 'Facebook Ad - Conversions', category: 'Advertising', aspectRatio: '1:1' },
+  { id: 'instagram-ad-engagement', icon: '📱', label: 'Instagram Ad - Engagement', category: 'Advertising', aspectRatio: '1:1' },
+  { id: 'instagram-ad-conversion', icon: '🎯', label: 'Instagram Ad - Conversions', category: 'Advertising', aspectRatio: '4:5' },
+  { id: 'linkedin-ad-awareness', icon: '💼', label: 'LinkedIn Ad - Brand Awareness', category: 'Advertising', aspectRatio: '16:9' },
+  { id: 'linkedin-ad-leadgen', icon: '📋', label: 'LinkedIn Ad - Lead Generation', category: 'Advertising', aspectRatio: '1:1' },
+  { id: 'google-display-awareness', icon: '🔍', label: 'Google Display - Awareness', category: 'Advertising', aspectRatio: '16:9' },
+  { id: 'google-display-conversion', icon: '🛒', label: 'Google Display - Conversions', category: 'Advertising', aspectRatio: '16:9' },
+  { id: 'tiktok-ad-engagement', icon: '🎵', label: 'TikTok Ad - Engagement', category: 'Advertising', aspectRatio: '9:16' },
+  { id: 'youtube-ad-awareness', icon: '▶️', label: 'YouTube Ad - Awareness', category: 'Advertising', aspectRatio: '16:9' },
 ];
 
 // ============================================================================
@@ -121,29 +125,40 @@ async function generatePresetsWithLLM(brand: Brand): Promise<SmartPreset[]> {
   const brandContext = buildBrandContext(brand);
   const availablePresetIds = PRESET_TEMPLATES.map(p => p.id).join(', ');
 
-  const systemPrompt = `You are a creative assistant that generates personalized image generation prompts for brands.
+  const systemPrompt = `You are a creative advertising strategist that generates personalized ad concepts for brands.
 
-Your task: Generate 6-8 smart presets (image generation prompts) that are highly relevant to the given brand.
+Your task: Generate 6-8 smart ad presets (image generation prompts) that are highly relevant to the given brand. Each preset must be for a SPECIFIC AD TYPE with a CLEAR OBJECTIVE and include a CREATIVE CONCEPT/IDEA related to what the brand does.
 
 ${brandContext}
 
-IMPORTANT RULES:
-1. Generate prompts that are SPECIFIC to what this brand does (use the brand description above)
-2. Match the brand's voice and tone exactly (${brand.voice?.formality || 'professional'} formality, ${brand.voice?.energy || 'moderate'} energy)
-3. Use the brand name naturally in prompts: "${brand.name}"
-4. Make prompts actionable and specific (not generic like "create a post")
-5. Each prompt should be for a different use case (social media, professional, marketing, etc.)
-6. Prompts should be 10-20 words, clear and direct
-7. Consider the brand's industry, target audience, and what they actually do
-8. Be creative but stay true to the brand's identity
+CRITICAL REQUIREMENTS:
+1. Each preset MUST be for an AD (not generic posts or banners)
+2. Each preset must specify the PLATFORM (Facebook, Instagram, LinkedIn, Google, TikTok, YouTube) and OBJECTIVE (Awareness, Conversion, Engagement, Lead Gen)
+3. Each prompt must include a SPECIFIC CREATIVE CONCEPT/IDEA that relates to what ${brand.name} does - not generic marketing slop
+4. The creative concept should be tied to the brand's product/service, target audience, or unique value proposition
+5. Match the brand's voice and tone exactly (${brand.voice?.formality || 'professional'} formality, ${brand.voice?.energy || 'moderate'} energy)
+6. Use the brand name naturally: "${brand.name}"
+7. Prompts should be 15-25 words, clear and direct
+8. Consider the brand's industry, what they actually do, and their target audience
+9. Each ad should have a clear creative angle/idea - think about what problem the brand solves, what makes them unique, or what their customers care about
+
+EXAMPLES OF GOOD AD CONCEPTS:
+- For a SaaS tool: "Facebook awareness ad showing how [brand] transforms chaotic workflows into organized productivity"
+- For an e-commerce brand: "Instagram conversion ad featuring a customer's before/after transformation using [brand]'s product"
+- For a service: "LinkedIn lead gen ad illustrating the hidden costs of not using [brand]'s expertise"
+
+BAD EXAMPLES (too generic):
+- "Create a Facebook ad for [brand]" ❌
+- "Instagram post showcasing [brand]" ❌
+- "LinkedIn banner for [brand]" ❌
 
 You must respond with a valid JSON object with this structure:
 {
   "presets": [
     {
-      "preset_id": "instagram-post",
-      "prompt": "Create a vibrant Instagram post showcasing [brand name]'s latest features",
-      "why_relevant": "Perfect for your energetic brand voice"
+      "preset_id": "facebook-ad-awareness",
+      "prompt": "Facebook brand awareness ad showing [specific creative concept related to what brand does]",
+      "why_relevant": "This creative concept connects to [specific aspect of brand/product] and targets [specific audience/need]"
     },
     ...
   ]
@@ -151,9 +166,9 @@ You must respond with a valid JSON object with this structure:
 
 Available preset_ids: ${availablePresetIds}
 
-Generate 6-8 presets that are most relevant to this brand. Focus on what makes this brand unique and what they actually do.`;
+Generate 6-8 ad presets with specific creative concepts. Each must have a clear idea behind it related to what ${brand.name} does, not generic marketing.`;
 
-  const userMessage = `Generate smart presets for ${brand.name}. Focus on what makes this brand unique and what they actually do based on the brand description above.`;
+  const userMessage = `Generate 6-8 ad presets for ${brand.name}. Each preset must be for a specific ad platform/objective and include a creative concept/idea that relates to what ${brand.name} does - their product, service, or value proposition. Avoid generic marketing slop. Make each ad concept specific and relevant to the brand.`;
 
   console.log("Calling OpenAI to generate smart presets...");
   
@@ -213,25 +228,47 @@ function generateFallbackPresets(brand: Brand): Array<{ preset: PresetTemplate; 
                'modern';
   
   const summary = brand.styleguide?.summary?.toLowerCase() || '';
-  let purpose = 'showcasing our brand';
+  let creativeConcept = '';
+  let whyRelevant = '';
   
+  // Generate product-specific creative concepts based on brand type
   if (summary.includes('saas') || summary.includes('software') || summary.includes('app')) {
-    purpose = 'showcasing our latest features';
+    creativeConcept = `showing how ${brand.name} transforms workflows and boosts productivity`;
+    whyRelevant = 'Highlights the core value proposition of efficiency and productivity';
   } else if (summary.includes('e-commerce') || summary.includes('shop') || summary.includes('store')) {
-    purpose = 'highlighting our products';
+    creativeConcept = `featuring a customer's transformation or success story with ${brand.name}'s products`;
+    whyRelevant = 'Social proof and customer success drive conversions';
   } else if (summary.includes('service') || summary.includes('consulting') || summary.includes('agency')) {
-    purpose = 'showcasing our expertise';
+    creativeConcept = `illustrating the problem ${brand.name} solves and the results clients achieve`;
+    whyRelevant = 'Problem-solution framing resonates with service buyers';
+  } else if (summary.includes('education') || summary.includes('course') || summary.includes('learning')) {
+    creativeConcept = `showing the learning journey and outcomes students achieve with ${brand.name}`;
+    whyRelevant = 'Outcome-focused messaging drives education conversions';
   } else if (brand.voice?.keywords?.length) {
-    purpose = `featuring ${brand.voice.keywords[0]}`;
+    const keyword = brand.voice.keywords[0];
+    creativeConcept = `highlighting how ${brand.name} delivers ${keyword} to customers`;
+    whyRelevant = `Connects to your brand's core value: ${keyword}`;
+  } else {
+    creativeConcept = `showcasing ${brand.name}'s unique value proposition and customer benefits`;
+    whyRelevant = 'Focuses on what makes your brand different';
   }
   
-  return PRESET_TEMPLATES.slice(0, 6).map(template => ({
-    preset: template,
-    prompt: `Create a ${tone} ${template.label.toLowerCase()} ${purpose} for ${brand.name}`,
-    whyRelevant: template.category === 'Professional' && brand.voice?.formality === 'professional' 
-      ? 'Perfect for your professional tone'
-      : undefined,
-  }));
+  // Select ad-focused templates
+  const adTemplates = PRESET_TEMPLATES.filter(t => t.category === 'Advertising').slice(0, 6);
+  
+  return adTemplates.map(template => {
+    // Extract objective from label
+    const objective = template.label.includes('Awareness') ? 'brand awareness' :
+                     template.label.includes('Conversion') ? 'conversions' :
+                     template.label.includes('Engagement') ? 'engagement' :
+                     template.label.includes('Lead') ? 'lead generation' : 'awareness';
+    
+    return {
+      preset: template,
+      prompt: `${template.label} ${creativeConcept} for ${brand.name}`,
+      whyRelevant: whyRelevant || `Targets ${objective} with a concept relevant to your brand`,
+    };
+  });
 }
 
 // ============================================================================
@@ -239,6 +276,10 @@ function generateFallbackPresets(brand: Brand): Array<{ preset: PresetTemplate; 
 // ============================================================================
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('generate-smart-presets');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -251,6 +292,7 @@ Deno.serve(async (req: Request) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    logger.setContext({ request_id: requestId });
     const { brandId } = await req.json();
 
     if (!brandId) {
@@ -320,6 +362,12 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Returning ${presets.length} presets (${useFallback ? 'fallback' : 'LLM-generated'})`);
 
+    const duration = performance.now() - startTime;
+    logger.info("Smart presets generation completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -332,11 +380,24 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Smart presets generation error:", error);
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Smart presets generation error", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'generate-smart-presets',
+      request_id: requestId,
+    });
 
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorObj.message,
       }),
       {
         status: 500,
@@ -345,6 +406,11 @@ Deno.serve(async (req: Request) => {
     );
   }
 });
+
+
+
+
+
 
 
 

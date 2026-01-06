@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowLeft, Sparkles, Loader2, Download, RefreshCw, Wand2, Check, X, ChevronDown, ChevronUp, Image as ImageIcon, Palette, Plus, FolderOpen } from 'lucide-react';
 import { Brand, BrandAsset } from '../lib/supabase';
 import { AssetPicker } from '../components/AssetPicker';
+import { PRIMARY_COLOR } from '../lib/colors';
 
 export function ImageGenerator({
   brand,
@@ -25,7 +26,8 @@ export function ImageGenerator({
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   // Computed values
-  const primaryColor = brand.colors.primary || '#10b981';
+  // Use fixed brand color instead of brand's extracted color
+  const primaryColor = PRIMARY_COLOR;
 
   // Calculate auto-included images (logo, backdrop, screenshot)
   const autoIncludedImages = [

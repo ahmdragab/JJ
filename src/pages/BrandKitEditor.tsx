@@ -1,8 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, Image as ImageIcon, Palette } from 'lucide-react';
 import { Brand, BrandAsset, supabase } from '../lib/supabase';
+import { PRIMARY_COLOR, SECONDARY_COLOR } from '../lib/colors';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
+
+// Utility function to load Google Fonts dynamically
+function loadGoogleFont(fontFamily: string): void {
+  if (!fontFamily) return;
+  
+  // Check if font is already loaded
+  const fontId = `google-font-${fontFamily.replace(/\s+/g, '-').toLowerCase()}`;
+  if (document.getElementById(fontId)) return;
+  
+  // Format font name for Google Fonts API (replace spaces with +)
+  const fontName = fontFamily.replace(/\s+/g, '+');
+  
+  // Create and append link element
+  const link = document.createElement('link');
+  link.id = fontId;
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${fontName}:wght@300;400;500;600;700;800&display=swap`;
+  document.head.appendChild(link);
+}
 
 export function BrandKitEditor({
   brand,
@@ -79,7 +99,7 @@ export function BrandKitEditor({
     };
 
     fetchAssets();
-  }, [brand.id]);
+  }, [brand.id, brand.status]); // Refetch when status changes (e.g., from 'extracting' to 'ready')
 
   // Animate extraction steps
   useEffect(() => {
@@ -93,6 +113,29 @@ export function BrandKitEditor({
       setCurrentExtractionStep(0);
     }
   }, [brand.status]);
+
+  // Load Google Fonts dynamically when brand fonts change
+  useEffect(() => {
+    // Load heading font if it exists
+    if (localBrand.fonts.heading) {
+      loadGoogleFont(localBrand.fonts.heading);
+    }
+    
+    // Load body font if it exists and is different from heading
+    if (localBrand.fonts.body && localBrand.fonts.body !== localBrand.fonts.heading) {
+      loadGoogleFont(localBrand.fonts.body);
+    }
+
+    // Also load fonts from alternative brand if in comparison mode
+    if (alternativeBrand) {
+      if (alternativeBrand.fonts?.heading) {
+        loadGoogleFont(alternativeBrand.fonts.heading);
+      }
+      if (alternativeBrand.fonts?.body && alternativeBrand.fonts.body !== alternativeBrand.fonts.heading) {
+        loadGoogleFont(alternativeBrand.fonts.body);
+      }
+    }
+  }, [localBrand.fonts.heading, localBrand.fonts.body, alternativeBrand]);
 
   // Handle asset upload
   const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -420,8 +463,9 @@ export function BrandKitEditor({
     onContinue();
   };
 
-  const primaryColor = localBrand.colors.primary || '#6366f1';
-  const secondaryColor = localBrand.colors.secondary || '#8b5cf6';
+  // Use fixed brand colors instead of brand's extracted colors
+  const primaryColor = PRIMARY_COLOR;
+  const secondaryColor = SECONDARY_COLOR;
 
   // Exit comparison mode and apply selections
   const handleApplySelections = () => {
@@ -445,7 +489,7 @@ export function BrandKitEditor({
   // Full-page comparison view
   if (alternativeBrand) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen" style={{ backgroundColor: '#F8F7F9' }}>
         {/* Comparison Header */}
         <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-slate-200">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -533,13 +577,13 @@ export function BrandKitEditor({
                 <div className="space-y-4">
                   <div>
                     <span className="text-xs text-slate-400 block mb-1">Heading</span>
-                    <p className="text-2xl text-slate-800" style={{ fontFamily: brand.fonts.heading || 'inherit' }}>
+                    <p className="text-2xl text-slate-800" style={{ fontFamily: brand.fonts.heading ? `"${brand.fonts.heading}", sans-serif` : 'inherit' }}>
                       {brand.fonts.heading || 'Not detected'}
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-slate-400 block mb-1">Body</span>
-                    <p className="text-base text-slate-600" style={{ fontFamily: brand.fonts.body || 'inherit' }}>
+                    <p className="text-base text-slate-600" style={{ fontFamily: brand.fonts.body ? `"${brand.fonts.body}", sans-serif` : 'inherit' }}>
                       {brand.fonts.body || 'Not detected'}
                     </p>
                   </div>
@@ -554,13 +598,13 @@ export function BrandKitEditor({
                 <div className="space-y-4">
                   <div>
                     <span className="text-xs text-slate-400 block mb-1">Heading</span>
-                    <p className="text-2xl text-slate-800" style={{ fontFamily: alternativeBrand.fonts?.heading || 'inherit' }}>
+                    <p className="text-2xl text-slate-800" style={{ fontFamily: alternativeBrand.fonts?.heading ? `"${alternativeBrand.fonts.heading}", sans-serif` : 'inherit' }}>
                       {alternativeBrand.fonts?.heading || 'Not detected'}
                     </p>
                   </div>
                   <div>
                     <span className="text-xs text-slate-400 block mb-1">Body</span>
-                    <p className="text-base text-slate-600" style={{ fontFamily: alternativeBrand.fonts?.body || 'inherit' }}>
+                    <p className="text-base text-slate-600" style={{ fontFamily: alternativeBrand.fonts?.body ? `"${alternativeBrand.fonts.body}", sans-serif` : 'inherit' }}>
                       {alternativeBrand.fonts?.body || 'Not detected'}
                     </p>
                   </div>
@@ -818,31 +862,9 @@ export function BrandKitEditor({
   }
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      {/* Action Bar */}
-      <div className="sticky top-16 z-40 px-3 sm:px-4 md:px-6 py-3 sm:py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-end">
-          <button
-            onClick={handleSaveAndContinue}
-            disabled={saving}
-            className="px-4 sm:px-6 py-2 sm:py-2.5 rounded-full text-white text-xs sm:text-sm font-medium shadow-lg hover:shadow-xl transition-all hover:scale-105 disabled:opacity-50"
-            style={{ 
-              background: `linear-gradient(135deg, ${primaryColor} 0%, ${secondaryColor} 100%)`,
-            }}
-          >
-            <span className="hidden sm:inline">{saving ? 'Saving...' : 'Continue to Create'}</span>
-            <span className="sm:hidden">{saving ? 'Saving...' : 'Continue'}</span>
-          </button>
-        </div>
-      </div>
-
+    <div className="min-h-screen" style={{ backgroundColor: '#F8F7F9' }}>
       {/* Hero Section with Brand Identity */}
-      <header 
-        className="relative pt-6 sm:pt-8 pb-12 sm:pb-20 px-4 sm:px-6 overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${primaryColor}08 0%, ${secondaryColor}05 50%, transparent 100%)`,
-        }}
-      >
+      <header className="relative pt-8 sm:pt-12 pb-12 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col sm:flex-row items-start gap-6 sm:gap-8 md:gap-12">
             {/* Logo Display */}
@@ -872,44 +894,31 @@ export function BrandKitEditor({
 
             {/* Brand Info */}
             <div className="flex-1 pt-0 sm:pt-2 text-center sm:text-left w-full">
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-slate-900 tracking-tight mb-2">
-                {localBrand.name}
-              </h1>
-              <p className="text-slate-400 text-base sm:text-lg mb-4">{localBrand.domain}</p>
-              <div className="flex items-start justify-center sm:justify-start gap-3 mb-4">
-                {localBrand.slogan ? (
-                  <>
-                    <p className="text-xl text-slate-600 font-light italic max-w-xl">
-                      "{localBrand.slogan}"
-                    </p>
-                    <button
-                      onClick={() => {
-                        const updated = { ...localBrand, slogan: null };
-                        setLocalBrand(updated);
-                        handleSave(updated);
-                      }}
-                      className="text-slate-400 hover:text-red-500 transition-colors p-1"
-                      title="Delete tagline"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Add a tagline..."
-                      value={localBrand.slogan || ''}
-                      onChange={(e) => {
-                        const updated = { ...localBrand, slogan: e.target.value || null };
-                        setLocalBrand(updated);
-                      }}
-                      onBlur={() => handleSave(localBrand)}
-                      className="text-xl text-slate-600 font-light italic max-w-xl bg-transparent border-b border-slate-300 focus:outline-none focus:border-slate-500 placeholder:text-slate-400"
-                    />
-                  </div>
-                )}
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-slate-900 tracking-tight mb-2">
+                    {localBrand.name}
+                  </h1>
+                  <p className="text-slate-400 text-base sm:text-lg">{localBrand.domain}</p>
+                </div>
+                <button
+                  onClick={handleSaveAndContinue}
+                  disabled={saving}
+                  className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-white text-sm font-medium hover:shadow-2xl hover:scale-105 transition-all duration-300 disabled:opacity-50 shrink-0 mx-auto sm:mx-0"
+                  style={{ 
+                    backgroundColor: '#3531B7',
+                  }}
+                  onMouseEnter={(e) => !saving && (e.currentTarget.style.backgroundColor = '#2a26a0')}
+                  onMouseLeave={(e) => !saving && (e.currentTarget.style.backgroundColor = '#3531B7')}
+                >
+                  {saving ? 'Saving...' : 'Continue to Create →'}
+                </button>
               </div>
+              {localBrand.slogan && (
+                <p className="text-xl text-slate-600 font-light italic max-w-xl mb-4">
+                  "{localBrand.slogan}"
+                </p>
+              )}
               {/* Summary/Description */}
               {(localBrand.styleguide?.summary || localBrand.extraction_data?.summary) && (
                 <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
@@ -1012,7 +1021,7 @@ export function BrandKitEditor({
                 </div>
                 <p
                   className="text-4xl text-slate-800 leading-tight"
-                  style={{ fontFamily: localBrand.fonts.heading || 'inherit' }}
+                  style={{ fontFamily: localBrand.fonts.heading ? `"${localBrand.fonts.heading}", sans-serif` : 'inherit' }}
                 >
                   The quick brown<br />fox jumps over
                 </p>
@@ -1032,7 +1041,7 @@ export function BrandKitEditor({
                 </div>
                 <p
                   className="text-lg text-slate-600 leading-relaxed"
-                  style={{ fontFamily: localBrand.fonts.body || 'inherit' }}
+                  style={{ fontFamily: localBrand.fonts.body ? `"${localBrand.fonts.body}", sans-serif` : 'inherit' }}
                 >
                   Typography is the art and technique of arranging type to make written language legible, readable and appealing when displayed.
                 </p>
@@ -1457,68 +1466,6 @@ export function BrandKitEditor({
           </section>
         )}
 
-        {/* Page Images */}
-        <section className="mt-16">
-          {/* Debug info */}
-          <p className="text-xs text-slate-400 mb-2">
-            Debug: page_images = {JSON.stringify(localBrand.page_images?.length ?? 'undefined')}
-          </p>
-        {localBrand.page_images && localBrand.page_images.length > 0 && (
-          <div>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">
-              Extracted Images 
-              <span className="ml-2 text-slate-300 font-normal">({localBrand.page_images.length})</span>
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {localBrand.page_images.slice(0, 20).map((image, index) => (
-                <div
-                  key={index}
-                  className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 group"
-                  style={{
-                    backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
-                    backgroundSize: '16px 16px',
-                    backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
-                    backgroundColor: '#fafafa',
-                  }}
-                >
-                  <img
-                    src={image.url}
-                    alt={`Page image ${index + 1}`}
-                    className="w-full h-full object-contain p-2"
-                    onError={(e) => {
-                      // Hide broken images
-                      (e.target as HTMLElement).parentElement!.style.display = 'none';
-                    }}
-                  />
-                  {/* Type badge */}
-                  {image.type && (
-                    <span className="absolute bottom-2 right-2 px-2 py-0.5 text-[10px] uppercase tracking-wider bg-black/60 text-white rounded">
-                      {image.type}
-                    </span>
-                  )}
-                  {/* Hover overlay with URL */}
-                  <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-2">
-                    <a
-                      href={image.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white text-xs text-center break-all hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Open image ↗
-                    </a>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {localBrand.page_images.length > 20 && (
-              <p className="text-center text-slate-400 text-sm mt-4">
-                Showing first 20 of {localBrand.page_images.length} images
-              </p>
-            )}
-          </div>
-        )}
-        </section>
 
         {/* Re-extract Section */}
         <section className="mt-20 pt-12 border-t border-slate-200">

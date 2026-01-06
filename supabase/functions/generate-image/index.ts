@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -196,7 +198,13 @@ function buildBrandContext(brand: Brand): { hardConstraints: string; softGuideli
   }
 
   // Logo requirement
-  hardConstraints.push(`\nLOGO: The brand logo MUST be included in every design. This is non-negotiable. Use the provided logo exactly as-is: do not alter its colors, proportions, shapes, or typography. No recoloring, restyling, or substitutions.`);
+  hardConstraints.push(`\nLOGO PRESERVATION (CRITICAL):
+- The brand logo MUST appear in every design
+- PRESERVE THE LOGO'S EXACT COLORS - copy the precise RGB values from the source image
+- The logo is a FIXED ASSET: reproduce it pixel-perfect without any color shifting, tinting, or style harmonization
+- Keep the logo's original proportions, shapes, and typography intact
+- Place the logo prominently, typically in a corner position
+- The logo's colors may differ from the brand palette - this is intentional, preserve them exactly`);
 
   // Typography category (identity level)
   if (brand.fonts?.heading || brand.fonts?.body) {
@@ -353,20 +361,21 @@ ${assets.map(a => `- ${a.name} (${a.category || 'general'}): ${a.url}`).join('\n
 IMPORTANT: These assets should be included prominently and accurately in the final design. They are not just style inspiration - they are actual elements that must appear in the output.`
     : 'No specific high-fidelity assets to include.';
 
-  let referencesContext = references.length > 0
-    ? `STYLE REFERENCES (for mood/style inspiration only - DO NOT copy directly):
-These are reference images used ONLY for understanding style, mood, color palette, composition, and aesthetic. The image generation model should use these for inspiration but should NOT copy any specific elements, text, logos, or objects from them.
+  // Check if user has provided reference images (for ad concept inspiration)
+  const hasReferenceAds = references.length > 0;
+  
+  let referencesContext = hasReferenceAds
+    ? `REFERENCE AD DESIGNS (for concept inspiration):
+The user has attached reference ad designs that they want you to use as inspiration for the concept and style. You should create something similar to the concept of these ads but adapted to fit the brand using brand colors and elements.
 
 ${references.map(r => {
       const styleDesc = r.style_description ? `\n  Style description: ${r.style_description}` : '';
       return `- ${r.name} (${r.category || 'general'}): ${r.url}${styleDesc}`;
     }).join('\n')}
 
-IMPORTANT: These are style guides only. Use them to understand the desired aesthetic, but do not include any specific elements from these images in the final design.`
-    : 'No user-selected style references provided.';
+IMPORTANT: Use these reference ads to understand the concept, layout approach, and visual style, but adapt it to the brand's colors, logo, and overall brand identity. Do not copy text, logos, or specific elements - instead, create a similar concept that fits the brand.`
+    : 'No reference ad designs provided.';
   
-  // Note: We no longer pass raw screenshot - we use the style profile instead
-
   // Add aspect ratio constraint if user specified one
   const aspectRatioContext = aspectRatio && aspectRatio !== 'auto'
     ? `\n\nASPECT RATIO CONSTRAINT:
@@ -378,7 +387,8 @@ The user has specified that the design MUST use aspect ratio: ${aspectRatio}
 - For landscape ratios (16:9, 21:9, 3:2, 4:3, 5:4), suggest horizontal compositions with elements arranged left-to-right`
     : '';
 
-  const systemPrompt = `You are a design prompt architect. Your job is to take a user's simple request and transform it into a detailed, optimized prompt for an AI image generation model.
+  // Build the core system prompt - focused exclusively on paid media ad designs
+  const systemPrompt = `You are a design prompt architect specializing in paid media ad designs. Your job is to take a user's simple request and transform it into a detailed, optimized prompt for an AI image generation model to create scroll-stopping, attention-grabbing paid media advertisements.
 
 ================================================================================
 HARD CONSTRAINTS (MUST OBEY - Identity Level)
@@ -407,19 +417,41 @@ ${assetsContext}
 ${referencesContext}${aspectRatioContext}
 
 ================================================================================
-CRITICAL RULES
+CRITICAL RULES FOR PAID MEDIA AD DESIGNS
 ================================================================================
-1. Understand what this brand does from the description above - ensure the design accurately reflects their industry, products, and services
-2. Generate appropriate headline and CTA text based on the user's intent AND what the brand does
-3. NEVER invent specific discounts, percentages, or numbers unless the user explicitly provides them
-4. NEVER invent statistics, customer counts, or factual claims about the brand
-5. If the topic involves a cultural/national event (like "Independence Day"), do NOT assume a specific country unless stated
-6. The headline and CTA should be generic enough to be safe but compelling
-7. Describe the overall layout naturally - focus on what looks good, not rigid percentages or exact positions
-8. ASSETS (High-Fidelity): CRITICAL - You MUST explicitly mention each attached high-fidelity asset in your final_prompt. These assets are attached as images and MUST appear accurately in the final design. In your final_prompt, explicitly state something like "Include the attached [asset name] image" or "Feature the [asset name] prominently" for EACH asset. Do not assume the model will include them automatically - you must explicitly instruct inclusion. Describe their placement, size, and integration into the composition.
-9. REFERENCES (Style Only): When referencing style images, describe the mood, color palette, composition style, or aesthetic they inspire, but make it clear these are for inspiration only - no specific elements should be copied.
-10. HARD CONSTRAINTS: All hard constraints (colors, logo, brand description, voice) MUST be strictly followed
-11. SOFT GUIDELINES: Use soft guidelines to inform your design choices, but feel free to explore variations and different compositions while maintaining the brand's overall visual language
+1. THIS IS A PAID MEDIA AD: The design must be scroll-stopping, attention-grabbing, and visually appealing. Utilize best practices for paid media ads to create something that is visually compelling, on-brand, and convincing.
+
+2. BRAND COLORS ONLY: Utilize ONLY the brand colors specified in the hard constraints. Do NOT invent random colors. Stick strictly to the brand color palette.
+
+3. BRAND SHAPES AND STYLES: Take inspiration from the brand's website screenshot (which will be provided) to understand brand shapes, styles, and design direction. Don't invent random shapes unless absolutely necessary - prefer shapes and styles that align with the brand's visual identity.
+
+4. LOGO AND ICON USAGE: The brand logo and favicon/icon will be provided as images. You MUST use them exactly as they are without making any changes to them. Do NOT modify, recolor, or reinterpret the logo or icon. Place them prominently where appropriate.
+
+5. WEBSITE SCREENSHOT INSPIRATION: The brand's website screenshot will be provided. Use it to understand the brand's style, visual direction, color usage patterns, typography, and overall aesthetic. This is your primary reference for understanding how the brand presents itself visually.
+
+6. DESIGN DECISIONS: Figure out what is the best design to deliver the message and what are the ideal elements to use. Consider the user's request, the brand identity, and best practices for paid media ads.
+
+7. REFERENCE ADS (if provided): ${hasReferenceAds ? 'The user has attached reference ad designs. Create something similar to the concept of these ads in a way that fits the brand using brand colors and elements. Adapt the concept and style, but do not copy text, logos, or specific elements.' : 'No reference ads provided - create an original ad design based on the brand and user request.'}
+
+8. Understand what this brand does from the description above - ensure the design accurately reflects their industry, products, and services
+
+9. Generate appropriate headline and CTA text based on the user's intent AND what the brand does
+
+10. NEVER invent specific discounts, percentages, or numbers unless the user explicitly provides them
+
+11. NEVER invent statistics, customer counts, or factual claims about the brand
+
+12. If the topic involves a cultural/national event (like "Independence Day"), do NOT assume a specific country unless stated
+
+13. The headline and CTA should be generic enough to be safe but compelling
+
+14. Describe the overall layout naturally - focus on what looks good, not rigid percentages or exact positions
+
+15. ASSETS (High-Fidelity): CRITICAL - You MUST explicitly mention each attached high-fidelity asset in your final_prompt. These assets are attached as images and MUST appear accurately in the final design. In your final_prompt, explicitly state something like "Include the attached [asset name] image" or "Feature the [asset name] prominently" for EACH asset. Do not assume the model will include them automatically - you must explicitly instruct inclusion. Describe their placement, size, and integration into the composition.
+
+16. HARD CONSTRAINTS: All hard constraints (colors, logo, brand description, voice) MUST be strictly followed
+
+17. SOFT GUIDELINES: Use soft guidelines to inform your design choices, but feel free to explore variations and different compositions while maintaining the brand's overall visual language
 
 OUTPUT FORMAT:
 You must respond with a valid JSON object matching this schema:
@@ -434,7 +466,7 @@ You must respond with a valid JSON object matching this schema:
   "design_notes": "detailed description of the visual composition, style, and overall aesthetic",
   "text_region_notes": "natural description of where text should appear (avoid rigid percentages)",
   "asset_instructions": [{"asset_id": "...", "usage": "specific instructions on how to include this high-fidelity asset accurately in the design (placement, size, integration)"}],
-  "final_prompt": "the complete, detailed prompt for the image generation model. MUST include: (1) all hard constraints (colors, logo, brand description), (2) soft guidelines as design principles (not rigid rules), (3) EXPLICIT instructions mentioning each attached high-fidelity asset by name (e.g., 'Include the attached product image', 'Feature the attached screenshot prominently') - this is CRITICAL as the model needs explicit instructions to include attached images, (4) style references to be used for inspiration only (not copied). Emphasize that soft guidelines should inform the design but allow for creative variation. IMPORTANT: You must explicitly reference each attached asset image in this prompt - do not assume the model will include them automatically."
+  "final_prompt": "the complete, detailed prompt for the image generation model. This is for a PAID MEDIA AD DESIGN. MUST include: (1) Emphasis that this is a paid media ad that needs to be scroll-stopping and attention-grabbing, (2) Instruction to use ONLY brand colors (no random colors), (3) Instruction to use logo and icon exactly as provided without modifications, (4) Reference to website screenshot for brand style inspiration, (5) ${hasReferenceAds ? 'Instruction to create something similar to the concept of the reference ads but adapted to the brand' : 'Original ad design based on brand and request'}, (6) all hard constraints (colors, logo, brand description), (7) soft guidelines as design principles (not rigid rules), (8) EXPLICIT instructions mentioning each attached high-fidelity asset by name (e.g., 'Include the attached product image', 'Feature the attached screenshot prominently') - this is CRITICAL as the model needs explicit instructions to include attached images. IMPORTANT: You must explicitly reference each attached asset image in this prompt - do not assume the model will include them automatically."
 }
 
 RESOLUTION GUIDELINES:
@@ -446,7 +478,9 @@ RESOLUTION GUIDELINES:
 
   const userMessage = `User's request: "${userPrompt}"${aspectRatio && aspectRatio !== 'auto' ? `\n\nIMPORTANT: The user has specified aspect ratio "${aspectRatio}". You MUST use this exact aspect ratio in your response and optimize the design for this format.` : ''}
 
-Based on this request and the brand context, create a detailed render plan and final prompt for generating a high-quality, on-brand marketing visual.`;
+${hasReferenceAds ? 'The user has attached reference ad designs. Create something similar to the concept of these ads but adapted to fit the brand using brand colors and elements.' : ''}
+
+Based on this request and the brand context, create a detailed render plan and final prompt for generating a high-quality, scroll-stopping paid media ad design that is attention-grabbing and on-brand.`;
 
   // Create prompt info for logging/display
   const promptInfo: GPTPromptInfo = {
@@ -602,7 +636,7 @@ function generateFallbackRenderPlan(
     : '';
 
   const finalPrompt = `
-Create a high-quality marketing visual for ${brand.name}.
+Create a high-quality paid media ad design for ${brand.name}. This is a paid media ad, so it needs to be appealing, scroll-stopping, and attention-grabbing. Utilize best practices to create something that is visually appealing and on-brand yet convincing.
 
 REQUEST: ${userPrompt}
 
@@ -614,16 +648,21 @@ SPECIFICATIONS:
 - Visual style: ${styleDesc.length > 0 ? styleDesc.join(', ') : 'modern and professional'}
 - Theme: ${brand.styleguide?.mode || 'auto'}
 
-COLOR REQUIREMENTS (STRICT - USE ONLY THESE):
+COLOR REQUIREMENTS (STRICT - USE ONLY BRAND COLORS):
 ${colorPalette.length > 0 
-  ? `${colorPalette.join('\n')}\n\nCRITICAL: Only use the exact brand colors listed above. Do NOT introduce any colors that are not part of the brand palette. Stick strictly to these colors.`
+  ? `${colorPalette.join('\n')}\n\nCRITICAL: Utilize ONLY the brand colors listed above. Do NOT invent random colors. Try to take inspiration from any brand shapes and styles using the website screenshot provided. Don't invent random shapes unless necessary.`
   : 'Use modern, professional colors'}
 
+BRAND ELEMENTS:
+- The brand logo and icon/favicon will be provided as images - use them exactly as they are without making changes to them
+- Take inspiration from the website screenshot to understand the brand style and direction
+- Figure out what is the best design to deliver the message and what are the ideal elements to use
+
 COMPOSITION:
-- Create a clean, balanced layout that works well for the content
+- Create a scroll-stopping, attention-grabbing layout optimized for paid media ads
 - Ensure there's clear space for text content (headline and CTA) that's easy to read
-- REQUIRED: The brand logo MUST be included in the design - place it prominently in a corner position (top-left or top-right)
-- Focus on visual appeal and brand consistency
+- REQUIRED: The brand logo MUST be included in the design - use it exactly as provided
+- Focus on visual appeal, brand consistency, and conversion optimization
 
 TEXT CONTENT:
 - Generate an appropriate headline based on the request and what the brand does
@@ -631,9 +670,13 @@ TEXT CONTENT:
 - Keep text minimal and impactful
 
 CRITICAL REQUIREMENTS:
-- The brand logo MUST appear in the final design - this is non-negotiable
+- This is a design for paid media ad, so it needs to be appealing, scroll-stopping and attention-grabbing
+- Utilize best practices to create something that is visually appealing and on-brand yet convincing
+- The brand logo MUST appear in the final design - use it exactly as provided without modifications
 - Use ONLY the brand colors specified above - no other colors
-- Maintain professional quality suitable for marketing
+- Utilize the logo and icon as and when needed, but use exactly as they are without making changes
+- Take inspiration from the website screenshot to understand the brand style and direction
+- Maintain professional quality suitable for paid media advertising
 - The design must unmistakably represent this brand and what they do
 - Leave clean text regions that are easy to read
 `.trim();
@@ -775,9 +818,28 @@ const RASTER_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.heic', '.
 function getBestLogoUrl(brand: Brand): string | null {
   const isLikelyRaster = (url: string): boolean => {
     const lowerUrl = url.toLowerCase();
+    
+    // Check for SVG data URIs (data:image/svg+xml)
+    if (lowerUrl.startsWith('data:image/svg+xml')) return false;
+    
+    // Check for SVG file extensions
     if (lowerUrl.includes('.svg')) return false;
+    
+    // Check for raster file extensions
     if (RASTER_EXTENSIONS.some(ext => lowerUrl.includes(ext))) return true;
-    return !lowerUrl.includes('.svg');
+    
+    // Check for raster data URIs (data:image/png, data:image/jpeg, etc.)
+    if (lowerUrl.startsWith('data:image/')) {
+      const mimeType = lowerUrl.split(';')[0].split(':')[1];
+      if (mimeType && ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'].includes(mimeType)) {
+        return true;
+      }
+      // If it's a data URI but not a known raster type, assume it's not raster
+      return false;
+    }
+    
+    // If no clear indication, assume it might be raster (but prefer explicit extensions)
+    return true;
   };
 
   if (brand.logos?.primary && isLikelyRaster(brand.logos.primary)) {
@@ -807,11 +869,44 @@ function getBestLogoUrl(brand: Brand): string | null {
     return brand.logos.icon;
   }
 
-  return brand.logos?.primary || null;
+  // Don't return SVG logos as fallback - return null instead
+  // This prevents trying to use unsupported SVG formats
+  return null;
 }
 
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string; width?: number; height?: number } | null> {
   try {
+    // Handle data URIs directly (don't fetch them)
+    if (url.startsWith('data:')) {
+      const [header, data] = url.split(',');
+      const mimeMatch = header.match(/data:([^;]+)/);
+      const mimeType = mimeMatch ? mimeMatch[1].toLowerCase().trim() : 'image/png';
+      
+      // Check if it's a supported type
+      if (!SUPPORTED_IMAGE_TYPES.includes(mimeType)) {
+        console.warn(`Skipping unsupported image type in data URI: ${mimeType}`);
+        return null;
+      }
+      
+      // For data URIs, the data is already base64 encoded (or URL-encoded)
+      // If it's URL-encoded (starts with %), we need to decode it first
+      let base64Data = data;
+      if (data.startsWith('%')) {
+        // URL-encoded data URI - decode it
+        try {
+          const decoded = decodeURIComponent(data);
+          // Extract base64 part if it's base64 encoded
+          base64Data = decoded;
+        } catch (e) {
+          console.warn('Failed to decode URL-encoded data URI');
+          return null;
+        }
+      }
+      
+      return { data: base64Data, mimeType };
+    }
+    
+    // Regular URL - fetch it
     const response = await fetch(url);
     if (!response.ok) return null;
     
@@ -935,6 +1030,10 @@ async function uploadToStorage(
 // ============================================================================
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('generate-image');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -944,6 +1043,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    logger.setContext({ request_id: requestId });
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
@@ -1006,6 +1106,7 @@ Deno.serve(async (req: Request) => {
       if (brandData) {
         brand = brandData as Brand;
         userId = brandData.user_id;
+        logger.setContext({ user_id: userId, brand_id: brandId });
       }
     }
 
@@ -1019,6 +1120,7 @@ Deno.serve(async (req: Request) => {
       
       if (imageData) {
         userId = imageData.user_id;
+        logger.setContext({ user_id: userId });
       }
     }
 
@@ -1087,15 +1189,22 @@ Deno.serve(async (req: Request) => {
     }
 
     // Consolidated request logging
-    console.log(`[GENERATE] Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
+      logger.info(`Image generation started`, {
+        prompt_preview: prompt.substring(0, 100),
+        assets_count: assets.length,
+        references_count: references.length,
+        aspect_ratio: aspectRatio,
+        resolution: resolutionLevel,
+      });
 
     // Validate Gemini 3 Pro Image limits
     const MAX_HIGH_FIDELITY = 6; // Assets (high-fidelity objects)
     const MAX_TOTAL_IMAGES = 14; // Total reference images
 
-    // Count auto-included images
+    // Count auto-included images (logo OR icon, not both)
+    const hasLogoOrIcon = brand && includeLogoReference && (brand.logos?.primary || brand.logos?.icon);
     const autoIncludedCount = [
-      brand && includeLogoReference && brand.logos?.primary ? 1 : 0,
+      hasLogoOrIcon ? 1 : 0,
       brand?.backdrops?.length ? 1 : 0,
       brand?.screenshot ? 1 : 0,
     ].reduce((a, b) => a + b, 0);
@@ -1160,21 +1269,34 @@ Deno.serve(async (req: Request) => {
       finalPrompt = prompt;
     }
 
-    // Add logo reference (always included unless disabled)
+    // Store logo OR icon data to add AFTER the prompt (closer to generation = more attention)
+    // Prefer logo, fallback to icon if no logo available
+    let logoDataToAttach: { mimeType: string; data: string } | null = null;
+    let logoAttached = false;
+    
     if (brand && includeLogoReference) {
+      // Try to fetch logo first
       const bestLogoUrl = getBestLogoUrl(brand);
       if (bestLogoUrl) {
+        console.log(`[Logo] Fetching logo from: ${bestLogoUrl}`);
         const logoData = await fetchImageAsBase64(bestLogoUrl);
         if (logoData) {
-          parts.push({
-            text: "BRAND LOGO - REQUIRED: This is the brand's logo. You MUST include this logo in the final design. Use it exactly as provided: do not change its colors, proportions, or shapes. Place it prominently, typically in a corner position (top-left or top-right). The logo is essential and cannot be omitted.",
-          });
-          parts.push({
-            inline_data: {
-              mime_type: logoData.mimeType,
-              data: logoData.data,
-            },
-          });
+          logoDataToAttach = logoData;
+          console.log(`[Logo] Successfully fetched: ${logoData.mimeType}, ${Math.round(logoData.data.length / 1024)}KB`);
+        } else {
+          console.warn(`[Logo] Failed to fetch logo from: ${bestLogoUrl}`);
+        }
+      }
+      
+      // Only fetch icon/favicon if we don't have a logo
+      if (!logoDataToAttach && brand.logos?.icon) {
+        console.log(`[Icon] No logo available, fetching icon from: ${brand.logos.icon}`);
+        const iconData = await fetchImageAsBase64(brand.logos.icon);
+        if (iconData) {
+          logoDataToAttach = iconData; // Use same variable, it's just the brand identifier
+          console.log(`[Icon] Successfully fetched: ${iconData.mimeType}, ${Math.round(iconData.data.length / 1024)}KB`);
+        } else {
+          console.warn(`[Icon] Failed to fetch icon from: ${brand.logos.icon}`);
         }
       }
     }
@@ -1219,7 +1341,7 @@ Deno.serve(async (req: Request) => {
       const screenshotData = await fetchImageAsBase64(brand.screenshot);
       if (screenshotData) {
         parts.push({
-          text: "HOMEPAGE SCREENSHOT - This is the brand's actual homepage. Use this as a primary style reference to understand the brand's visual design language, layout patterns, color usage, typography, and overall aesthetic. This screenshot has been analyzed by GPT to extract the style profile, but you should also reference the visual details directly. Use this for style inspiration and to maintain consistency with the brand's actual website design.",
+          text: "WEBSITE SCREENSHOT - This is the brand's actual homepage. Use this to understand the brand's visual design language, layout patterns, color usage, typography, shapes, styles, and overall aesthetic. Take inspiration from the brand shapes and styles shown here. Don't invent random shapes unless necessary - prefer shapes and styles that align with what you see in this screenshot. This is your primary reference for understanding how the brand presents itself visually.",
         });
         parts.push({
           inline_data: {
@@ -1230,7 +1352,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Add user-selected references (style_reference)
+    // Add user-selected references (reference ad designs)
     for (const ref of (references as AssetInput[])) {
       const refData = await fetchImageAsBase64(ref.url);
       if (refData) {
@@ -1238,7 +1360,7 @@ Deno.serve(async (req: Request) => {
           ? ` Style: ${ref.style_description}.` 
           : '';
         parts.push({
-          text: `STYLE REFERENCE - "${ref.name}".${styleDesc} Use only for mood/style inspiration, do NOT copy any text, logos, or specific elements:`,
+          text: `REFERENCE AD DESIGN - "${ref.name}".${styleDesc} This is a reference ad design. Create something similar to the concept of this ad in a way that fits the brand using brand colors and elements. Adapt the concept and style, but do not copy text, logos, or specific elements. Use this to understand the ad concept and approach, then create a similar concept that fits the brand.`,
         });
         parts.push({
           inline_data: {
@@ -1256,13 +1378,41 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Add the optimized prompt
+    // Add the optimized prompt FIRST (main instruction)
     parts.push({ text: finalPrompt });
+
+    // Add logo OR icon IMMEDIATELY after the prompt (high priority, close to generation)
+    if (logoDataToAttach) {
+      parts.push({
+        text: `
+
+=== CRITICAL: BRAND LOGO/ICON (MUST INCLUDE) ===
+The image below is the EXACT brand logo or icon. This is NOT a suggestion - you MUST include this in the generated image.
+
+MANDATORY REQUIREMENTS:
+1. COPY THIS EXACTLY - pixel-perfect reproduction, no modifications
+2. DO NOT generate a different logo/icon or interpret the brand name as text
+3. PRESERVE the original colors exactly as shown (do NOT color-match to the design)
+4. USE EXACTLY AS IS - do not make any changes
+5. PLACE prominently in a corner (top-left or top-right) or where appropriate for the ad design
+6. MAINTAIN exact proportions - do not stretch, skew, or resize disproportionately
+
+The attached image below is the ONLY acceptable brand identifier. Any other logo/icon is WRONG.`,
+      });
+      parts.push({
+        inline_data: {
+          mime_type: logoDataToAttach.mimeType,
+          data: logoDataToAttach.data,
+        },
+      });
+      logoAttached = true;
+      console.log(`[Logo/Icon] Attached to request at position ${parts.length - 1}`);
+    }
 
     // Resolution is always fixed at 2K
     const finalResolution: ResolutionLevel = '2K';
     
-    // Determine which aspect ratio to use
+    // Determine which aspect ratio to use - ALWAYS set one (never let model decide)
     let aspectRatioToUse: string | null = null;
     
     if (aspectRatio && aspectRatio !== 'auto') {
@@ -1272,46 +1422,44 @@ Deno.serve(async (req: Request) => {
       // Auto mode: use GPT's recommended aspect ratio if available
       if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
         aspectRatioToUse = renderPlan.aspect_ratio;
+      } else {
+        // Default to 1:1 (square) for paid media ads if nothing specified
+        // This is a common format for social media ads
+        aspectRatioToUse = '1:1';
+        console.log(`[Aspect Ratio] No aspect ratio specified, defaulting to 1:1 for paid media ads`);
       }
     }
     
     // Validate aspect ratio before using it (must match Gemini API requirements)
     const validatedAspectRatio = validateAspectRatio(aspectRatioToUse);
-    if (aspectRatioToUse && !validatedAspectRatio) {
-      console.warn(`Invalid aspect ratio "${aspectRatioToUse}" - will let model decide instead`);
-      aspectRatioToUse = null;
-    } else if (validatedAspectRatio) {
+    if (!validatedAspectRatio) {
+      // Fallback to 1:1 if validation fails
+      console.warn(`Invalid aspect ratio "${aspectRatioToUse}" - defaulting to 1:1`);
+      aspectRatioToUse = '1:1';
+    } else {
       aspectRatioToUse = validatedAspectRatio;
     }
     
-    // Get resolution dimensions for logging (if aspect ratio is known)
-    const resolutionDims = aspectRatioToUse 
-      ? getResolution(aspectRatioToUse as AspectRatioValue, finalResolution)
-      : null;
+    // Get resolution dimensions for logging
+    const resolutionDims = getResolution(aspectRatioToUse as AspectRatioValue, finalResolution);
     
     // Build generation config according to Gemini API documentation
     // For gemini-3-pro-image-preview, use image_config with aspect_ratio and image_size
     // Reference: https://ai.google.dev/gemini-api/docs/image-generation
+    // ALWAYS set image_config to ensure consistent sizing
     const generationConfig: Record<string, unknown> = {
       responseModalities: ["TEXT", "IMAGE"],
-    };
-    
-    // Add image_config if we have a validated aspect ratio to use (either user-specified or GPT-recommended)
-    if (validatedAspectRatio) {
-      generationConfig.image_config = {
-        aspect_ratio: validatedAspectRatio,
+      image_config: {
+        aspect_ratio: aspectRatioToUse,
         image_size: finalResolution, // Always 2K
-      };
-    }
+      },
+    };
     
     // Consolidated resolution/config logging
     const resolutionInfo = resolutionDims 
       ? `${resolutionDims.width}x${resolutionDims.height} @ ${finalResolution}`
-      : `model-determined @ ${finalResolution}`;
-    const aspectInfo = validatedAspectRatio 
-      ? `aspect_ratio=${validatedAspectRatio}` 
-      : 'aspect_ratio=auto';
-    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}`);
+      : `unknown @ ${finalResolution}`;
+    console.log(`[Config] aspect_ratio=${aspectRatioToUse} | ${resolutionInfo}`);
 
     // Call Gemini API
     // Create a sanitized summary for logging
@@ -1325,7 +1473,14 @@ Deno.serve(async (req: Request) => {
       return `[${index}] unknown`;
     }).join(' | ');
     
-    console.log(`[Gemini API] Calling with ${parts.length} parts: ${partsSummary}`);
+    // Add final logo/icon reminder at the very end (recency bias helps)
+    if (logoAttached) {
+      parts.push({
+        text: `\n\nFINAL REMINDER: The brand logo/icon attached above MUST appear in the generated image. Do NOT create a different logo/icon. Use the EXACT attached image.`,
+      });
+    }
+
+    console.log(`[Gemini API] Calling with ${parts.length} parts (logo attached: ${logoAttached}): ${partsSummary}`);
     
     const geminiRequestBody = {
       contents: [{ parts }],
@@ -1440,17 +1595,12 @@ Deno.serve(async (req: Request) => {
       }
       
       // Store the aspect ratio that was used (for future edits)
-      if (validatedAspectRatio) {
-        newMetadata.aspect_ratio = validatedAspectRatio;
-      } else if (renderPlan?.aspect_ratio && renderPlan.aspect_ratio !== 'auto') {
-        // Store GPT's recommended aspect ratio if we used it
-        newMetadata.aspect_ratio = renderPlan.aspect_ratio;
-      } else if (aspectRatio && aspectRatio !== 'auto') {
-        // Store user-specified aspect ratio
-        newMetadata.aspect_ratio = aspectRatio;
+      // We always set an aspect ratio now, so store it
+      if (aspectRatioToUse) {
+        newMetadata.aspect_ratio = aspectRatioToUse;
       }
       
-      if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || validatedAspectRatio) {
+      if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || aspectRatioToUse) {
         updateData.metadata = newMetadata;
       }
 
@@ -1459,6 +1609,12 @@ Deno.serve(async (req: Request) => {
         .update(updateData)
         .eq('id', imageId);
     }
+
+    const duration = performance.now() - startTime;
+    logger.info("Image generation completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
 
     return new Response(
       JSON.stringify({
@@ -1475,11 +1631,24 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Image generation error:", error);
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Image generation error", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'generate-image',
+      request_id: requestId,
+    });
 
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorObj.message,
       }),
       {
         status: 500,

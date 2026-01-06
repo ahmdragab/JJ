@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
+import * as Sentry from '@sentry/react';
 import { supabase } from '../lib/supabase';
 
 type AuthContextType = {
@@ -19,13 +20,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+      const user = session?.user ?? null;
+      setUser(user);
       setLoading(false);
+      
+      // Set user context in Sentry
+      if (user) {
+        Sentry.setUser({
+          id: user.id,
+          email: user.email,
+        });
+      } else {
+        Sentry.setUser(null);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      const newUser = session?.user ?? null;
+      
+      // Set user context in Sentry
+      if (newUser) {
+        Sentry.setUser({
+          id: newUser.id,
+          email: newUser.email,
+        });
+      } else {
+        Sentry.setUser(null);
+      }
+      
       setUser(prevUser => {
-        const newUser = session?.user ?? null;
         // Only update if user ID actually changed to prevent unnecessary re-renders
         // This prevents flicker when token refreshes on tab focus
         if (prevUser?.id === newUser?.id) {

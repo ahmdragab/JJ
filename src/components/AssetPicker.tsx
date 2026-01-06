@@ -23,7 +23,7 @@ export function AssetPicker({
   selectedAssets,
   filterType = 'all',
   title = 'Media Library',
-  primaryColor = '#1a1a1a',
+  primaryColor = PRIMARY_COLOR,
   maxSelection,
   maxAssets,
 }: AssetPickerProps) {

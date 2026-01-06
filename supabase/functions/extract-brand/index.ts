@@ -1,6 +1,172 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // @ts-ignore - npm: imports work in Deno runtime
 import BrandDev from "npm:brand.dev";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
+
+// ConvertAPI configuration
+const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
+/**
+ * Check if a URL returns SVG content
+ */
+async function isSvgUrl(url: string): Promise<boolean> {
+  try {
+    // Check URL extension first
+    if (url.toLowerCase().includes(".svg")) {
+      console.log("[SVG] Detected SVG from URL extension");
+      return true;
+    }
+    
+    // Try HEAD request
+    const headResponse = await fetch(url, { method: "HEAD" });
+    const contentType = headResponse.headers.get("content-type") || "";
+    if (contentType.includes("svg")) {
+      console.log(`[SVG] Detected SVG from content-type: ${contentType}`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error("[SVG] Error checking URL:", error);
+    return false;
+  }
+}
+
+/**
+ * Convert SVG to PNG using ConvertAPI and upload to Supabase Storage
+ */
+async function convertSvgToPng(
+  svgUrl: string,
+  brandId: string,
+  logoType: string = "primary"
+): Promise<string | null> {
+  if (!CONVERTAPI_SECRET) {
+    console.warn("[ConvertAPI] CONVERTAPI_SECRET not set, skipping SVG conversion");
+    return null;
+  }
+  
+  try {
+    console.log(`[ConvertAPI] Converting ${logoType} logo from: ${svgUrl}`);
+    
+    // Call ConvertAPI
+    const convertResponse = await fetch(
+      `https://v2.convertapi.com/convert/svg/to/png?Secret=${CONVERTAPI_SECRET}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          Parameters: [
+            { Name: "File", FileValue: { Url: svgUrl } },
+            { Name: "ImageResolution", Value: "300" },
+            { Name: "ScaleImage", Value: "true" },
+            { Name: "ScaleProportions", Value: "true" },
+            { Name: "ImageHeight", Value: "512" },
+          ],
+        }),
+      }
+    );
+    
+    if (!convertResponse.ok) {
+      const errorText = await convertResponse.text();
+      console.error(`[ConvertAPI] Conversion failed: ${convertResponse.status} - ${errorText}`);
+      return null;
+    }
+    
+    const convertResult = await convertResponse.json();
+    
+    if (!convertResult.Files || convertResult.Files.length === 0) {
+      console.error("[ConvertAPI] No files in response");
+      return null;
+    }
+    
+    // Get the PNG data (base64 encoded)
+    const pngBase64 = convertResult.Files[0].FileData;
+    const pngFileName = convertResult.Files[0].FileName || `${logoType}.png`;
+    
+    console.log(`[ConvertAPI] Conversion successful: ${pngFileName}`);
+    
+    // Decode base64 to binary
+    const binaryString = atob(pngBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Upload to Supabase Storage
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const storagePath = `${brandId}/${logoType}-converted-${Date.now()}.png`;
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("brand-logos")
+      .upload(storagePath, bytes, {
+        contentType: "image/png",
+        cacheControl: "3600",
+        upsert: true,
+      });
+    
+    if (uploadError) {
+      console.error("[ConvertAPI] Upload to storage failed:", uploadError);
+      return null;
+    }
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from("brand-logos")
+      .getPublicUrl(uploadData.path);
+    
+    console.log(`[ConvertAPI] PNG uploaded: ${urlData.publicUrl}`);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error("[ConvertAPI] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Process logos - convert SVGs to PNGs using ConvertAPI
+ */
+async function processLogos(
+  logos: { primary?: string; secondary?: string; icon?: string },
+  brandId: string
+): Promise<{ primary?: string; secondary?: string; icon?: string }> {
+  const processedLogos = { ...logos };
+  
+  // Process primary logo
+  if (logos.primary) {
+    const isSvg = await isSvgUrl(logos.primary);
+    if (isSvg) {
+      console.log("[SVG] Primary logo is SVG, converting via ConvertAPI...");
+      const pngUrl = await convertSvgToPng(logos.primary, brandId, "primary");
+      if (pngUrl) {
+        processedLogos.primary = pngUrl;
+      } else {
+        console.warn("[SVG] Failed to convert primary logo, keeping original SVG");
+      }
+    } else {
+      console.log("[SVG] Primary logo is already raster format");
+    }
+  }
+  
+  // Process icon if different from primary
+  if (logos.icon && logos.icon !== logos.primary) {
+    const isSvg = await isSvgUrl(logos.icon);
+    if (isSvg) {
+      console.log("[SVG] Icon is SVG, converting via ConvertAPI...");
+      const pngUrl = await convertSvgToPng(logos.icon, brandId, "icon");
+      if (pngUrl) {
+        processedLogos.icon = pngUrl;
+      }
+    }
+  }
+  
+  return processedLogos;
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -267,6 +433,10 @@ function extractKeywords(description: string): string[] {
 }
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('extract-brand');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -275,6 +445,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    logger.setContext({ request_id: requestId });
     const { url, brandId } = await req.json();
 
     // brandId is optional - when not provided, we just return extracted data without DB update
@@ -467,10 +638,17 @@ Deno.serve(async (req: Request) => {
       extractedData.name = domain.split(".")[0];
     }
 
-    // Ensure we have at least a logo fallback
-    if (!extractedData.logos.primary) {
-      extractedData.logos.primary = `https://logo.clearbit.com/${domain}`;
+    // Convert SVG logos to PNG if brandId is provided
+    if (brandId && extractedData.logos) {
+      console.log("[SVG] Processing logos for brand:", brandId);
+      extractedData.logos = await processLogos(extractedData.logos, brandId);
     }
+
+    const duration = performance.now() - startTime;
+    logger.info("Brand extraction completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
 
     return new Response(
       JSON.stringify({ success: true, data: extractedData }),
@@ -480,11 +658,25 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Brand extraction error:", error);
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Brand extraction error", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'extract-brand',
+      request_id: requestId,
+    });
+
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Unknown error",
-        details: error instanceof Error ? error.stack : undefined
+        error: errorObj.message,
+        details: errorObj.stack,
       }),
       {
         status: 500,

@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,11 +49,16 @@ interface StyleAnalysisResult {
 }
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('analyze-style');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    logger.setContext({ request_id: requestId });
     const { imageUrl, styleId } = await req.json();
 
     if (!imageUrl) {
@@ -196,19 +203,44 @@ Return a JSON object with:
       }
     }
 
+    const duration = performance.now() - startTime;
+    logger.info("Style analysis completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
     return new Response(
       JSON.stringify(result),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
-    console.error("Error analyzing style:", error);
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Error analyzing style", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'analyze-style',
+      request_id: requestId,
+    });
+
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: errorObj.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
+
+
+
+
+
 
 
 

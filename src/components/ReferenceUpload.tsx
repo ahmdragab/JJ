@@ -18,7 +18,7 @@ export function ReferenceUpload({
   onClose,
   onSelect,
   selectedReferences,
-  primaryColor = '#1a1a1a',
+  primaryColor = PRIMARY_COLOR,
   maxSelection,
 }: ReferenceUploadProps) {
   const [uploading, setUploading] = useState(false);

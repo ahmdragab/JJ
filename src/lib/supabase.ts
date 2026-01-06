@@ -180,6 +180,16 @@ export type Brand = {
         textures?: boolean;
       };
     };
+    // AI-extracted colors (pre-computed by Gemini 3 Flash during brand analysis)
+    // Used when user clicks "Use AI-extracted colors" button
+    ai_extracted_colors?: {
+      primary?: string;
+      secondary?: string;
+      background?: string;
+      surface?: string;
+      text_primary?: string;
+      text_on_primary?: string;
+    };
   };
   status: 'draft' | 'extracting' | 'ready' | 'error';
   extraction_data: Record<string, unknown>;

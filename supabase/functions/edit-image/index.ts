@@ -1,5 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { createLogger } from "../_shared/logger.ts";
+import { captureException } from "../_shared/sentry.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -236,18 +238,27 @@ function getBestLogoUrl(brand: Brand): string | null {
 
 async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType: string; width?: number; height?: number } | null> {
   try {
+    console.log(`[fetchImageAsBase64] Fetching image from: ${url}`);
     const response = await fetch(url);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.error(`[fetchImageAsBase64] HTTP error: ${response.status} ${response.statusText} for URL: ${url}`);
+      return null;
+    }
     
     let contentType = response.headers.get('content-type') || 'image/png';
     contentType = contentType.split(';')[0].trim().toLowerCase();
     
     if (!SUPPORTED_IMAGE_TYPES.includes(contentType)) {
-      console.warn(`Skipping unsupported image type: ${contentType}`);
+      console.warn(`[fetchImageAsBase64] Unsupported image type: ${contentType} for URL: ${url}`);
       return null;
     }
     
     const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength === 0) {
+      console.error(`[fetchImageAsBase64] Empty response body for URL: ${url}`);
+      return null;
+    }
+    
     const uint8Array = new Uint8Array(arrayBuffer);
     
     // Try to extract dimensions from PNG/JPEG headers
@@ -275,9 +286,15 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     }
     const base64 = btoa(binary);
     
+    if (!base64 || base64.length === 0) {
+      console.error(`[fetchImageAsBase64] Failed to encode image to base64 for URL: ${url}`);
+      return null;
+    }
+    
+    console.log(`[fetchImageAsBase64] Successfully fetched and encoded image: ${contentType}, ${Math.round(base64.length / 1024)}KB base64`);
     return { data: base64, mimeType: contentType, width, height };
   } catch (error) {
-    console.error('Failed to fetch image:', error);
+    console.error(`[fetchImageAsBase64] Exception fetching image from ${url}:`, error);
     return null;
   }
 }
@@ -352,6 +369,10 @@ async function uploadToStorage(
 // ============================================================================
 
 Deno.serve(async (req: Request) => {
+  const logger = createLogger('edit-image');
+  const requestId = logger.generateRequestId();
+  const startTime = performance.now();
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -361,6 +382,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    logger.setContext({ request_id: requestId });
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
@@ -595,9 +617,46 @@ Deno.serve(async (req: Request) => {
     const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
     const attachedAssetNames: string[] = [];
     
-    // Include the previous image
+    // Include the previous image - REQUIRED for editing
+    console.log(`[Edit] Fetching previous image from: ${previousImageUrl}`);
     const previousImageData = await fetchImageAsBase64(previousImageUrl);
-    if (previousImageData) {
+    if (!previousImageData) {
+      console.error(`[Edit] Failed to fetch previous image from: ${previousImageUrl}`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Failed to fetch the previous image. The image URL may be invalid or inaccessible. URL: ${previousImageUrl}` 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const imageSizeKB = Math.round(previousImageData.data.length / 1024);
+    console.log(`[Edit] Previous image fetched: ${previousImageData.mimeType}, ${imageSizeKB}KB`);
+    
+    // Validate image data size (Gemini has limits, typically ~20MB per image)
+    const MAX_IMAGE_SIZE_MB = 20;
+    const imageSizeMB = previousImageData.data.length / (1024 * 1024);
+    if (imageSizeMB > MAX_IMAGE_SIZE_MB) {
+      console.error(`[Edit] Image too large: ${imageSizeMB.toFixed(2)}MB (max ${MAX_IMAGE_SIZE_MB}MB)`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Image is too large (${imageSizeMB.toFixed(2)}MB). Maximum size is ${MAX_IMAGE_SIZE_MB}MB.` 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Validate base64 data is not empty
+    if (!previousImageData.data || previousImageData.data.length === 0) {
+      console.error(`[Edit] Image data is empty`);
+      return new Response(
+        JSON.stringify({ 
+          error: `Invalid image data: image appears to be empty or corrupted.` 
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
       parts.push({
         text: "Here is the current image. Please modify it according to the user's request:",
       });
@@ -607,7 +666,6 @@ Deno.serve(async (req: Request) => {
           data: previousImageData.data,
         },
       });
-    }
 
     // Add aspect ratio preservation instruction
     const aspectRatioInstruction = originalAspectRatio
@@ -781,11 +839,34 @@ Deno.serve(async (req: Request) => {
     console.log(`[Gemini Response] Received with ${responseParts} part(s)`);
 
     // Check for errors or blocked content
-    if (geminiData.candidates?.[0]?.finishReason) {
+    if (!geminiData.candidates || geminiData.candidates.length === 0) {
+      const errorMessage = geminiData.error?.message || 'No candidates returned from Gemini API';
+      console.error("Gemini API error - no candidates:", JSON.stringify(geminiData, null, 2));
+      throw new Error(`Gemini API error: ${errorMessage}`);
+    }
+
+    if (geminiData.candidates[0]?.finishReason) {
       const finishReason = geminiData.candidates[0].finishReason;
       if (finishReason !== 'STOP' && finishReason !== 'MAX_TOKENS') {
-        console.error("Gemini finish reason:", finishReason);
-        throw new Error(`Gemini API finished with reason: ${finishReason}`);
+        const errorDetails = {
+          finishReason,
+          safetyRatings: geminiData.candidates[0]?.safetyRatings,
+          promptFeedback: geminiData.promptFeedback,
+          error: geminiData.error,
+        };
+        console.error("Gemini finish reason:", JSON.stringify(errorDetails, null, 2));
+        
+        // Provide more helpful error messages based on finish reason
+        let errorMessage = `Gemini API finished with reason: ${finishReason}`;
+        if (finishReason === 'OTHER') {
+          errorMessage = `Gemini API encountered an error processing the request. This may be due to invalid image data, unsupported format, or request size limits. Please try again or use a different image.`;
+        } else if (finishReason === 'SAFETY') {
+          errorMessage = `Content was blocked by safety filters. Please modify your request.`;
+        } else if (finishReason === 'RECITATION') {
+          errorMessage = `Content was blocked due to recitation policy. Please modify your request.`;
+        }
+        
+        throw new Error(errorMessage);
       }
     }
 
@@ -886,6 +967,12 @@ Deno.serve(async (req: Request) => {
       .update(updateData)
       .eq('id', imageId);
 
+    const duration = performance.now() - startTime;
+    logger.info("Image edit completed", {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -900,11 +987,24 @@ Deno.serve(async (req: Request) => {
       }
     );
   } catch (error) {
-    console.error("Image edit error:", error);
+    const duration = performance.now() - startTime;
+    const errorObj = error instanceof Error ? error : new Error(String(error));
+    
+    // Log to Axiom
+    logger.error("Image edit error", errorObj, {
+      request_id: requestId,
+      duration_ms: Math.round(duration),
+    });
+
+    // Send to Sentry
+    await captureException(errorObj, {
+      function_name: 'edit-image',
+      request_id: requestId,
+    });
 
     return new Response(
       JSON.stringify({ 
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorObj.message,
       }),
       {
         status: 500,

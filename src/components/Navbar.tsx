@@ -5,12 +5,13 @@ import {
   CreditCard, 
   FolderOpen, 
   LogOut, 
-  Gem,
   Settings,
   Sparkles
 } from 'lucide-react';
+import favIcon from '../fav.png';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase, Brand, getUserCredits } from '../lib/supabase';
+import { supabase, Brand, getUserCredits, normalizeDomain } from '../lib/supabase';
+import { PRIMARY_COLOR } from '../lib/colors';
 
 interface NavbarProps {
   currentBrand?: Brand;
@@ -141,7 +142,8 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
 
   // Use currentBrand if available, otherwise use lastBrand when on brands page
   const activeBrand = currentBrand || (isOnBrandsPage ? lastBrand : null);
-  const primaryColor = activeBrand?.colors?.primary || '#f59e0b';
+  // Use fixed brand color instead of brand's extracted color
+  const primaryColor = PRIMARY_COLOR;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
@@ -155,42 +157,51 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
       <div className="relative max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2">
           
-          {/* Left: Logo + Brand */}
-          <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto min-w-0 flex-1">
-            {/* Logo */}
+          {/* Left: Logo */}
+          <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto shrink-0">
             <button 
               onClick={() => navigate('/brands')}
-              className="group flex items-center gap-1.5 sm:gap-2.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full hover:bg-white/60 transition-all duration-300 shrink-0"
+              className="group flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full hover:bg-white/60 transition-all duration-300"
             >
-              <div 
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-sm transition-transform group-hover:scale-110"
-                style={{ 
-                  background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}dd)`,
-                }}
-              >
-                <Gem className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-              </div>
-              <span className="text-sm sm:text-base font-semibold text-slate-800 hidden sm:block">
-                Jameel
-              </span>
+              <img 
+                src={favIcon} 
+                alt="Alwan" 
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover transition-transform group-hover:scale-110"
+              />
             </button>
+          </div>
 
-            {/* Brand Switcher - Pill Style */}
-            {currentBrand && (
-              <div className="relative min-w-0" ref={brandMenuRef}>
-                <button
-                  onClick={() => setShowBrandMenu(!showBrandMenu)}
-                  className="flex items-center gap-1.5 sm:gap-2 pl-2 sm:pl-3 pr-2 sm:pr-2.5 py-1 sm:py-1.5 rounded-full bg-white/40 hover:bg-white/70 backdrop-blur-sm transition-all duration-300 group min-w-0"
-                >
-                  <span className="text-xs sm:text-sm text-slate-600 group-hover:text-slate-800 transition-colors truncate max-w-[80px] sm:max-w-[100px]">
-                    {currentBrand.name}
-                  </span>
-                  <ChevronDown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${showBrandMenu ? 'rotate-180' : ''}`} />
-                </button>
+          {/* Center: Brand Switcher */}
+          {currentBrand && (
+            <div className="absolute left-1/2 transform -translate-x-1/2 pointer-events-auto" ref={brandMenuRef}>
+              <button
+                onClick={() => setShowBrandMenu(!showBrandMenu)}
+                className="flex items-center gap-1.5 sm:gap-2 pl-1.5 sm:pl-2 pr-2 sm:pr-2.5 py-1 sm:py-1.5 rounded-full bg-white/40 hover:bg-white/70 backdrop-blur-sm transition-all duration-300 group"
+              >
+                {/* Brand Favicon */}
+                {currentBrand.logos?.icon ? (
+                  <img 
+                    src={currentBrand.logos.icon} 
+                    alt="" 
+                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-md object-contain"
+                  />
+                ) : (
+                  <div 
+                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-md flex items-center justify-center text-[10px] font-bold text-white"
+                    style={{ backgroundColor: currentBrand.colors?.primary || '#6366f1' }}
+                  >
+                    {currentBrand.name?.charAt(0) || 'B'}
+                  </div>
+                )}
+                <span className="text-xs sm:text-sm text-slate-600 group-hover:text-slate-800 transition-colors">
+                  {normalizeDomain(currentBrand.domain)}
+                </span>
+                <ChevronDown className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ${showBrandMenu ? 'rotate-180' : ''}`} />
+              </button>
 
                 {/* Brand Dropdown */}
                 {showBrandMenu && (
-                  <div className="absolute top-full left-0 mt-2 w-48 sm:w-56 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 py-2 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
+                  <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 w-48 sm:w-56 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 py-2 animate-in fade-in slide-in-from-top-2 duration-200 z-50">
                     <div className="px-4 py-2 text-xs font-medium text-slate-400">
                       Your brands
                     </div>
@@ -211,16 +222,24 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                           brand.id === currentBrand.id ? 'bg-slate-50/60' : ''
                         }`}
                       >
-                        <div 
-                          className="w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm"
-                          style={{ backgroundColor: brand.colors?.primary || '#6366f1' }}
-                        />
-                        <span className="text-sm text-slate-700 truncate flex-1 text-left">
-                          {brand.name}
-                        </span>
-                        {brand.id === currentBrand.id && (
-                          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                        {/* Brand Favicon in dropdown */}
+                        {brand.logos?.icon ? (
+                          <img 
+                            src={brand.logos.icon} 
+                            alt="" 
+                            className="w-5 h-5 rounded-md object-contain shrink-0"
+                          />
+                        ) : (
+                          <div 
+                            className="w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                            style={{ backgroundColor: brand.colors?.primary || '#6366f1' }}
+                          >
+                            {brand.name?.charAt(0) || 'B'}
+                          </div>
                         )}
+                        <span className="text-sm text-slate-700 truncate flex-1 text-left">
+                          {normalizeDomain(brand.domain)}
+                        </span>
                       </button>
                     ))}
                     <div className="border-t border-slate-100/80 mt-2 pt-2 mx-2">
@@ -239,26 +258,15 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                 )}
               </div>
             )}
-          </div>
-
-          {/* Center: Page indicator (subtle) */}
-          {currentBrand && isOnStudioPage && (
-            <div className="hidden md:flex items-center pointer-events-auto">
-              <div className="flex items-center gap-1 px-4 py-1.5 rounded-full bg-white/30 backdrop-blur-sm">
-                <Sparkles className="w-3.5 h-3.5 text-slate-500" />
-              </div>
-            </div>
-          )}
 
           {/* Right: Actions */}
           <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto shrink-0">
             
             {/* Credits - Minimal pill */}
             <button
-              onClick={() => {/* TODO: Navigate to billing */}}
+              onClick={() => navigate('/pricing')}
               className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/40 hover:bg-white/70 backdrop-blur-sm transition-all duration-300 group"
             >
-              <span className="text-xs text-amber-600 font-medium">✦</span>
               <span className="text-xs sm:text-sm text-slate-600 group-hover:text-slate-800">{credits}</span>
             </button>
 
@@ -294,7 +302,6 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                       {user.email}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <span className="text-xs text-amber-600">✦</span>
                       <span className="text-xs text-slate-500">{credits} credits</span>
                     </div>
                   </div>
@@ -312,12 +319,13 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                     </button>
                     <button
                       onClick={() => {
+                        navigate('/pricing');
                         setShowUserMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50/80 transition-colors"
                     >
                       <CreditCard className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-600">Billing</span>
+                      <span className="text-sm text-slate-600">Billing & Pricing</span>
                     </button>
                     <button
                       onClick={() => {

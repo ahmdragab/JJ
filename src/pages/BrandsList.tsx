@@ -3,6 +3,7 @@ import { Plus, Sparkles, Loader2, X } from 'lucide-react';
 import { supabase, Brand } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
+import { PRIMARY_COLOR, SECONDARY_COLOR } from '../lib/colors';
 
 export function BrandsList({
   onSelectBrand,
@@ -172,13 +173,15 @@ export function BrandsList({
               </div>
               <button
                 onClick={onCreateNew}
-                className="group relative px-4 sm:px-6 py-2 sm:py-3 bg-slate-900 text-white font-medium text-sm sm:text-base rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden w-full sm:w-auto"
+                className="group relative px-4 sm:px-6 py-2 sm:py-3 text-white font-medium text-sm sm:text-base rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden w-full sm:w-auto"
+                style={{ backgroundColor: '#3531B7' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3531B7'}
               >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   <Plus className="w-4 h-4" />
                   New Brand
                 </span>
-                <div className="absolute inset-0 bg-slate-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
               </button>
             </div>
           </div>
@@ -208,8 +211,9 @@ export function BrandsList({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10">
               {brands.map((brand, index) => {
-                const primaryColor = brand.colors?.primary || '#64748b';
-                const secondaryColor = brand.colors?.secondary || '#94a3b8';
+                // Use fixed brand colors instead of brand's extracted colors
+                const primaryColor = PRIMARY_COLOR;
+                const secondaryColor = SECONDARY_COLOR;
                 
                 return (
                 <div

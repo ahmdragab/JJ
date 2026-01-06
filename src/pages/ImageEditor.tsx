@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Download, RefreshCw, Sparkles, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage } from '../lib/supabase';
+import { PRIMARY_COLOR } from '../lib/colors';
 
 export function ImageEditor({ brand }: { brand: Brand }) {
   const { imageId } = useParams<{ imageId: string }>();
@@ -14,7 +15,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
   const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const primaryColor = brand.colors?.primary || '#1a1a1a';
+  // Use fixed brand color instead of brand's extracted color
+  const primaryColor = PRIMARY_COLOR;
 
   // Get all versions (history + current)
   const getAllVersions = (img: GeneratedImage | null): Array<{ image_url: string; edit_prompt?: string; timestamp: string }> => {
@@ -175,16 +177,56 @@ export function ImageEditor({ brand }: { brand: Brand }) {
     if (!image?.image_url) return;
 
     try {
-      const response = await fetch(image.image_url);
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Extract the file path from the Supabase Storage URL
+      // Supabase Storage URLs are like: https://[project].supabase.co/storage/v1/object/public/brand-images/[path]
+      const urlParts = image.image_url.split('/brand-images/');
+      if (urlParts.length === 2) {
+        const filePath = urlParts[1];
+        
+        // Download directly from storage with no transformations
+        // Use the download method to get the original file
+        const { data, error } = await supabase.storage
+          .from('brand-images')
+          .download(filePath);
+        
+        if (error) {
+          console.error('Storage download error:', error);
+          // Fallback to fetching from URL
+          const response = await fetch(image.image_url);
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+        
+        // Create download link with the original file
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        // Fallback for non-Supabase URLs
+        const response = await fetch(image.image_url);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${brand.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
     } catch (error) {
       console.error('Download failed:', error);
     }

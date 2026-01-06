@@ -17,6 +17,7 @@
   body {
     overflow-x: hidden;
     position: relative;
+    background-color: #F8F7F9;
   }
   
   /* Ensure touch targets are at least 44x44px on mobile */

@@ -6,7 +6,9 @@ import { BrandKitEditor } from './pages/BrandKitEditor';
 import { Studio } from './pages/Studio';
 import { StylesAdmin } from './pages/StylesAdmin';
 import { AdminImages } from './pages/AdminImages';
+import { Pricing } from './pages/Pricing';
 import { Navbar } from './components/Navbar';
+import { BrandConfirmation } from './components/BrandConfirmation';
 import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain } from './lib/supabase';
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
@@ -18,7 +20,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
         <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
       </div>
     );
@@ -37,7 +39,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
         <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
       </div>
     );
@@ -57,6 +59,8 @@ function BrandRoutes() {
   const navigate = useNavigate();
   const [brand, setBrand] = useState<Brand | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [wasExtracting, setWasExtracting] = useState(false);
 
   useEffect(() => {
     if (brandSlug && user) {
@@ -77,8 +81,37 @@ function BrandRoutes() {
       return;
     }
     setBrand(data);
+    
+    // Check if brand was just extracted (updated within last 2 minutes)
+    // and needs confirmation
+    if (data.status === 'ready' && data.updated_at) {
+      const updatedAt = new Date(data.updated_at);
+      const now = new Date();
+      const minutesSinceUpdate = (now.getTime() - updatedAt.getTime()) / (1000 * 60);
+      
+      // Check if confirmation was already shown for this brand
+      const confirmationKey = `brand_confirmed_${data.id}`;
+      const wasConfirmed = localStorage.getItem(confirmationKey);
+      
+      // Show confirmation if brand was updated recently and not yet confirmed
+      if (minutesSinceUpdate < 2 && !wasConfirmed) {
+        setShowConfirmation(true);
+      }
+    }
+    
+    if (data.status === 'extracting') {
+      setWasExtracting(true);
+    }
+    
     setLoading(false);
   };
+
+  // Track if brand was extracting to show confirmation when ready
+  useEffect(() => {
+    if (brand?.status === 'extracting') {
+      setWasExtracting(true);
+    }
+  }, [brand?.status]);
 
   // Poll for brand updates when status is 'extracting'
   useEffect(() => {
@@ -96,12 +129,16 @@ function BrandRoutes() {
         // Stop polling once extraction is complete
         if (data.status !== 'extracting') {
           clearInterval(pollInterval);
+          // Show confirmation when extraction completes
+          if (wasExtracting && data.status === 'ready') {
+            setShowConfirmation(true);
+          }
         }
       }
     }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(pollInterval);
-  }, [brand?.id, brand?.status]);
+  }, [brand?.id, brand?.status, wasExtracting]);
 
   const handleUpdateBrand = async (updates: Partial<Brand>) => {
     if (!brand) return;
@@ -149,7 +186,7 @@ function BrandRoutes() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, brandId: brand.id }),
         }
       );
 
@@ -175,7 +212,7 @@ function BrandRoutes() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
         <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
       </div>
     );
@@ -183,6 +220,27 @@ function BrandRoutes() {
 
   if (!brand) {
     return <Navigate to="/brands" replace />;
+  }
+
+  // Show confirmation flow if needed
+  if (showConfirmation && brand.status === 'ready') {
+    return (
+      <BrandConfirmation
+        brand={brand}
+        onConfirm={async (updates) => {
+          await handleUpdateBrand(updates);
+          setBrand(prev => prev ? { ...prev, ...updates } : null);
+        }}
+        onComplete={() => {
+          setShowConfirmation(false);
+          setWasExtracting(false);
+          // Mark this brand as confirmed in localStorage
+          if (brand) {
+            localStorage.setItem(`brand_confirmed_${brand.id}`, 'true');
+          }
+        }}
+      />
+    );
   }
 
   return (
@@ -381,6 +439,17 @@ function AppRoutes() {
               </div>
             </>
           </AdminRoute>
+        } 
+      />
+      <Route 
+        path="/pricing" 
+        element={
+          <>
+            <Navbar />
+            <div className="pt-16">
+              <Pricing />
+            </div>
+          </>
         } 
       />
     </Routes>
