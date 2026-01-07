@@ -3,7 +3,7 @@ import { ArrowLeft, Loader2, Sparkles } from 'lucide-react';
 import { Brand, Template, supabase } from '../lib/supabase';
 
 export function DesignGenerator({
-  brand,
+  brand: _brand,
   onGenerate,
   onBack,
 }: {
@@ -11,6 +11,7 @@ export function DesignGenerator({
   onGenerate: (templateId: string, brief: string) => void;
   onBack: () => void;
 }) {
+  void _brand; // Available for future brand-specific template filtering
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
@@ -104,9 +105,11 @@ export function DesignGenerator({
                     <span className="px-2 py-1 bg-slate-100 rounded">
                       {template.aspect_ratio}
                     </span>
-                    <span className="px-2 py-1 bg-slate-100 rounded capitalize">
-                      {template.type.replace('_', ' ')}
-                    </span>
+                    {template.type && (
+                      <span className="px-2 py-1 bg-slate-100 rounded capitalize">
+                        {template.type.replace('_', ' ')}
+                      </span>
+                    )}
                   </div>
                 </button>
               ))}

@@ -82,12 +82,39 @@ Deno.serve(async (req: Request) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    
+
     if (!supabaseUrl || !supabaseKey) {
       throw new Error("Supabase configuration missing");
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Idempotency check: Check if this event has already been processed
+    const { data: existingEvent } = await supabase
+      .from("stripe_events")
+      .select("id")
+      .eq("event_id", event.id)
+      .single();
+
+    if (existingEvent) {
+      logger.info(`Event already processed, skipping: ${event.id}`, {
+        request_id: requestId,
+        event_id: event.id,
+      });
+      return new Response(
+        JSON.stringify({ received: true, message: "Event already processed" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Store the event ID to prevent duplicate processing
+    await supabase
+      .from("stripe_events")
+      .insert({
+        event_id: event.id,
+        event_type: event.type,
+        processed_at: new Date().toISOString(),
+      });
 
     // Handle different event types
     switch (event.type) {

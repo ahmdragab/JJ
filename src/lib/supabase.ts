@@ -15,6 +15,30 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
+/**
+ * Get the current user's access token for API calls
+ * Returns null if no session exists
+ */
+export async function getAccessToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
+/**
+ * Get auth headers for Edge Function calls
+ * Throws an error if not authenticated
+ */
+export async function getAuthHeaders(): Promise<{ Authorization: string; 'Content-Type': string }> {
+  const token = await getAccessToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+  return {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  };
+}
+
 // Validate domain format
 export function isValidDomain(input: string): boolean {
   const trimmed = input.trim();
@@ -214,6 +238,38 @@ export type Template = {
   prompt_template: string;
   preview_color?: string;
   is_active: boolean;
+  created_at: string;
+  // Template rendering properties (used by TemplateRenderer)
+  type?: string;
+  style?: {
+    layout?: string;
+    background?: string;
+    headline_color?: string;
+    body_color?: string;
+    cta_background?: string;
+    cta_text?: string;
+    accent?: string;
+    [key: string]: unknown;
+  };
+  slots?: Record<string, { type: 'text' | 'image'; label?: string }>;
+};
+
+// Design type for template rendering system
+export type Design = {
+  id: string;
+  template_id: string;
+  tokens: {
+    colors?: Record<string, string>;
+    fonts?: Record<string, string>;
+  };
+  slots: {
+    logo?: string;
+    headline?: string;
+    body?: string;
+    cta?: string;
+    image?: string;
+    [key: string]: string | undefined;
+  };
   created_at: string;
 };
 

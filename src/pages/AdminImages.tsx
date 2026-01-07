@@ -1,14 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Loader2, RefreshCw, ShieldCheck, Image as ImageIcon, History, Clock3, Search, Filter } from 'lucide-react';
-import { supabase, Brand, GeneratedImage } from '../lib/supabase';
+import { supabase, GeneratedImage } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminUser } from '../lib/admin';
 
 type StatusFilter = 'all' | 'ready' | 'generating' | 'error';
 
+// Partial Brand type for list display
+type BrandListItem = {
+  id: string;
+  name: string;
+  slug: string;
+  domain: string;
+};
+
 export function AdminImages() {
   const { user } = useAuth();
-  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brands, setBrands] = useState<BrandListItem[]>([]);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [loadingBrands, setLoadingBrands] = useState(true);

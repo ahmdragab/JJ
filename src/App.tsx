@@ -1,18 +1,31 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Landing } from './pages/Landing';
-import { BrandsList } from './pages/BrandsList';
-import { BrandKitEditor } from './pages/BrandKitEditor';
-import { Studio } from './pages/Studio';
-import { StylesAdmin } from './pages/StylesAdmin';
-import { AdminImages } from './pages/AdminImages';
-import { Pricing } from './pages/Pricing';
+import { ToastProvider, useToast } from './components/Toast';
 import { Navbar } from './components/Navbar';
 import { BrandConfirmation } from './components/BrandConfirmation';
-import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain } from './lib/supabase';
-import { useState, useEffect } from 'react';
+import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain, getAuthHeaders } from './lib/supabase';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { isAdminUser } from './lib/admin';
+
+// Lazy-loaded page components for code splitting
+const Landing = lazy(() => import('./pages/Landing').then(m => ({ default: m.Landing })));
+const LandingV2 = lazy(() => import('./pages/LandingV2').then(m => ({ default: m.LandingV2 })));
+const BrandsList = lazy(() => import('./pages/BrandsList').then(m => ({ default: m.BrandsList })));
+const BrandKitEditor = lazy(() => import('./pages/BrandKitEditor').then(m => ({ default: m.BrandKitEditor })));
+const Studio = lazy(() => import('./pages/Studio').then(m => ({ default: m.Studio })));
+const StylesAdmin = lazy(() => import('./pages/StylesAdmin').then(m => ({ default: m.StylesAdmin })));
+const AdminImages = lazy(() => import('./pages/AdminImages').then(m => ({ default: m.AdminImages })));
+const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
+
+// Loading fallback component
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
+      <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+    </div>
+  );
+}
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -74,6 +87,7 @@ function BrandRoutes() {
       .from('brands')
       .select('*')
       .eq('slug', slug)
+      .eq('user_id', user?.id)
       .maybeSingle();
 
     if (error || !data) {
@@ -117,12 +131,21 @@ function BrandRoutes() {
   useEffect(() => {
     if (!brand || brand.status !== 'extracting') return;
 
+    let isMounted = true;
+
     const pollInterval = setInterval(async () => {
+      // Skip if component unmounted during async operation
+      if (!isMounted) return;
+
       const { data, error } = await supabase
         .from('brands')
         .select('*')
         .eq('id', brand.id)
+        .eq('user_id', user?.id)
         .maybeSingle();
+
+      // Check again after async operation
+      if (!isMounted) return;
 
       if (!error && data) {
         setBrand(data);
@@ -137,8 +160,11 @@ function BrandRoutes() {
       }
     }, 2000); // Poll every 2 seconds
 
-    return () => clearInterval(pollInterval);
-  }, [brand?.id, brand?.status, wasExtracting]);
+    return () => {
+      isMounted = false;
+      clearInterval(pollInterval);
+    };
+  }, [brand?.id, brand?.status, wasExtracting, user?.id]);
 
   const handleUpdateBrand = async (updates: Partial<Brand>) => {
     if (!brand) return;
@@ -147,6 +173,8 @@ function BrandRoutes() {
     setBrand(prev => prev ? { ...prev, ...updates, updated_at: new Date().toISOString() } : null);
 
     // Save to database in the background
+    // Note: Don't save styleguide here - it's managed by edge functions (analyze-brand-style)
+    // Saving stale styleguide would overwrite ai_extracted_colors
     await supabase
       .from('brands')
       .update({
@@ -156,7 +184,6 @@ function BrandRoutes() {
         all_logos: updates.all_logos || brand.all_logos,
         voice: updates.voice || brand.voice,
         slogan: updates.slogan || brand.slogan,
-        styleguide: updates.styleguide || brand.styleguide,
         updated_at: new Date().toISOString(),
       })
       .eq('id', brand.id);
@@ -166,6 +193,7 @@ function BrandRoutes() {
       .from('brands')
       .select('*')
       .eq('slug', brand.slug)
+      .eq('user_id', user?.id)
       .maybeSingle();
     
     if (data) {
@@ -175,17 +203,15 @@ function BrandRoutes() {
 
   const handleReExtract = async (): Promise<Partial<Brand> | null> => {
     if (!brand) return null;
-    
+
     try {
       const url = `https://${brand.domain}`;
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-brand`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({ url, brandId: brand.id }),
         }
       );
@@ -287,6 +313,7 @@ function BrandRoutes() {
 function LandingWrapper() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
 
   const handleStartExtraction = async (input: string) => {
     if (!user) return;
@@ -294,7 +321,7 @@ function LandingWrapper() {
     try {
       // Validate domain format
       if (!isValidDomain(input)) {
-        alert('Please enter a valid domain name (e.g., example.com)');
+        toast.error('Invalid Domain', 'Please enter a valid domain name (e.g., example.com)');
         return;
       }
 
@@ -331,39 +358,21 @@ function LandingWrapper() {
       // Navigate using slug
       navigate(`/brands/${newBrand.slug}`);
 
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-brand-firecrawl`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({ url, brandId: newBrand.id }),
         }
       );
 
       if (!response.ok) throw new Error('Brand extraction failed');
 
-      const { data: extractedData } = await response.json();
-
-      await supabase
-        .from('brands')
-        .update({
-          name: extractedData.name,
-          slogan: extractedData.slogan,
-          logos: extractedData.logos,
-          all_logos: extractedData.all_logos,
-          backdrops: extractedData.backdrops,
-          colors: extractedData.colors,
-          fonts: extractedData.fonts,
-          voice: extractedData.voice,
-          styleguide: extractedData.styleguide,
-          screenshot: extractedData.screenshot,
-          page_images: extractedData.page_images,
-          status: 'ready',
-        })
-        .eq('id', newBrand.id);
+      // Edge function saves all data directly to DB - no need to save again here
+      // Polling in BrandRoutes will pick up the changes
+      // Removing redundant save prevents overwriting ai_extracted_colors from async analyze-brand-style
 
     } catch (error) {
       console.error('Failed to start extraction:', error);
@@ -371,7 +380,7 @@ function LandingWrapper() {
   };
 
   return (
-    <Landing 
+    <Landing
       onStart={handleStartExtraction} 
       onViewBrands={() => navigate('/brands')} 
     />
@@ -395,10 +404,89 @@ function BrandsListWrapper() {
   );
 }
 
+// New landing page wrapper (V2)
+function LandingV2Wrapper() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+
+  const handleStartExtraction = async (input: string) => {
+    if (!user) return;
+
+    try {
+      // Validate domain format
+      if (!isValidDomain(input)) {
+        toast.error('Invalid Domain', 'Please enter a valid domain name (e.g., example.com)');
+        return;
+      }
+
+      let domain: string;
+      let url: string;
+
+      if (input.includes('://')) {
+        domain = new URL(input).hostname;
+        url = input;
+      } else {
+        domain = normalizeDomain(input);
+        url = `https://${domain}`;
+      }
+
+      domain = normalizeDomain(domain);
+
+      // Generate a slug for the brand
+      const slug = generateSlug(domain);
+
+      const { data: newBrand, error } = await supabase
+        .from('brands')
+        .insert({
+          user_id: user.id,
+          domain,
+          slug,
+          name: domain.replace('www.', '').split('.')[0],
+          status: 'extracting',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Navigate using slug
+      navigate(`/brands/${newBrand.slug}`);
+
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-brand-firecrawl`,
+        {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ url, brandId: newBrand.id }),
+        }
+      );
+
+      if (!response.ok) throw new Error('Brand extraction failed');
+
+      // Edge function saves all data directly to DB - no need to save again here
+      // Polling in BrandRoutes will pick up the changes
+      // Removing redundant save prevents overwriting ai_extracted_colors from async analyze-brand-style
+
+    } catch (error) {
+      console.error('Failed to start extraction:', error);
+    }
+  };
+
+  return (
+    <LandingV2
+      onStart={handleStartExtraction}
+      onViewBrands={() => navigate('/brands')}
+    />
+  );
+}
+
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingWrapper />} />
+      <Route path="/landing" element={<LandingV2Wrapper />} />
       <Route 
         path="/brands" 
         element={
@@ -460,7 +548,11 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <Suspense fallback={<PageLoader />}>
+            <AppRoutes />
+          </Suspense>
+        </ToastProvider>
       </AuthProvider>
     </BrowserRouter>
   );

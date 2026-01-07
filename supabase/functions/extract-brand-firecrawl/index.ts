@@ -2,6 +2,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getUserIdFromRequest, verifyBrandOwnership, unauthorizedResponse, forbiddenResponse } from "../_shared/auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ConvertAPI configuration
 const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
@@ -174,10 +176,13 @@ async function processLogos(
   return processedLogos;
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  };
+}
 
 // Firecrawl branding response structure based on actual API response
 interface FirecrawlBrandingResponse {
@@ -292,24 +297,41 @@ Deno.serve(async (req: Request) => {
   const logger = createLogger('extract-brand-firecrawl');
   const requestId = logger.generateRequestId();
   const startTime = performance.now();
-  
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCors(req) });
   }
 
   try {
     logger.setContext({ request_id: requestId });
+
+    // Authenticate the user
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
+
+    if (authError || !userId) {
+      return unauthorizedResponse(authError || 'Authentication required', getCors(req));
+    }
+
+    logger.setContext({ request_id: requestId, user_id: userId });
+
     const { url, brandId } = await req.json();
-    
+
     if (brandId) {
       logger.setContext({ brand_id: brandId });
+
+      // Verify brand ownership before allowing updates
+      const { owned } = await verifyBrandOwnership(supabase, brandId, userId);
+      if (!owned) {
+        return forbiddenResponse('You do not have permission to update this brand', getCors(req));
+      }
     }
 
     if (!url) {
       return new Response(
         JSON.stringify({ error: 'URL is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 400, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
       );
     }
 
@@ -403,7 +425,7 @@ Deno.serve(async (req: Request) => {
             error: 'The website took too long to load. This can happen with slow or heavily protected websites. Please try again or use the alternative extraction.',
             code: 'SCRAPE_TIMEOUT'
           }),
-          { status: 408, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 408, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
         );
       }
       
@@ -415,7 +437,7 @@ Deno.serve(async (req: Request) => {
             code: 'SERVICE_UNAVAILABLE',
             status
           }),
-          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 503, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
         );
       }
       
@@ -426,7 +448,7 @@ Deno.serve(async (req: Request) => {
             error: 'Too many requests to Firecrawl. Please wait a moment and try again.',
             code: 'RATE_LIMITED'
           }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 429, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
         );
       }
       
@@ -437,7 +459,7 @@ Deno.serve(async (req: Request) => {
             error: 'Firecrawl authentication failed. Please contact support.',
             code: 'AUTH_ERROR'
           }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 500, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
         );
       }
       
@@ -490,6 +512,8 @@ Deno.serve(async (req: Request) => {
           industry: brandData.industry,
           keyServices: brandData.key_services,
         },
+        screenshot: brandData.screenshot,
+        page_images: brandData.page_images,
         status: 'ready',
       };
 
@@ -612,7 +636,7 @@ Deno.serve(async (req: Request) => {
         data: brandData,
         raw: firecrawlData.data, // Include raw response for debugging
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCors(req), 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     const duration = performance.now() - startTime;
@@ -635,7 +659,7 @@ Deno.serve(async (req: Request) => {
         error: errorObj.message,
         success: false,
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCors(req), 'Content-Type': 'application/json' } }
     );
   }
 });

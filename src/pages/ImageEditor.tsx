@@ -1,12 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Send, Loader2, Download, RefreshCw, Sparkles, MessageCircle, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, ConversationMessage } from '../lib/supabase';
+import { supabase, Brand, GeneratedImage, ConversationMessage, getAuthHeaders } from '../lib/supabase';
 import { PRIMARY_COLOR } from '../lib/colors';
+import { useToast } from '../components/Toast';
 
 export function ImageEditor({ brand }: { brand: Brand }) {
   const { imageId } = useParams<{ imageId: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const [image, setImage] = useState<GeneratedImage | null>(null);
   const [loading, setLoading] = useState(true);
   const [editPrompt, setEditPrompt] = useState('');
@@ -121,7 +123,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
   const handleEdit = async () => {
     if (!editPrompt.trim() || !image || editing) return;
     if (image.edit_count >= image.max_edits) {
-      alert(`You've reached the maximum of ${image.max_edits} edits for this image. Create a new image to continue.`);
+      toast.warning('Edit Limit Reached', `You've reached the maximum of ${image.max_edits} edits for this image. Create a new image to continue.`);
       return;
     }
 
@@ -140,14 +142,12 @@ export function ImageEditor({ brand }: { brand: Brand }) {
     setEditPrompt('');
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt: promptText,
             brandId: brand.id,

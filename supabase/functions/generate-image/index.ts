@@ -2,13 +2,17 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getUserIdFromRequest, verifyBrandOwnership } from "../_shared/auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-  "Access-Control-Max-Age": "86400",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 // API Configuration
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -1038,9 +1042,13 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 204,
-      headers: corsHeaders,
+      headers: getCors(req),
     });
   }
+
+  // Track credit state for refund on failure
+  let creditDeducted = false;
+  let deductedUserId: string | null = null;
 
   try {
     logger.setContext({ request_id: requestId });
@@ -1050,7 +1058,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseKey) {
       return new Response(
         JSON.stringify({ error: "Server configuration error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
     
@@ -1062,7 +1070,7 @@ Deno.serve(async (req: Request) => {
     } catch (parseError) {
       return new Response(
         JSON.stringify({ error: "Invalid request body" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -1081,46 +1089,60 @@ Deno.serve(async (req: Request) => {
     if (!prompt) {
       return new Response(
         JSON.stringify({ error: "Missing prompt" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!GEMINI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not set" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
-    // Fetch brand data and get user_id
-    let brand: Brand | null = null;
-    let userId: string | null = null;
-    
-    if (brandId) {
-      const { data: brandData } = await supabase
-        .from("brands")
-        .select("*")
-        .eq("id", brandId)
-        .single();
+    // Extract user_id from JWT token (secure - from auth header, not request body)
+    const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
 
-      if (brandData) {
-        brand = brandData as Brand;
-        userId = brandData.user_id;
-        logger.setContext({ user_id: userId, brand_id: brandId });
-      }
+    if (authError || !userId) {
+      return new Response(
+        JSON.stringify({ error: authError || "Authentication required" }),
+        { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
+      );
     }
 
-    // If we have imageId, get user_id from the image record (more reliable)
-    if (imageId && !userId) {
+    logger.setContext({ user_id: userId });
+
+    // Fetch and verify brand ownership
+    let brand: Brand | null = null;
+
+    if (brandId) {
+      const { owned, brand: brandData } = await verifyBrandOwnership(supabase, brandId, userId);
+
+      if (!owned) {
+        return new Response(
+          JSON.stringify({ error: "Brand not found or access denied" }),
+          { status: 403, headers: { ...getCors(req), "Content-Type": "application/json" } }
+        );
+      }
+
+      brand = brandData as Brand;
+      logger.setContext({ brand_id: brandId });
+    }
+
+    // If we have imageId, verify the user owns it
+    if (imageId) {
       const { data: imageData } = await supabase
         .from("images")
         .select("user_id")
         .eq("id", imageId)
+        .eq("user_id", userId)
         .single();
-      
-      if (imageData) {
-        userId = imageData.user_id;
-        logger.setContext({ user_id: userId });
+
+      if (!imageData) {
+        return new Response(
+          JSON.stringify({ error: "Image not found or access denied" }),
+          { status: 403, headers: { ...getCors(req), "Content-Type": "application/json" } }
+        );
       }
     }
 
@@ -1143,29 +1165,74 @@ Deno.serve(async (req: Request) => {
             error: "Insufficient credits. Please purchase more credits to generate images.",
             credits: currentCredits
           }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
-      // Deduct credit using direct UPDATE (more reliable than RPC)
-      const { error: deductError } = await supabase
+      // Deduct credit using atomic UPDATE with optimistic locking
+      // The .eq("credits", currentCredits) ensures we only update if credits haven't changed
+      const { data: updateResult, error: deductError } = await supabase
         .from("user_credits")
-        .update({ 
+        .update({
           credits: currentCredits - 1,
           updated_at: new Date().toISOString()
         })
         .eq("user_id", userId)
-        .eq("credits", currentCredits); // Optimistic lock to prevent race conditions
+        .eq("credits", currentCredits) // Optimistic lock
+        .select("credits");
 
       if (deductError) {
         console.error("Failed to deduct credit:", deductError);
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             error: "Failed to process credits. Please try again.",
             credits: currentCredits
           }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
+      }
+
+      // If no rows were updated, the optimistic lock failed (race condition)
+      if (!updateResult || updateResult.length === 0) {
+        console.warn("Credit deduction race condition detected, retrying...");
+        // Retry once with fresh data
+        const { data: retryData } = await supabase
+          .from("user_credits")
+          .select("credits")
+          .eq("user_id", userId)
+          .single();
+
+        const retryCredits = retryData?.credits ?? 0;
+        if (retryCredits < 1) {
+          return new Response(
+            JSON.stringify({
+              error: "Insufficient credits. Please purchase more credits to generate images.",
+              credits: retryCredits
+            }),
+            { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: retryResult, error: retryError } = await supabase
+          .from("user_credits")
+          .update({
+            credits: retryCredits - 1,
+            updated_at: new Date().toISOString()
+          })
+          .eq("user_id", userId)
+          .eq("credits", retryCredits)
+          .select("credits");
+
+        if (retryError || !retryResult || retryResult.length === 0) {
+          console.error("Credit deduction retry failed");
+          return new Response(
+            JSON.stringify({
+              error: "Failed to process credits due to high demand. Please try again.",
+              credits: retryCredits
+            }),
+            { status: 503, headers: { ...getCors(req), "Content-Type": "application/json" } }
+          );
+        }
       }
 
       // Log the transaction (non-blocking - don't fail if this errors)
@@ -1186,6 +1253,8 @@ Deno.serve(async (req: Request) => {
       }
 
       console.log(`Credit deducted for user ${userId}: ${currentCredits} -> ${currentCredits - 1}`);
+      creditDeducted = true;
+      deductedUserId = userId;
     }
 
     // Consolidated request logging
@@ -1215,7 +1284,7 @@ Deno.serve(async (req: Request) => {
     if ((assets as AssetInput[]).length > MAX_HIGH_FIDELITY) {
       return new Response(
         JSON.stringify({ error: `Too many assets. Maximum ${MAX_HIGH_FIDELITY} high-fidelity images allowed.` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -1224,7 +1293,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ 
           error: `Too many images. Maximum ${MAX_TOTAL_IMAGES} total images allowed (including ${autoIncludedCount} auto-included). You have ${totalImages} total.` 
         }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -1627,17 +1696,70 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
     const duration = performance.now() - startTime;
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    
+
+    // Refund credit if it was deducted before the error occurred
+    if (creditDeducted && deductedUserId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (supabaseUrl && supabaseKey) {
+          const refundClient = createClient(supabaseUrl, supabaseKey);
+
+          // Refund the credit - get current value and increment
+          const { data: currentData } = await refundClient
+            .from("user_credits")
+            .select("credits")
+            .eq("user_id", deductedUserId)
+            .single();
+
+          const currentCredits = currentData?.credits ?? 0;
+
+          const { error: refundError } = await refundClient
+            .from("user_credits")
+            .update({
+              credits: currentCredits + 1,
+              updated_at: new Date().toISOString()
+            })
+            .eq("user_id", deductedUserId);
+
+          if (refundError) {
+            console.error("Credit refund failed:", refundError);
+          }
+
+          // Log the refund transaction
+          await refundClient
+            .from("credit_transactions")
+            .insert({
+              user_id: deductedUserId,
+              type: 'refunded',
+              amount: 1,
+              source: 'error_refund',
+              description: `Credit refunded due to generation error: ${errorObj.message.substring(0, 100)}`
+            });
+
+          console.log(`Credit refunded for user ${deductedUserId} due to error`);
+          logger.info("Credit refunded due to error", { user_id: deductedUserId });
+        }
+      } catch (refundErr) {
+        // Log but don't fail - we still need to return the error response
+        console.error("Failed to refund credit:", refundErr);
+        logger.error("Credit refund failed", refundErr instanceof Error ? refundErr : new Error(String(refundErr)), {
+          user_id: deductedUserId,
+        });
+      }
+    }
+
     // Log to Axiom
     logger.error("Image generation error", errorObj, {
       request_id: requestId,
       duration_ms: Math.round(duration),
+      credit_refunded: creditDeducted,
     });
 
     // Send to Sentry
@@ -1647,12 +1769,13 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
     });
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: errorObj.message,
+        credit_refunded: creditDeducted,
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }

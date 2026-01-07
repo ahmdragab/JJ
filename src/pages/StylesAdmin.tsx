@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Upload, Loader2, Trash2, Edit2, Save, Image as ImageIcon, Link2, CheckCircle, XCircle, Sparkles, Search } from 'lucide-react';
-import { Style, supabase } from '../lib/supabase';
+import { Style, supabase, getAuthHeaders } from '../lib/supabase';
+import { useToast } from '../components/Toast';
 
 export function StylesAdmin() {
+  const toast = useToast();
   const [styles, setStyles] = useState<Style[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -118,7 +120,7 @@ export function StylesAdmin() {
 
     const validFiles = files.filter(f => SUPPORTED_TYPES.includes(f.type.toLowerCase()));
     if (validFiles.length === 0) {
-      alert('Please upload valid image files (PNG, JPEG, WEBP, HEIC, HEIF, GIF)');
+      toast.error('Invalid Format', 'Please upload valid image files (PNG, JPEG, WEBP, HEIC, HEIF, GIF)');
       return;
     }
 
@@ -178,10 +180,10 @@ export function StylesAdmin() {
 
       const newStyles = await Promise.all(uploadPromises);
       await loadStyles();
-      alert(`Successfully uploaded ${newStyles.length} style(s)`);
+      toast.success('Upload Complete', `Successfully uploaded ${newStyles.length} style(s)`);
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Failed to upload. Please try again.');
+      toast.error('Upload Failed', 'Failed to upload. Please try again.');
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -222,7 +224,7 @@ export function StylesAdmin() {
       await loadStyles();
     } catch (error) {
       console.error('Failed to update style:', error);
-      alert('Failed to update style. Please try again.');
+      toast.error('Update Failed', 'Failed to update style. Please try again.');
     }
   };
 
@@ -240,7 +242,7 @@ export function StylesAdmin() {
       await loadStyles();
     } catch (error) {
       console.error('Failed to delete style:', error);
-      alert('Failed to delete style. Please try again.');
+      toast.error('Delete Failed', 'Failed to delete style. Please try again.');
     }
   };
 
@@ -252,14 +254,12 @@ export function StylesAdmin() {
   const analyzeStyle = async (style: Style) => {
     setAnalyzingId(style.id);
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-style`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             imageUrl: style.url,
             styleId: style.id,
@@ -286,7 +286,7 @@ export function StylesAdmin() {
   const handleBulkAnalyze = async () => {
     const stylesToAnalyze = styles.filter(s => s.is_active);
     if (stylesToAnalyze.length === 0) {
-      alert('No active styles to analyze');
+      toast.warning('No Styles', 'No active styles to analyze');
       return;
     }
 
@@ -333,13 +333,13 @@ export function StylesAdmin() {
       await loadStyles();
 
       if (successCount > 0) {
-        alert(`Successfully analyzed ${successCount} style(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+        toast.success('Analysis Complete', `Successfully analyzed ${successCount} style(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
       } else {
-        alert(`Failed to analyze styles. Check the progress below for details.`);
+        toast.error('Analysis Failed', 'Failed to analyze styles. Check the progress below for details.');
       }
     } catch (error) {
       console.error('Bulk analysis failed:', error);
-      alert('Bulk analysis failed. Please try again.');
+      toast.error('Analysis Failed', 'Bulk analysis failed. Please try again.');
     } finally {
       setAnalyzing(false);
     }
@@ -429,7 +429,7 @@ export function StylesAdmin() {
       .filter(line => line.length > 0 && (line.startsWith('http://') || line.startsWith('https://')));
 
     if (urls.length === 0) {
-      alert('Please enter at least one valid URL');
+      toast.warning('No URLs', 'Please enter at least one valid URL');
       return;
     }
 
@@ -570,9 +570,9 @@ export function StylesAdmin() {
       await loadStyles();
 
       if (successCount > 0) {
-        alert(`Successfully imported ${successCount} style(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
+        toast.success('Import Complete', `Successfully imported ${successCount} style(s)${errorCount > 0 ? `, ${errorCount} failed` : ''}`);
       } else {
-        alert(`Failed to import styles. Check the progress below for details.`);
+        toast.error('Import Failed', 'Failed to import styles. Check the progress below for details.');
       }
 
       // Clear URLs if all succeeded
@@ -582,7 +582,7 @@ export function StylesAdmin() {
       }
     } catch (error) {
       console.error('Bulk import failed:', error);
-      alert('Bulk import failed. Please try again.');
+      toast.error('Import Failed', 'Bulk import failed. Please try again.');
     } finally {
       setImporting(false);
     }
@@ -1201,7 +1201,7 @@ export function StylesAdmin() {
                                     try {
                                       await analyzeStyle(style);
                                     } catch (error) {
-                                      alert(error instanceof Error ? error.message : 'Failed to analyze');
+                                      toast.error('Analysis Failed', error instanceof Error ? error.message : 'Failed to analyze');
                                     }
                                   }}
                                   disabled={analyzingId === style.id}

@@ -1,4 +1,4 @@
-import { Brand } from './supabase';
+import { Brand, getAuthHeaders } from './supabase';
 
 export type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -79,14 +79,12 @@ export async function generateSmartPresets(brand: Brand): Promise<SmartPreset[]>
 
   // 3. Fetch from API
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-smart-presets`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
+        headers: authHeaders,
         body: JSON.stringify({ brandId: brand.id }),
       }
     );

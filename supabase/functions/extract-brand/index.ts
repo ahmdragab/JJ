@@ -4,6 +4,7 @@ import BrandDev from "npm:brand.dev";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getUserIdFromRequest, unauthorizedResponse } from "../_shared/auth.ts";
 
 // ConvertAPI configuration
 const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
@@ -436,7 +437,7 @@ Deno.serve(async (req: Request) => {
   const logger = createLogger('extract-brand');
   const requestId = logger.generateRequestId();
   const startTime = performance.now();
-  
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -446,6 +447,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     logger.setContext({ request_id: requestId });
+
+    // Authenticate the user
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
+
+    if (authError || !userId) {
+      return unauthorizedResponse(authError || 'Authentication required', corsHeaders);
+    }
+
+    logger.setContext({ request_id: requestId, user_id: userId });
+
     const { url, brandId } = await req.json();
 
     // brandId is optional - when not provided, we just return extracted data without DB update
@@ -674,9 +686,8 @@ Deno.serve(async (req: Request) => {
     });
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: errorObj.message,
-        details: errorObj.stack,
       }),
       {
         status: 500,

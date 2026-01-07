@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Loader2, X } from 'lucide-react';
+import { Plus, Sparkles, Loader2, X, ArrowRight } from 'lucide-react';
 import { supabase, Brand } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
-import { PRIMARY_COLOR, SECONDARY_COLOR } from '../lib/colors';
+import { useToast } from '../components/Toast';
 
 export function BrandsList({
   onSelectBrand,
@@ -13,6 +13,7 @@ export function BrandsList({
   onCreateNew: () => void;
 }) {
   const { user } = useAuth();
+  const toast = useToast();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -29,7 +30,7 @@ export function BrandsList({
 
   const loadBrands = async () => {
     if (!user) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('brands')
@@ -57,10 +58,8 @@ export function BrandsList({
     const brandId = confirmDelete.brandId;
     setDeleting(brandId);
     try {
-      // Find the brand to get storage paths
       const brandToDelete = brands.find(b => b.id === brandId);
-      
-      // Clean up storage files before deleting the brand
+
       if (brandToDelete) {
         // Delete brand logos
         if (brandToDelete.logos) {
@@ -78,12 +77,12 @@ export function BrandsList({
           }
         }
 
-        // Delete brand assets (these will be cascade deleted, but clean up storage)
+        // Delete brand assets
         const { data: assets } = await supabase
           .from('brand_assets')
           .select('url')
           .eq('brand_id', brandId);
-        
+
         if (assets && assets.length > 0) {
           const assetPaths = assets
             .map(asset => {
@@ -91,7 +90,7 @@ export function BrandsList({
               return urlParts.length > 1 ? urlParts[1] : null;
             })
             .filter((path): path is string => path !== null);
-          
+
           if (assetPaths.length > 0) {
             await supabase.storage.from('brand-assets').remove(assetPaths);
           }
@@ -102,7 +101,7 @@ export function BrandsList({
           .from('images')
           .select('image_url')
           .eq('brand_id', brandId);
-        
+
         if (images && images.length > 0) {
           const imagePaths = images
             .map(img => {
@@ -111,27 +110,24 @@ export function BrandsList({
               return urlParts.length > 1 ? urlParts[1] : null;
             })
             .filter((path): path is string => path !== null);
-          
+
           if (imagePaths.length > 0) {
             await supabase.storage.from('brand-images').remove(imagePaths);
           }
         }
       }
 
-      // Delete the brand (cascade will handle related records)
       const { error } = await supabase
         .from('brands')
         .delete()
         .eq('id', brandId);
 
       if (error) throw error;
-      
-      // Update local state
       setBrands(brands.filter(b => b.id !== brandId));
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to delete brand:', error);
-      const errorMessage = error?.message || 'Unknown error occurred';
-      alert(`Failed to delete brand: ${errorMessage}. Please try again.`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      toast.error('Delete Failed', `Failed to delete brand: ${errorMessage}. Please try again.`);
     } finally {
       setDeleting(null);
       setConfirmDelete({ isOpen: false, brandId: null });
@@ -140,236 +136,177 @@ export function BrandsList({
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
         <div className="relative">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-200 to-orange-200 animate-pulse blur-xl opacity-40"></div>
-          <Loader2 className="w-8 h-8 animate-spin text-amber-600 absolute inset-0 m-auto" />
+          <div className="w-16 h-16 rounded-full bg-brand-primary/10 animate-pulse" />
+          <Loader2 className="w-6 h-6 animate-spin text-brand-primary absolute inset-0 m-auto" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 relative overflow-hidden">
-      {/* Organic background blobs */}
+    <div className="min-h-screen bg-neutral-50 relative overflow-hidden">
+      {/* Subtle background gradient */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-orange-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-yellow-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000"></div>
+        <div className="absolute -top-[40%] -right-[20%] w-[80%] h-[80%] bg-gradient-to-br from-brand-primary/[0.03] to-transparent rounded-full blur-3xl" />
+        <div className="absolute -bottom-[30%] -left-[20%] w-[70%] h-[70%] bg-gradient-to-tr from-brand-primary/[0.02] to-transparent rounded-full blur-3xl" />
       </div>
 
-      <div className="relative z-10 pt-6 sm:pt-8 md:pt-12 pb-6 sm:pb-8 md:pb-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+      <div className="relative z-10 pt-24 sm:pt-28 md:pt-32 pb-12 sm:pb-16 page-enter">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-8 sm:mb-12 md:mb-16">
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 sm:gap-6">
+          <div className="mb-12 sm:mb-16">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
               <div>
-                <h1 className="text-2xl sm:text-3xl md:text-5xl font-bold mb-2 sm:mb-4 text-slate-900 leading-tight font-playful">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold mb-3 text-neutral-800 tracking-tight font-display">
                   Your Brands
                 </h1>
-                <p className="text-base sm:text-lg md:text-xl text-slate-600/80 font-light">
+                <p className="text-base sm:text-lg text-neutral-500">
                   A collection of your creative identities
                 </p>
               </div>
               <button
                 onClick={onCreateNew}
-                className="group relative px-4 sm:px-6 py-2 sm:py-3 text-white font-medium text-sm sm:text-base rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 overflow-hidden w-full sm:w-auto"
-                style={{ backgroundColor: '#3531B7' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3531B7'}
+                className="btn-primary px-6 py-3 text-sm rounded-xl w-full sm:w-auto min-h-[48px]"
               >
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  <Plus className="w-4 h-4" />
-                  New Brand
-                </span>
+                <Plus className="w-4 h-4 mr-2" />
+                New Brand
               </button>
             </div>
           </div>
 
           {/* Brands Grid */}
           {brands.length === 0 ? (
-            <div className="text-center py-24">
-              <div className="max-w-md mx-auto">
+            <div className="text-center py-20 sm:py-28">
+              <div className="max-w-sm mx-auto">
                 <div className="relative mb-8">
-                  <div className="w-32 h-32 mx-auto rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-amber-200/30 to-orange-200/30 animate-pulse"></div>
-                    <Sparkles className="w-16 h-16 text-amber-600 relative z-10" />
+                  <div className="w-24 h-24 mx-auto rounded-full bg-brand-primary/5 flex items-center justify-center">
+                    <Sparkles className="w-10 h-10 text-brand-primary/60" />
                   </div>
                 </div>
-                <h3 className="text-3xl font-bold text-slate-800 mb-3">Start your collection</h3>
-                <p className="text-lg text-slate-600 mb-8 font-light">
+                <h3 className="text-2xl font-semibold text-neutral-800 mb-3 font-display">Start your collection</h3>
+                <p className="text-neutral-500 mb-8">
                   Create your first brand and bring it to life
                 </p>
                 <button
                   onClick={onCreateNew}
-                  className="px-8 py-4 bg-slate-900 text-white font-medium text-lg rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300"
+                  className="btn-primary px-8 py-3.5 rounded-xl min-h-[48px]"
                 >
                   Create Your First Brand
                 </button>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10">
-              {brands.map((brand, index) => {
-                // Use fixed brand colors instead of brand's extracted colors
-                const primaryColor = PRIMARY_COLOR;
-                const secondaryColor = SECONDARY_COLOR;
-                
-                return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6 lg:gap-8">
+              {brands.map((brand, index) => (
                 <div
                   key={brand.id}
                   onClick={() => onSelectBrand(brand.slug)}
-                    className="group relative cursor-pointer transform hover:scale-[1.02] transition-all duration-500"
-                    style={{
-                      animationDelay: `${index * 100}ms`,
-                    }}
-                  >
-                    {/* Card with organic shape */}
-                    <div className="relative h-full">
-                      {/* Organic blob shape background */}
-                      <div 
-                        className="absolute inset-0 rounded-[3rem] opacity-90 group-hover:opacity-100 transition-opacity duration-500"
-                        style={{
-                          background: `linear-gradient(135deg, ${primaryColor}15, ${secondaryColor}15)`,
-                          clipPath: 'polygon(0% 0%, 100% 0%, 95% 100%, 5% 100%)',
-                        }}
+                  className="group card-interactive stagger-fade-in"
+                  style={{ animationDelay: `${index * 80}ms` }}
+                >
+                  <div className="p-4 sm:p-5">
+                    {/* Brand Preview */}
+                    <div className="relative mb-4 aspect-[4/3] rounded-2xl overflow-hidden">
+                      {brand.screenshot ? (
+                        <img
+                          src={brand.screenshot}
+                          alt={brand.name}
+                          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full transition-transform duration-700 group-hover:scale-105"
+                          style={{
+                            background: `linear-gradient(135deg, ${brand.colors?.primary || '#3531B7'} 0%, ${brand.colors?.secondary || '#2a26a0'} 100%)`,
+                          }}
+                        />
+                      )}
+
+                      {/* Logo overlay */}
+                      {brand.logos?.primary && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+                          <img
+                            src={brand.logos.primary}
+                            alt={brand.name}
+                            className="max-w-[50%] max-h-[50%] object-contain drop-shadow-lg"
+                          />
+                        </div>
+                      )}
+
+                      {/* Delete button - subtle */}
+                      <button
+                        onClick={(e) => handleDeleteClick(brand.id, e)}
+                        disabled={deleting === brand.id}
+                        className="absolute top-2 left-2 w-10 h-10 rounded-xl bg-white/90 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-red-50 text-neutral-400 hover:text-red-500 disabled:opacity-50 touch-manipulation"
+                        title="Delete brand"
                       >
-                        <div className="absolute inset-0 rounded-[3rem] backdrop-blur-sm bg-white/60"></div>
+                        {deleting === brand.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Brand Info */}
+                    <div className="space-y-3">
+                      <div>
+                        <h3 className="text-lg font-semibold text-neutral-800 mb-0.5 font-heading group-hover:text-brand-primary transition-colors duration-300">
+                          {brand.name}
+                        </h3>
+                        <p className="text-sm text-neutral-400">{brand.domain}</p>
                       </div>
 
-                      {/* Content */}
-                      <div className="relative p-4 sm:p-6 md:p-8">
-                        {/* Brand Preview - Organic shape */}
-                        <div 
-                          className="relative mb-4 sm:mb-6 h-40 sm:h-48 rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden group-hover:scale-105 transition-transform duration-500"
-                          style={{
-                            clipPath: 'polygon(0% 0%, 100% 0%, 98% 100%, 2% 100%)',
-                          }}
-                        >
-                          {brand.screenshot ? (
-                            <img
-                              src={brand.screenshot}
-                              alt={brand.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div 
-                              className="w-full h-full"
-                              style={{
-                                background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
-                              }}
-                            />
-                          )}
-                          
-                          {/* Logo overlay */}
-                          {brand.logos?.primary && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/5 backdrop-blur-[2px]">
-                              <img
-                                src={brand.logos.primary}
-                                alt={brand.name}
-                                className="max-w-[55%] max-h-[55%] object-contain drop-shadow-2xl"
-                              />
-                            </div>
-                          )}
+                      {brand.slogan && (
+                        <p className="text-sm text-neutral-500 leading-relaxed line-clamp-2">
+                          {brand.slogan}
+                        </p>
+                      )}
 
-                          {/* Delete button */}
-                          <button
-                            onClick={(e) => handleDeleteClick(brand.id, e)}
-                            disabled={deleting === brand.id}
-                            className="absolute top-4 left-4 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-100 text-red-600 disabled:opacity-50"
-                            title="Delete brand"
-                          >
-                            {deleting === brand.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <X className="w-4 h-4" />
-                            )}
-                          </button>
+                      {/* Color Palette - softer, more subtle */}
+                      {brand.colors && (
+                        <div className="flex gap-1.5 pt-1">
+                          {brand.colors.primary && (
+                            <div
+                              className="w-6 h-6 rounded-full transition-transform duration-300 group-hover:scale-110"
+                              style={{ backgroundColor: brand.colors.primary }}
+                            />
+                          )}
+                          {brand.colors.secondary && (
+                            <div
+                              className="w-6 h-6 rounded-full transition-transform duration-300 group-hover:scale-110"
+                              style={{ backgroundColor: brand.colors.secondary }}
+                            />
+                          )}
+                          {brand.colors.background && (
+                            <div
+                              className="w-6 h-6 rounded-full border border-neutral-200/50 transition-transform duration-300 group-hover:scale-110"
+                              style={{ backgroundColor: brand.colors.background }}
+                            />
+                          )}
                         </div>
+                      )}
 
-                        {/* Brand Info */}
-                        <div className="space-y-3 sm:space-y-4">
-                          <div>
-                            <h3 
-                              className="text-xl sm:text-2xl font-bold mb-1 sm:mb-1.5"
-                              style={{
-                                color: primaryColor,
-                              }}
-                            >
-                              {brand.name}
-                            </h3>
-                            <p className="text-xs sm:text-sm text-slate-600 font-light">{brand.domain}</p>
-                          </div>
-
-                          {brand.slogan && (
-                            <p className="text-sm text-slate-700 leading-relaxed font-light line-clamp-2">
-                              {brand.slogan}
-                            </p>
-                          )}
-
-                          {/* Color Palette - Organic shapes */}
-                          {brand.colors && (
-                            <div className="flex gap-3 pt-2">
-                              {brand.colors.primary && (
-                                <div
-                                  className="w-10 h-10 rounded-full shadow-lg transform hover:scale-110 transition-transform"
-                                  style={{ 
-                                    backgroundColor: brand.colors.primary,
-                                    clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)',
-                                  }}
-                                  title="Primary color"
-                                />
-                              )}
-                              {brand.colors.secondary && (
-                                <div
-                                  className="w-10 h-10 rounded-full shadow-lg transform hover:scale-110 transition-transform"
-                                  style={{ 
-                                    backgroundColor: brand.colors.secondary,
-                                    clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)',
-                                  }}
-                                  title="Secondary color"
-                                />
-                              )}
-                              {brand.colors.background && (
-                                <div
-                                  className="w-10 h-10 rounded-full shadow-lg transform hover:scale-110 transition-transform"
-                                  style={{ 
-                                    backgroundColor: brand.colors.background,
-                                    clipPath: 'polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)',
-                                  }}
-                                  title="Background color"
-                                />
-                              )}
-                            </div>
-                          )}
-
-                          {/* Footer */}
-                          <div className="pt-4 border-t border-slate-200/50">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-500 font-light">
-                                {new Date(brand.created_at).toLocaleDateString('en-US', { 
-                                  month: 'short', 
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
-                              </span>
-                              <div 
-                                className="flex items-center gap-2 text-sm font-medium group-hover:gap-3 transition-all"
-                                style={{ color: primaryColor }}
-                              >
-                                <span>Explore</span>
-                                <div className="w-1 h-1 rounded-full bg-current"></div>
-                                <div className="w-1 h-1 rounded-full bg-current"></div>
-                                <div className="w-1 h-1 rounded-full bg-current"></div>
-                              </div>
-                            </div>
-                          </div>
+                      {/* Footer */}
+                      <div className="pt-3 flex items-center justify-between">
+                        <span className="text-xs text-neutral-400">
+                          {new Date(brand.created_at).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-brand-primary opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                          <span>Open</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
                         </div>
                       </div>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -386,29 +323,6 @@ export function BrandsList({
         cancelText="Cancel"
         variant="danger"
       />
-
-      <style>{`
-        @keyframes blob {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
     </div>
   );
 }

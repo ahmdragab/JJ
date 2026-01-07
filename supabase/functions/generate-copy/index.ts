@@ -1,6 +1,11 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getUserIdFromRequest, unauthorizedResponse } from "../_shared/auth.ts";
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,7 +17,7 @@ Deno.serve(async (req: Request) => {
   const logger = createLogger('generate-copy');
   const requestId = logger.generateRequestId();
   const startTime = performance.now();
-  
+
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
@@ -22,6 +27,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     logger.setContext({ request_id: requestId });
+
+    // Authenticate the user
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
+
+    if (authError || !userId) {
+      return unauthorizedResponse(authError || 'Authentication required', corsHeaders);
+    }
+
+    logger.setContext({ request_id: requestId, user_id: userId });
+
     const { brandVoice, templateType, brief, slots } = await req.json();
 
     if (!brandVoice || !templateType || !brief || !slots) {

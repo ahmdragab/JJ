@@ -5,6 +5,13 @@ import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
+// Type augmentation for global Sentry access (for debugging)
+declare global {
+  interface Window {
+    Sentry?: typeof Sentry;
+  }
+}
+
 // Initialize Sentry
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
 
@@ -47,7 +54,7 @@ if (sentryDsn) {
 
 // Make Sentry available globally for testing
 if (typeof window !== 'undefined') {
-  (window as any).Sentry = Sentry;
+  window.Sentry = Sentry;
 }
 
 createRoot(document.getElementById('root')!).render(

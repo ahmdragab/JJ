@@ -28,6 +28,15 @@ export function TemplateRenderer({
     return 'Inter, sans-serif';
   };
 
+  // Early return if style is not defined
+  if (!template.style) {
+    return (
+      <div className="w-full aspect-video bg-slate-100 flex items-center justify-center text-slate-500">
+        Template style not configured
+      </div>
+    );
+  }
+
   if (template.type === 'web_hero' && template.style.layout === 'split') {
     return (
       <div

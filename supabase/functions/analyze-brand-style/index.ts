@@ -222,12 +222,42 @@ Deno.serve(async (req: Request) => {
   const logger = createLogger('analyze-brand-style');
   const requestId = logger.generateRequestId();
   const startTime = performance.now();
-  
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
+    // Verify authorization - accept service role key or valid user JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Missing authorization header" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    // Allow service role key for internal calls (from other edge functions)
+    const isServiceRole = token === serviceRoleKey;
+
+    if (!isServiceRole) {
+      // If not service role, validate as a user JWT via Supabase
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabase = createClient(supabaseUrl, serviceRoleKey!);
+      const { data: { user }, error } = await supabase.auth.getUser(token);
+
+      if (error || !user) {
+        console.error("Auth validation failed:", error?.message);
+        return new Response(
+          JSON.stringify({ error: "Invalid authorization token" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     logger.setContext({ request_id: requestId });
     const { brandId, screenshotUrl, pageImageUrls, logoUrl, extractColorsOnly } = await req.json();
 
@@ -477,7 +507,9 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
     if (extractColorsOnly) {
       const colorsResponse = parsedResponse as { extracted_colors: ExtractedColors };
       const extractedColors = validateColors(colorsResponse.extracted_colors);
-      
+
+      console.log("Extracted colors (colors-only mode):", JSON.stringify(extractedColors));
+
       // Get current styleguide and store AI colors there
       const { data: brandData, error: fetchError } = await supabase
         .from("brands")
@@ -487,27 +519,35 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
 
       if (fetchError) {
         console.error("Failed to fetch brand:", fetchError);
-      } else {
-        const currentStyleguide = (brandData?.styleguide as Record<string, unknown>) || {};
-        const updatedStyleguide = {
-          ...currentStyleguide,
-          ai_extracted_colors: extractedColors,
-        };
-
-        const { error: updateError } = await supabase
-          .from("brands")
-          .update({
-            styleguide: updatedStyleguide,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", brandId);
-
-        if (updateError) {
-          console.error("Failed to update brand AI colors:", updateError);
-        } else {
-          console.log("Successfully stored AI-extracted colors in styleguide");
-        }
+        return new Response(
+          JSON.stringify({ error: "Failed to fetch brand data", details: fetchError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      const currentStyleguide = (brandData?.styleguide as Record<string, unknown>) || {};
+      const updatedStyleguide = {
+        ...currentStyleguide,
+        ai_extracted_colors: extractedColors,
+      };
+
+      const { error: updateError } = await supabase
+        .from("brands")
+        .update({
+          styleguide: updatedStyleguide,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", brandId);
+
+      if (updateError) {
+        console.error("Failed to update brand AI colors:", updateError);
+        return new Response(
+          JSON.stringify({ error: "Failed to save extracted colors", details: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log("Successfully stored AI-extracted colors in styleguide");
 
       const duration = performance.now() - startTime;
       logger.info("Brand color extraction completed", {
@@ -569,6 +609,9 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
     // Add extracted colors if present
     if (styleProfile.extracted_colors) {
       validatedProfile.extracted_colors = validateColors(styleProfile.extracted_colors);
+      console.log("Gemini returned extracted_colors:", JSON.stringify(validatedProfile.extracted_colors));
+    } else {
+      console.warn("Gemini did NOT return extracted_colors in response");
     }
 
     // Get current styleguide and update
@@ -580,33 +623,44 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
 
     if (fetchError) {
       console.error("Failed to fetch brand:", fetchError);
-    } else {
-      const currentStyleguide = (brandData?.styleguide as Record<string, unknown>) || {};
-      const updatedStyleguide = {
-        ...currentStyleguide,
-        style_profile: validatedProfile,
-      };
-
-      // Store AI-extracted colors in styleguide (don't overwrite main colors field)
-      // These will be used when user clicks "Retry" button
-      if (validatedProfile.extracted_colors) {
-        updatedStyleguide.ai_extracted_colors = validatedProfile.extracted_colors;
-      }
-
-      const { error: updateError } = await supabase
-        .from("brands")
-        .update({
-          styleguide: updatedStyleguide,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", brandId);
-
-      if (updateError) {
-        console.error("Failed to update brand style profile:", updateError);
-      } else {
-        console.log("Successfully updated brand style profile with AI-extracted colors stored separately");
-      }
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch brand data", details: fetchError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+
+    const currentStyleguide = (brandData?.styleguide as Record<string, unknown>) || {};
+    const updatedStyleguide = {
+      ...currentStyleguide,
+      style_profile: validatedProfile,
+    };
+
+    // Store AI-extracted colors in styleguide (don't overwrite main colors field)
+    // These will be used when user clicks "Retry" button
+    if (validatedProfile.extracted_colors) {
+      updatedStyleguide.ai_extracted_colors = validatedProfile.extracted_colors;
+    }
+
+    const { error: updateError } = await supabase
+      .from("brands")
+      .update({
+        styleguide: updatedStyleguide,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", brandId);
+
+    if (updateError) {
+      console.error("Failed to update brand style profile:", updateError);
+      return new Response(
+        JSON.stringify({ error: "Failed to save style profile", details: updateError.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log("Successfully updated brand style profile", {
+      has_style_profile: true,
+      has_ai_extracted_colors: !!validatedProfile.extracted_colors,
+    });
 
     const duration = performance.now() - startTime;
     logger.info("Brand style analysis completed", {

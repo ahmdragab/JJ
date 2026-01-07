@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Check, Loader2, CreditCard } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useToast } from '../components/Toast';
 
 interface Plan {
   id: string;
@@ -19,16 +20,16 @@ interface Plan {
   };
 }
 
-
 export function Pricing() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams] = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
-  const [userPlan, setUserPlan] = useState<any>(null);
+  const [userPlan, setUserPlan] = useState<{ plan_name: string } | null>(null);
 
   useEffect(() => {
     loadPlans();
@@ -36,14 +37,9 @@ export function Pricing() {
       loadUserPlan();
     }
 
-    // Check for success/cancel from Stripe redirect
     const success = searchParams.get('success');
-    const canceled = searchParams.get('canceled');
-    if (success) {
-      // Reload user plan to show updated subscription
-      if (user) {
-        setTimeout(() => loadUserPlan(), 2000);
-      }
+    if (success && user) {
+      setTimeout(() => loadUserPlan(), 2000);
     }
   }, [user, searchParams]);
 
@@ -63,7 +59,6 @@ export function Pricing() {
       setLoading(false);
     }
   }
-
 
   async function loadUserPlan() {
     if (!user) return;
@@ -108,64 +103,59 @@ export function Pricing() {
       }
     } catch (error) {
       console.error('Error creating checkout:', error);
-      alert('Failed to create checkout session. Please try again.');
+      toast.error('Checkout Failed', 'Failed to create checkout session. Please try again.');
     } finally {
       setProcessing(null);
     }
   }
 
-
-  const calculateYearlyDiscount = (monthlyPrice: number) => {
-    const yearlyPrice = monthlyPrice * 12;
-    const discountedYearly = yearlyPrice * 0.8; // 20% discount
-    return {
-      yearly: discountedYearly,
-      savings: yearlyPrice - discountedYearly,
-    };
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+      <div className="min-h-screen flex items-center justify-center gradient-surface">
+        <div className="relative">
+          <div className="w-20 h-20 rounded-full bg-brand-primary/20 animate-pulse blur-xl opacity-40" />
+          <Loader2 className="w-8 h-8 animate-spin text-brand-primary absolute inset-0 m-auto" />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 py-16 px-4">
+    <div className="min-h-screen gradient-surface py-16 px-4 page-enter">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-slate-900 mb-4">Pricing</h1>
-          <p className="text-lg text-slate-600 mb-8">Simple, transparent pricing for every creator</p>
+          <h1 className="text-4xl font-bold text-neutral-800 mb-4 font-display">Pricing</h1>
+          <p className="text-lg text-neutral-500 mb-8">Simple, transparent pricing for every creator</p>
 
           {/* Billing Toggle */}
           <div className="flex items-center justify-center gap-4 mb-8">
-            <span className={`text-sm font-medium ${billingCycle === 'monthly' ? 'text-slate-900' : 'text-slate-500'}`}>
+            <span className={`text-sm font-medium transition-colors ${billingCycle === 'monthly' ? 'text-neutral-800' : 'text-neutral-400'}`}>
               Monthly
             </span>
             <button
               onClick={() => setBillingCycle(billingCycle === 'monthly' ? 'yearly' : 'monthly')}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                billingCycle === 'yearly' ? 'bg-purple-600' : 'bg-slate-300'
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors touch-manipulation ${
+                billingCycle === 'yearly' ? 'bg-brand-primary' : 'bg-neutral-300'
               }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${
                   billingCycle === 'yearly' ? 'translate-x-6' : 'translate-x-1'
                 }`}
               />
             </button>
-            <span className={`text-sm font-medium ${billingCycle === 'yearly' ? 'text-slate-900' : 'text-slate-500'}`}>
+            <span className={`text-sm font-medium transition-colors ${billingCycle === 'yearly' ? 'text-neutral-800' : 'text-neutral-400'}`}>
               Annual
               {billingCycle === 'yearly' && (
-                <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">Save 20%</span>
+                <span className="ml-2 text-xs bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-full font-semibold">
+                  Save 20%
+                </span>
               )}
             </span>
           </div>
 
-          <div className="inline-flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-2 rounded-lg text-sm font-medium">
+          <div className="inline-flex items-center gap-2 bg-brand-primary/10 text-brand-primary px-4 py-2 rounded-xl text-sm font-medium">
             <CreditCard className="w-4 h-4" />
             <span>1 credit = 1 image</span>
           </div>
@@ -173,61 +163,52 @@ export function Pricing() {
 
         {/* Plans Grid */}
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-          {plans.map((plan) => {
+          {plans.map((plan, index) => {
             const isActive = userPlan?.plan_name === plan.name;
             const isRecommended = plan.name === 'plus' && (!userPlan || userPlan?.plan_name === 'free');
-            
-            // Find user's current plan to determine upgrade/downgrade
+
             const currentUserPlan = plans.find(p => p.name === userPlan?.plan_name);
             const isDowngrade = currentUserPlan && plan.sort_order < currentUserPlan.sort_order;
             const isUpgrade = currentUserPlan && plan.sort_order > currentUserPlan.sort_order;
-            
-            const price = billingCycle === 'yearly' && plan.price_yearly
-              ? plan.price_yearly / 12
-              : plan.price_monthly;
-            const displayPrice = billingCycle === 'yearly' && plan.price_yearly
-              ? plan.price_yearly
-              : plan.price_monthly;
-            const costPerCredit = price > 0 ? (price / plan.credits_per_month).toFixed(2) : '0.00';
 
             return (
               <div
                 key={plan.id}
-                className={`relative bg-white rounded-2xl shadow-lg p-8 ${
-                  isRecommended ? 'ring-2 ring-purple-500' : ''
+                className={`relative card p-8 stagger-fade-in ${
+                  isRecommended ? 'ring-2 ring-brand-primary shadow-glow' : ''
                 } ${isActive ? 'ring-2 ring-green-500' : ''}`}
+                style={{ animationDelay: `${index * 100}ms` }}
               >
                 {isRecommended && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-purple-600 text-white px-4 py-1 rounded-full text-xs font-semibold">
+                    <span className="bg-brand-primary text-white px-4 py-1 rounded-full text-xs font-semibold shadow-lg">
                       Recommended
                     </span>
                   </div>
                 )}
                 {isActive && (
                   <div className="absolute -top-4 right-4">
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold">
+                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-semibold shadow-lg">
                       ACTIVE
                     </span>
                   </div>
                 )}
 
                 <div className="mb-6">
-                  <h3 className="text-2xl font-bold text-slate-900 mb-2">{plan.display_name}</h3>
-                  <p className="text-slate-600 text-sm mb-4">{plan.description}</p>
+                  <h3 className="text-2xl font-bold text-neutral-800 mb-2 font-heading">{plan.display_name}</h3>
+                  <p className="text-neutral-500 text-sm mb-4">{plan.description}</p>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-slate-900">
+                    <span className="text-4xl font-bold text-neutral-800">
                       ${billingCycle === 'yearly' && plan.price_yearly ? plan.price_yearly : plan.price_monthly}
                     </span>
-                    {billingCycle === 'yearly' && plan.price_yearly && (
-                      <span className="text-slate-500 text-sm">/year</span>
-                    )}
-                    {billingCycle === 'monthly' && (
-                      <span className="text-slate-500 text-sm">/mo</span>
+                    {billingCycle === 'yearly' && plan.price_yearly ? (
+                      <span className="text-neutral-400 text-sm">/year</span>
+                    ) : (
+                      <span className="text-neutral-400 text-sm">/mo</span>
                     )}
                   </div>
                   {billingCycle === 'yearly' && plan.price_yearly && (
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-neutral-400 mt-1">
                       ${(plan.price_yearly / 12).toFixed(2)}/month billed annually
                     </p>
                   )}
@@ -235,23 +216,23 @@ export function Pricing() {
 
                 <div className="space-y-4 mb-8">
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <CreditCard className="w-5 h-5 text-orange-500" />
+                    <div className="flex items-center gap-2 text-neutral-700">
+                      <CreditCard className="w-5 h-5 text-brand-primary" />
                       <span className="font-medium">{plan.credits_per_month} credits/month</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-600">
+                  <div className="flex items-center gap-2 text-neutral-600">
                     <Check className="w-5 h-5 text-green-500" />
                     <span className="text-sm">Credits reset monthly</span>
                   </div>
                   {plan.features.priority_support && (
-                    <div className="flex items-center gap-2 text-slate-600">
+                    <div className="flex items-center gap-2 text-neutral-600">
                       <Check className="w-5 h-5 text-green-500" />
                       <span className="text-sm">Priority support</span>
                     </div>
                   )}
                   {plan.features.usage_analytics && (
-                    <div className="flex items-center gap-2 text-slate-600">
+                    <div className="flex items-center gap-2 text-neutral-600">
                       <Check className="w-5 h-5 text-green-500" />
                       <span className="text-sm">Usage analytics</span>
                     </div>
@@ -262,12 +243,12 @@ export function Pricing() {
                   <button
                     onClick={() => handleSubscribe(plan.id)}
                     disabled={isActive || processing === plan.id}
-                    className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
+                    className={`w-full py-3 px-4 rounded-xl font-semibold transition-all touch-manipulation active:scale-[0.98] ${
                       isActive
                         ? 'bg-green-100 text-green-700 cursor-not-allowed'
                         : isRecommended
-                        ? 'bg-purple-600 text-white hover:bg-purple-700'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                        ? 'btn-primary shadow-lg hover:shadow-xl'
+                        : 'btn-secondary'
                     } ${processing === plan.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {processing === plan.id ? (
@@ -286,9 +267,9 @@ export function Pricing() {
 
         {/* Footer */}
         <div className="mt-16 text-center">
-          <p className="text-slate-600">
+          <p className="text-neutral-500">
             Need more credits or enterprise pricing?{' '}
-            <a href="mailto:support@example.com" className="text-purple-600 hover:text-purple-700 font-medium">
+            <a href="mailto:support@alwan.io" className="text-brand-primary hover:text-brand-primary-hover font-medium transition-colors">
               Contact us
             </a>
           </p>
@@ -297,4 +278,3 @@ export function Pricing() {
     </div>
   );
 }
-

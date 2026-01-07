@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Sparkles, Loader2, Download, RefreshCw, Wand2, Check, X, ChevronDown, ChevronUp, Image as ImageIcon, Palette, Plus, FolderOpen } from 'lucide-react';
-import { Brand, BrandAsset } from '../lib/supabase';
+import { Brand, BrandAsset, getAuthHeaders } from '../lib/supabase';
 import { AssetPicker } from '../components/AssetPicker';
-import { PRIMARY_COLOR } from '../lib/colors';
 
 export function ImageGenerator({
   brand,
@@ -26,8 +25,8 @@ export function ImageGenerator({
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
 
   // Computed values
-  // Use fixed brand color instead of brand's extracted color
-  const primaryColor = PRIMARY_COLOR;
+  // Use fixed brand color from design system
+  const primaryColor = '#3531B7';
 
   // Calculate auto-included images (logo, backdrop, screenshot)
   const autoIncludedImages = [
@@ -48,8 +47,8 @@ export function ImageGenerator({
   // Validation
   const canAddAsset = currentAssets < MAX_HIGH_FIDELITY && currentTotal < MAX_TOTAL_IMAGES;
   const canAddReference = currentTotal < MAX_TOTAL_IMAGES;
-  const assetsRemaining = Math.max(0, MAX_HIGH_FIDELITY - currentAssets);
   const totalRemaining = Math.max(0, MAX_TOTAL_IMAGES - currentTotal);
+  void canAddAsset; void canAddReference; void totalRemaining; // Used for UI feedback
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -60,14 +59,12 @@ export function ImageGenerator({
     setTextResponse(null);
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt,
             brandId: brand.id,
@@ -664,7 +661,6 @@ export function ImageGenerator({
         selectedAssets={selectedAssets}
         filterType="asset"
         title="Select Assets"
-        primaryColor={primaryColor}
         maxSelection={Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences)}
       />
 
@@ -682,7 +678,6 @@ export function ImageGenerator({
         selectedAssets={selectedReferences}
         filterType="reference"
         title="Select Style References"
-        primaryColor="#8b5cf6"
         maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets}
       />
 
@@ -702,7 +697,6 @@ export function ImageGenerator({
         selectedAssets={[...selectedAssets, ...selectedReferences]}
         filterType="all"
         title="Media Library"
-        primaryColor={primaryColor}
         maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages}
         maxAssets={MAX_HIGH_FIDELITY}
       />

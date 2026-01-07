@@ -1,10 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Loader2, 
-  Trash2, 
-  Calendar, 
-  Sparkles, 
+import { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Loader2,
+  Trash2,
+  Calendar,
+  Sparkles,
   ImageIcon,
   Download,
   X,
@@ -19,7 +18,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  Palette,
   FlaskConical,
   Columns,
   Zap,
@@ -32,8 +30,7 @@ import {
   Play,
   Package
 } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style } from '../lib/supabase';
-import { PRIMARY_COLOR } from '../lib/colors';
+import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, getAuthHeaders } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AssetPicker } from '../components/AssetPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
@@ -41,6 +38,7 @@ import { StylesPicker } from '../components/StylesPicker';
 import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
 import { logger } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/Toast';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -50,9 +48,62 @@ type EditingImage = {
   prompt: string;
 } | null;
 
+// Platform groups with sizes - static constant (no need for useMemo)
+const PLATFORM_GROUPS = [
+  {
+    name: 'Facebook',
+    favicon: 'https://www.facebook.com/favicon.ico',
+    sizes: [
+      { label: 'Square', ratio: '1:1' as AspectRatio },
+      { label: 'Portrait', ratio: '4:5' as AspectRatio },
+      { label: 'Story', ratio: '9:16' as AspectRatio },
+    ],
+  },
+  {
+    name: 'Instagram',
+    favicon: 'https://www.instagram.com/favicon.ico',
+    sizes: [
+      { label: 'Square', ratio: '1:1' as AspectRatio },
+      { label: 'Portrait', ratio: '4:5' as AspectRatio },
+      { label: 'Story', ratio: '9:16' as AspectRatio },
+      { label: 'Reels', ratio: '9:16' as AspectRatio },
+    ],
+  },
+  {
+    name: 'LinkedIn',
+    favicon: 'https://www.linkedin.com/favicon.ico',
+    sizes: [
+      { label: 'Square', ratio: '1:1' as AspectRatio },
+      { label: 'Portrait', ratio: '4:5' as AspectRatio },
+    ],
+  },
+  {
+    name: 'TikTok',
+    favicon: 'https://www.tiktok.com/favicon.ico',
+    sizes: [
+      { label: 'Vertical', ratio: '9:16' as AspectRatio },
+    ],
+  },
+  {
+    name: 'Snapchat',
+    favicon: 'https://www.snapchat.com/favicon.ico',
+    sizes: [
+      { label: 'Full Screen', ratio: '9:16' as AspectRatio },
+    ],
+  },
+  {
+    name: 'Twitter/X',
+    favicon: 'https://abs.twimg.com/favicons/twitter.3.ico',
+    sizes: [
+      { label: 'Square', ratio: '1:1' as AspectRatio },
+      { label: 'Landscape', ratio: '16:9' as AspectRatio },
+    ],
+  },
+];
+
 export function Studio({ brand }: { brand: Brand }) {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const toast = useToast();
   const [images, setImages] = useState<GeneratedImage[]>([]);
   
   // Set logger context
@@ -75,61 +126,8 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showRatioDropdown, setShowRatioDropdown] = useState(false);
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const [editingImage, setEditingImage] = useState<EditingImage>(null);
-  
-  // Platform groups with favicons and sizes
-  const platformGroups = [
-    {
-      name: 'Facebook',
-      favicon: 'https://www.facebook.com/favicon.ico',
-      sizes: [
-        { label: 'Square', ratio: '1:1' as AspectRatio },
-        { label: 'Portrait', ratio: '4:5' as AspectRatio },
-        { label: 'Story', ratio: '9:16' as AspectRatio },
-      ],
-    },
-    {
-      name: 'Instagram',
-      favicon: 'https://www.instagram.com/favicon.ico',
-      sizes: [
-        { label: 'Square', ratio: '1:1' as AspectRatio },
-        { label: 'Portrait', ratio: '4:5' as AspectRatio },
-        { label: 'Story', ratio: '9:16' as AspectRatio },
-        { label: 'Reels', ratio: '9:16' as AspectRatio },
-      ],
-    },
-    {
-      name: 'LinkedIn',
-      favicon: 'https://www.linkedin.com/favicon.ico',
-      sizes: [
-        { label: 'Square', ratio: '1:1' as AspectRatio },
-        { label: 'Portrait', ratio: '4:5' as AspectRatio },
-      ],
-    },
-    {
-      name: 'TikTok',
-      favicon: 'https://www.tiktok.com/favicon.ico',
-      sizes: [
-        { label: 'Vertical', ratio: '9:16' as AspectRatio },
-      ],
-    },
-    {
-      name: 'Snapchat',
-      favicon: 'https://www.snapchat.com/favicon.ico',
-      sizes: [
-        { label: 'Full Screen', ratio: '9:16' as AspectRatio },
-      ],
-    },
-    {
-      name: 'Twitter/X',
-      favicon: 'https://abs.twimg.com/favicons/twitter.3.ico',
-      sizes: [
-        { label: 'Square', ratio: '1:1' as AspectRatio },
-        { label: 'Landscape', ratio: '16:9' as AspectRatio },
-      ],
-    },
-  ];
-  
-  const togglePlatformExpand = (platformName: string) => {
+
+  const togglePlatformExpand = useCallback((platformName: string) => {
     setExpandedPlatforms(prev => {
       const next = new Set(prev);
       if (next.has(platformName)) {
@@ -139,7 +137,7 @@ export function Studio({ brand }: { brand: Brand }) {
       }
       return next;
     });
-  };
+  }, []);
   
   // Modal state
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
@@ -169,13 +167,13 @@ export function Studio({ brand }: { brand: Brand }) {
   const [selectedReferences, setSelectedReferences] = useState<BrandAsset[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<Style[]>([]);
   const [showMediaLibrary, setShowMediaLibrary] = useState(false);
-  const [showMediaPopover, setShowMediaPopover] = useState(false);
+  const [, setShowMediaPopover] = useState(false);
   const [showReferenceUpload, setShowReferenceUpload] = useState(false);
   const [showStylesPicker, setShowStylesPicker] = useState(false);
-  
+
   // Available styles for thumbnail selection
   const [availableStyles, setAvailableStyles] = useState<Style[]>([]);
-  const [loadingStyles, setLoadingStyles] = useState(false);
+  const [, setLoadingStyles] = useState(false);
   
   // Smart presets state
   const [smartPresets, setSmartPresets] = useState<SmartPreset[]>([]);
@@ -203,8 +201,6 @@ export function Studio({ brand }: { brand: Brand }) {
   const modalEditInputRef = useRef<HTMLInputElement>(null);
   const mediaPopoverRef = useRef<HTMLDivElement>(null);
 
-  // Use fixed brand color instead of brand's extracted color
-  const primaryColor = PRIMARY_COLOR;
 
   // Calculate auto-included images (logo, backdrop, screenshot)
   const autoIncludedImages = [
@@ -220,7 +216,6 @@ export function Studio({ brand }: { brand: Brand }) {
   // Calculate current counts (styles count as references)
   const currentAssets = selectedAssets.length;
   const currentReferences = selectedReferences.length + selectedStyles.length;
-  const currentTotal = currentAssets + currentReferences + autoIncludedImages;
 
   // Persist prompt to localStorage
   const STORAGE_KEY = `studio-prompt-${brand.id}`;
@@ -377,10 +372,10 @@ export function Studio({ brand }: { brand: Brand }) {
   //   return prompt;
   // };
 
-  const handleDeleteClick = (imageId: string, e: React.MouseEvent) => {
+  const handleDeleteClick = useCallback((imageId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setConfirmDelete({ isOpen: true, imageId });
-  };
+  }, []);
 
   const handleDeleteConfirm = async () => {
     if (!confirmDelete.imageId) return;
@@ -468,10 +463,14 @@ export function Studio({ brand }: { brand: Brand }) {
     setGenerating(true);
     
     try {
+      if (!user?.id) {
+        throw new Error('Not authenticated');
+      }
+
       const { data: imageRecord, error: insertError } = await supabase
         .from('images')
         .insert({
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           brand_id: brand.id,
           template_id: null,
           prompt: preset.prompt,
@@ -516,14 +515,12 @@ export function Studio({ brand }: { brand: Brand }) {
       ];
 
       // Always use V1 for presets
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt: preset.prompt,
             brandId: brand.id,
@@ -545,7 +542,7 @@ export function Studio({ brand }: { brand: Brand }) {
         const errorData = await response.json();
         // Handle credit errors specifically
         if (response.status === 402) {
-          alert(`Insufficient credits. You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+          toast.error('Insufficient Credits', `You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
           // Remove the image record that was created
           await supabase.from('images').delete().eq('id', imageRecord.id);
           setImages(prev => prev.filter(img => img.id !== imageRecord.id));
@@ -572,7 +569,7 @@ export function Studio({ brand }: { brand: Brand }) {
         preset_id: preset.id,
         prompt_preview: preset.prompt.substring(0, 100),
       });
-      alert(errorObj.message);
+      toast.error('Generation Failed', errorObj.message);
     } finally {
       setGenerating(false);
     }
@@ -582,12 +579,16 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!prompt.trim() || generating) return;
 
     setGenerating(true);
-    
+
     try {
+      if (!user?.id) {
+        throw new Error('Not authenticated');
+      }
+
       const { data: imageRecord, error: insertError } = await supabase
         .from('images')
         .insert({
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           brand_id: brand.id,
           template_id: null, // TEMPLATES COMMENTED OUT: currentTemplateId || null,
           prompt,
@@ -637,15 +638,13 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Use selected prompt version (v1 or v2)
       const endpoint = promptVersion === 'v3' ? 'generate-image-v3' : promptVersion === 'v2' ? 'generate-image-v2' : 'generate-image';
-      
+
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt,
             brandId: brand.id,
@@ -667,7 +666,7 @@ export function Studio({ brand }: { brand: Brand }) {
         const errorData = await response.json();
         // Handle credit errors specifically
         if (response.status === 402) {
-          alert(`Insufficient credits. You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+          toast.error('Insufficient Credits', `You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
           // Remove the image record that was created
           await supabase.from('images').delete().eq('id', imageRecord.id);
           setImages(prev => prev.filter(img => img.id !== imageRecord.id));
@@ -693,7 +692,7 @@ export function Studio({ brand }: { brand: Brand }) {
         brand_id: brand.id,
         prompt_preview: prompt.substring(0, 100),
       });
-      alert(errorObj.message);
+      toast.error('Generation Failed', errorObj.message);
     } finally {
       setGenerating(false);
     }
@@ -743,29 +742,21 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Generate with all 3 versions in parallel
       // V1 will deduct credit, V2 and V3 skip credits
+      const authHeaders = await getAuthHeaders();
       const [v1Response, v2Response, v3Response] = await Promise.all([
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify(requestBody), // V1 deducts 1 credit
         }),
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({ ...requestBody, skipCredits: true }), // V2 skips credit
         }),
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({ ...requestBody, skipCredits: true }), // V3 skips credit
         }),
       ]);
@@ -795,7 +786,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
     } catch (error) {
       console.error('Comparison failed:', error);
-      alert(error instanceof Error ? error.message : 'Failed to compare versions');
+      toast.error('Comparison Failed', error instanceof Error ? error.message : 'Failed to compare versions');
     } finally {
       setComparing(false);
     }
@@ -807,18 +798,22 @@ export function Studio({ brand }: { brand: Brand }) {
     
     const result = comparisonResults[version];
     if (!result || !result.image_base64) {
-      alert(`No image available for ${version.toUpperCase()}`);
+      toast.warning('No Image', `No image available for ${version.toUpperCase()}`);
       return;
     }
 
     setSavingComparison(version);
 
     try {
+      if (!user?.id) {
+        throw new Error('Not authenticated');
+      }
+
       // Create image record in database
       const { data: imageRecord, error: insertError } = await supabase
         .from('images')
         .insert({
-          user_id: (await supabase.auth.getUser()).data.user?.id,
+          user_id: user.id,
           brand_id: brand.id,
           template_id: null,
           prompt,
@@ -826,9 +821,9 @@ export function Studio({ brand }: { brand: Brand }) {
           metadata: {
             aspect_ratio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
             prompt_version: version,
-            ...(result.gpt_prompt_info && { gpt_prompt_info: result.gpt_prompt_info }),
-            ...(result.design_type && { design_type: result.design_type }),
-            ...(result.prompt_used && { prompt_used: result.prompt_used }),
+            ...('gpt_prompt_info' in result && result.gpt_prompt_info && { gpt_prompt_info: result.gpt_prompt_info }),
+            ...('design_type' in result && result.design_type && { design_type: result.design_type }),
+            ...('prompt_used' in result && result.prompt_used && { prompt_used: result.prompt_used }),
           },
           conversation: [],
         })
@@ -891,7 +886,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
     } catch (error) {
       console.error('Failed to save comparison image:', error);
-      alert(error instanceof Error ? error.message : 'Failed to save image');
+      toast.error('Save Failed', error instanceof Error ? error.message : 'Failed to save image');
     } finally {
       setSavingComparison(null);
     }
@@ -905,7 +900,7 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!fullImage) return;
 
     if (fullImage.edit_count >= fullImage.max_edits) {
-      alert(`You've reached the maximum of ${fullImage.max_edits} edits for this image.`);
+      toast.warning('Edit Limit Reached', `You've reached the maximum of ${fullImage.max_edits} edits for this image.`);
       return;
     }
 
@@ -917,14 +912,12 @@ export function Studio({ brand }: { brand: Brand }) {
     };
 
     try {
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt,
             brandId: brand.id,
@@ -994,7 +987,7 @@ export function Studio({ brand }: { brand: Brand }) {
     }
 
     if (selectedImage.edit_count >= selectedImage.max_edits) {
-      alert(`You've reached the maximum of ${selectedImage.max_edits} edits for this image.`);
+      toast.warning('Edit Limit Reached', `You've reached the maximum of ${selectedImage.max_edits} edits for this image.`);
       return;
     }
 
@@ -1025,14 +1018,12 @@ export function Studio({ brand }: { brand: Brand }) {
       console.log('Making API call...');
       
       // Make the API call - this blocks until the image is generated
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body: JSON.stringify({
             prompt: editPromptText,
             brandId: brand.id,
@@ -1121,7 +1112,7 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  const handleDownload = async (image: GeneratedImage, e?: React.MouseEvent) => {
+  const handleDownload = useCallback(async (image: GeneratedImage, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!image.image_url) return;
 
@@ -1131,13 +1122,13 @@ export function Studio({ brand }: { brand: Brand }) {
       const urlParts = image.image_url.split('/brand-images/');
       if (urlParts.length === 2) {
         const filePath = urlParts[1];
-        
+
         // Download directly from storage with no transformations
         // Use the download method to get the original file
         const { data, error } = await supabase.storage
           .from('brand-images')
           .download(filePath);
-        
+
         if (error) {
           console.error('Storage download error:', error);
           // Fallback to fetching from URL
@@ -1153,7 +1144,7 @@ export function Studio({ brand }: { brand: Brand }) {
           URL.revokeObjectURL(url);
           return;
         }
-        
+
         // Create download link with the original file
         const url = URL.createObjectURL(data);
         const a = document.createElement('a');
@@ -1179,7 +1170,7 @@ export function Studio({ brand }: { brand: Brand }) {
     } catch (error) {
       console.error('Download failed:', error);
     }
-  };
+  }, [brand.name]);
 
   // TEMPLATES COMMENTED OUT
   // const handleTemplateClick = (template: Template) => {
@@ -1321,40 +1312,20 @@ export function Studio({ brand }: { brand: Brand }) {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [selectedImage, showModalEditPrompt, modalEditing]);
 
-  const aspectRatios: { value: AspectRatio; label: string }[] = [
-    { value: 'auto', label: 'Auto' },
-    { value: '1:1', label: 'Square (1:1)' },
-    { value: '2:3', label: 'Portrait (2:3)' },
-    { value: '3:4', label: 'Portrait (3:4)' },
-    { value: '4:5', label: 'Social (4:5)' },
-    { value: '9:16', label: 'Mobile (9:16)' },
-    { value: '3:2', label: 'Landscape (3:2)' },
-    { value: '4:3', label: 'Landscape (4:3)' },
-    { value: '5:4', label: 'Classic (5:4)' },
-    { value: '16:9', label: 'Widescreen (16:9)' },
-    { value: '21:9', label: 'Cinematic (21:9)' },
-  ];
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }
 
   return (
-    <div className={`${images.length === 0 ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'min-h-screen'} bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 relative`}>
+    <div className={`${images.length === 0 ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'min-h-screen'} bg-neutral-50 relative`}>
       {/* Subtle background texture */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div 
-          className="absolute -top-40 -right-40 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob"
-          style={{ backgroundColor: primaryColor }}
-        />
-        <div 
-          className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl opacity-10 animate-blob animation-delay-2000"
-          style={{ backgroundColor: primaryColor }}
-        />
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-brand-primary mix-blend-multiply filter blur-3xl opacity-[0.08] animate-blob" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-brand-primary mix-blend-multiply filter blur-3xl opacity-[0.08] animate-blob animation-delay-2000" />
       </div>
 
       {/* Main Content */}
@@ -1367,7 +1338,7 @@ export function Studio({ brand }: { brand: Brand }) {
               <div className="mb-8">
                 <button
                   onClick={() => setShowTemplatesSection(!showTemplatesSection)}
-                  className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+                  className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors"
                 >
                   <LayoutTemplate className="w-4 h-4" />
                   <span className="text-sm font-medium">Templates</span>
@@ -1384,7 +1355,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       <button
                         key={template.id}
                         onClick={() => handleTemplateClick(template)}
-                        className="group relative bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-slate-200/50 hover:bg-white hover:shadow-lg hover:border-slate-300 transition-all text-left"
+                        className="group relative bg-white/70 backdrop-blur-sm rounded-xl p-4 border border-neutral-200/50 hover:bg-white hover:shadow-lg hover:border-neutral-300 transition-all text-left"
                       >
                         <div 
                           className="w-full aspect-square rounded-lg mb-3 flex items-center justify-center"
@@ -1397,15 +1368,15 @@ export function Studio({ brand }: { brand: Brand }) {
                             style={{ color: template.preview_color || primaryColor }}
                           />
                         </div>
-                        <h4 className="text-sm font-medium text-slate-900 mb-1">
+                        <h4 className="text-sm font-medium text-neutral-900 mb-1">
                           {template.name}
                         </h4>
                         {template.description && (
-                          <p className="text-xs text-slate-500 line-clamp-2">
+                          <p className="text-xs text-neutral-500 line-clamp-2">
                             {template.description}
                           </p>
                         )}
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                        <div className="mt-2 flex items-center gap-1.5 text-xs text-neutral-400">
                           <Grid3x3 className="w-3 h-3" />
                           <span>{template.aspect_ratio}</span>
                         </div>
@@ -1427,13 +1398,13 @@ export function Studio({ brand }: { brand: Brand }) {
                   {/* Prompt Version Toggle */}
                   {!editingImage && (
                     <div className="mb-2 flex items-center justify-center gap-3">
-                      <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200 p-0.5">
+                      <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-neutral-200 p-0.5">
                         <button
                           onClick={() => setPromptVersion('v1')}
                           className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                             promptVersion === 'v1'
-                              ? 'bg-slate-900 text-white shadow-sm'
-                              : 'text-slate-500 hover:text-slate-700'
+                              ? 'bg-neutral-900 text-white shadow-sm'
+                              : 'text-neutral-500 hover:text-neutral-700'
                           }`}
                         >
                           V1
@@ -1443,7 +1414,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                             promptVersion === 'v2'
                               ? 'bg-emerald-500 text-white shadow-sm'
-                              : 'text-slate-500 hover:text-slate-700'
+                              : 'text-neutral-500 hover:text-neutral-700'
                           }`}
                         >
                           <FlaskConical className="w-3 h-3" />
@@ -1454,7 +1425,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                             promptVersion === 'v3'
                               ? 'bg-amber-500 text-white shadow-sm'
-                              : 'text-slate-500 hover:text-slate-700'
+                              : 'text-neutral-500 hover:text-neutral-700'
                           }`}
                         >
                           <Zap className="w-3 h-3" />
@@ -1479,7 +1450,7 @@ export function Studio({ brand }: { brand: Brand }) {
                         className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
                           compareMode 
                             ? 'bg-amber-100 text-amber-700 border border-amber-300' 
-                            : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                            : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
                         }`}
                       >
                         <Columns className="w-3 h-3" />
@@ -1491,13 +1462,10 @@ export function Studio({ brand }: { brand: Brand }) {
                   {/* Main Input */}
                   <div 
                     className={`bg-white rounded-xl sm:rounded-2xl border transition-all duration-300 overflow-visible ${
-                      inputFocused 
-                        ? 'border-slate-300' 
-                        : 'border-slate-200'
+                      inputFocused
+                        ? 'border-brand-primary/40'
+                        : 'border-neutral-200'
                     }`}
-                    style={{
-                      borderColor: inputFocused ? `${PRIMARY_COLOR}40` : undefined,
-                    }}
                   >
                     <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 overflow-visible ${(prompt.trim() || inputFocused) ? 'flex-col' : 'items-center'}`}>
                       <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
@@ -1519,7 +1487,7 @@ export function Studio({ brand }: { brand: Brand }) {
                             }
                           }}
                           placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
-                          className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
+                          className={`flex-1 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
                             (prompt.trim() || inputFocused)
                               ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
                               : 'h-[2rem] sm:h-[2.5rem]'
@@ -1532,8 +1500,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           <button
                             onClick={editingImage ? handleEdit : handleGenerate}
                             disabled={(generating || editing) || !prompt.trim()}
-                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                            style={{ backgroundColor: primaryColor }}
+                            className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm shrink-0"
                           >
                             {(generating || editing) && (
                               <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
@@ -1569,7 +1536,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
                       {/* Actions Row - Moves to bottom when typing or focused */}
                       {(prompt.trim() || inputFocused) && (
-                        <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-slate-100 flex-wrap overflow-visible">
+                        <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-neutral-100 flex-wrap overflow-visible">
                           {/* Ratio Dropdown (only for new images) */}
                           {!editingImage && (
                             <div className="relative overflow-visible" ref={ratioDropdownRef}>
@@ -1584,10 +1551,9 @@ export function Studio({ brand }: { brand: Brand }) {
                                   // Keep input focused
                                   inputRef.current?.focus();
                                 }}
-                                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300"
-                                style={{
-                                  borderColor: showRatioDropdown ? `${primaryColor}40` : undefined,
-                                }}
+                                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border hover:border-neutral-300 ${
+                                  showRatioDropdown ? 'border-brand-primary/40' : 'border-neutral-200'
+                                }`}
                               >
                                 <Grid3x3 className="w-4 h-4 sm:w-4 sm:h-4" />
                                 <span>
@@ -1602,7 +1568,7 @@ export function Studio({ brand }: { brand: Brand }) {
                               </button>
 
                               {showRatioDropdown && (
-                                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-80 overflow-y-auto">
+                                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
                                   {/* Auto Option */}
                                   <div className="px-3 py-2">
                                     <button
@@ -1611,26 +1577,26 @@ export function Studio({ brand }: { brand: Brand }) {
                                         setSelectedPlatform(null);
                                         setShowRatioDropdown(false);
                                       }}
-                                      className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                      className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                     >
                                       <div className="flex items-center gap-2">
-                                        <Grid3x3 className="w-4 h-4 text-slate-400" />
+                                        <Grid3x3 className="w-4 h-4 text-neutral-400" />
                                         <span>Auto</span>
                                       </div>
                                       {selectedAspectRatio === 'auto' && !selectedPlatform && (
-                                        <Check className="w-4 h-4 text-slate-600" />
+                                        <Check className="w-4 h-4 text-neutral-600" />
                                       )}
                                     </button>
                                   </div>
-                                  <div className="border-t border-slate-100 my-1" />
+                                  <div className="border-t border-neutral-100 my-1" />
                                   
                                   {/* Platforms Section */}
                                   <div className="px-3 py-2">
-                                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                    <div className="px-2 py-1 text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
                                       Platforms
                                     </div>
                                     <div className="space-y-1">
-                                      {platformGroups.map((platform) => {
+                                      {PLATFORM_GROUPS.map((platform) => {
                                         const isExpanded = expandedPlatforms.has(platform.name);
                                         const hasPlatformSelected = platform.sizes.some(
                                           size => selectedPlatform === `${platform.name} - ${size.label}`
@@ -1645,8 +1611,8 @@ export function Studio({ brand }: { brand: Brand }) {
                                                 e.preventDefault();
                                                 togglePlatformExpand(platform.name);
                                               }}
-                                              className={`w-full px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded ${
-                                                hasPlatformSelected ? 'bg-slate-50' : ''
+                                              className={`w-full px-2 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded ${
+                                                hasPlatformSelected ? 'bg-neutral-50' : ''
                                               }`}
                                             >
                                               <div className="flex items-center gap-2">
@@ -1663,7 +1629,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                                 )}
                                               </div>
-                                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                              <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                             </button>
                                             
                                             {/* Expanded Sizes */}
@@ -1682,7 +1648,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                                         setSelectedAspectRatio(size.ratio);
                                                         setShowRatioDropdown(false);
                                                       }}
-                                                      className="w-full px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center justify-between rounded"
+                                                      className="w-full px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-50 flex items-center justify-between rounded"
                                                     >
                                                       <span>{size.label} ({size.ratio})</span>
                                                       {isSelected && (
@@ -1699,11 +1665,11 @@ export function Studio({ brand }: { brand: Brand }) {
                                     </div>
                                   </div>
                                   
-                                  <div className="border-t border-slate-100 my-1" />
+                                  <div className="border-t border-neutral-100 my-1" />
                                   
                                   {/* Sizes Section */}
                                   <div className="px-3 py-2">
-                                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                                    <div className="px-2 py-1 text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
                                       Custom Sizes
                                     </div>
                                     {/* Portrait/Square Ratios */}
@@ -1724,18 +1690,18 @@ export function Studio({ brand }: { brand: Brand }) {
                                               setSelectedPlatform(null);
                                               setShowRatioDropdown(false);
                                             }}
-                                            className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                            className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                           >
                                             <span>{ratio.label}</span>
                                             {isSelected && (
-                                              <Check className="w-4 h-4 text-slate-600" />
+                                              <Check className="w-4 h-4 text-neutral-600" />
                                             )}
                                           </button>
                                         );
                                       })}
                                     </div>
                                     
-                                    <div className="border-t border-slate-100 my-1.5" />
+                                    <div className="border-t border-neutral-100 my-1.5" />
                                     
                                     {/* Landscape Ratios */}
                                     <div className="space-y-1">
@@ -1755,11 +1721,11 @@ export function Studio({ brand }: { brand: Brand }) {
                                               setSelectedPlatform(null);
                                               setShowRatioDropdown(false);
                                             }}
-                                            className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                            className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                           >
                                             <span>{ratio.label}</span>
                                             {isSelected && (
-                                              <Check className="w-4 h-4 text-slate-600" />
+                                              <Check className="w-4 h-4 text-neutral-600" />
                                             )}
                                           </button>
                                         );
@@ -1783,18 +1749,13 @@ export function Studio({ brand }: { brand: Brand }) {
                               // Keep input focused
                               inputRef.current?.focus();
                             }}
-                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300 relative"
+                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 relative"
                             title="Attach assets"
                           >
                             <FolderOpen className="w-4 h-4 sm:w-4 sm:h-4" />
                             <span>Attach Assets</span>
                             {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
-                              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold"
-                                style={{ 
-                                  backgroundColor: primaryColor,
-                                  color: 'white',
-                                }}
-                              >
+                              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold bg-brand-primary text-white">
                                 {selectedAssets.length + selectedReferences.length}
                               </span>
                             )}
@@ -1814,16 +1775,11 @@ export function Studio({ brand }: { brand: Brand }) {
                             e.preventDefault();
                           }}
                         >
-                          <div className="mb-2 text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                          <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
                             <Sparkles className="w-3.5 h-3.5" />
                             <span>Quick Style Selection</span>
                             {selectedStyles.length > 0 && (
-                              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                                style={{ 
-                                  backgroundColor: primaryColor,
-                                  color: 'white',
-                                }}
-                              >
+                              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
                                 {selectedStyles.length} selected
                               </span>
                             )}
@@ -1847,14 +1803,10 @@ export function Studio({ brand }: { brand: Brand }) {
                                     setShowStylesPicker(true);
                                   }}
                                   className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                                    isSelected 
-                                      ? 'ring-2 ring-offset-1' 
-                                      : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                                    isSelected
+                                      ? 'border-brand-primary ring-2 ring-brand-primary/30 ring-offset-1'
+                                      : 'border-neutral-200 hover:border-neutral-300 hover:shadow-md'
                                   }`}
-                                  style={isSelected ? {
-                                    borderColor: primaryColor,
-                                    boxShadow: `0 0 0 2px ${primaryColor}30`,
-                                  } : {}}
                                   aria-label={style.name}
                                 >
                                   {/* Thumbnail Image */}
@@ -1879,10 +1831,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
                                   {/* Selection Indicator */}
                                   {isSelected && (
-                                    <div 
-                                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10"
-                                      style={{ backgroundColor: primaryColor }}
-                                    >
+                                    <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10 bg-brand-primary">
                                       <Check className="w-2.5 h-2.5 text-white" />
                                     </div>
                                   )}
@@ -1892,7 +1841,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           </div>
                           
                           {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
-                          <div className="absolute left-0 right-0 top-8 bottom-0 bg-slate-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
+                          <div className="absolute left-0 right-0 top-8 bottom-0 bg-neutral-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
                             <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
                               <Sparkles className="w-4 h-4" />
                               <span>Click to browse all styles</span>
@@ -1907,15 +1856,15 @@ export function Studio({ brand }: { brand: Brand }) {
                 {/* Smart Presets Section */}
                 <div>
                   <div className="mb-4 text-center">
-                    <h3 className="text-sm sm:text-base font-medium text-slate-600">
+                    <h3 className="text-sm sm:text-base font-medium text-neutral-600">
                       Some ideas to get started
                     </h3>
                   </div>
                   
                   {loadingPresets ? (
                     <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                      <span className="ml-3 text-slate-600 text-sm sm:text-base">Generating smart presets...</span>
+                      <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
+                      <span className="ml-3 text-neutral-600 text-sm sm:text-base">Generating smart presets...</span>
                     </div>
                   ) : smartPresets.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1925,51 +1874,42 @@ export function Studio({ brand }: { brand: Brand }) {
                           <button
                             key={preset.id}
                             onClick={() => handlePresetClick(preset)}
-                            className="group relative bg-white rounded-2xl p-4 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                            className="group relative bg-white rounded-2xl p-4 border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all text-left flex flex-col h-full"
                           >
                             {/* Tag */}
                             <div className="absolute top-3 left-3">
-                              <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-full border border-slate-200">
+                              <span className="text-xs font-medium text-neutral-500 bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-200">
                                 {tag}
                               </span>
                             </div>
                             
                             {/* Icon */}
                             <div className="flex items-center justify-center mb-4 mt-1">
-                              <div 
-                                className="w-16 h-16 rounded-xl flex items-center justify-center"
-                                style={{ 
-                                  backgroundColor: `${PRIMARY_COLOR}08`,
-                                  color: PRIMARY_COLOR
-                                }}
-                              >
-                                <IconComponent className="w-8 h-8" style={{ color: PRIMARY_COLOR }} />
+                              <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary">
+                                <IconComponent className="w-8 h-8 text-brand-primary" />
                               </div>
                             </div>
                             
                             {/* Title */}
-                            <h4 className="font-semibold text-slate-900 mb-1.5 text-sm leading-tight">
+                            <h4 className="font-semibold text-neutral-900 mb-1.5 text-sm leading-tight">
                               {preset.label}
                             </h4>
                             
                             {/* Description */}
                             {preset.smartContext?.whyRelevant ? (
-                              <p className="text-xs text-slate-600 mb-3 flex-1 leading-relaxed line-clamp-2">
+                              <p className="text-xs text-neutral-600 mb-3 flex-1 leading-relaxed line-clamp-2">
                                 {preset.smartContext.whyRelevant}
                               </p>
                             ) : (
-                              <p className="text-xs text-slate-600 mb-3 flex-1 leading-relaxed">
+                              <p className="text-xs text-neutral-600 mb-3 flex-1 leading-relaxed">
                                 {preset.category}
                               </p>
                             )}
                             
                             {/* Create Button */}
-                            <div className="mt-auto pt-3 border-t border-slate-100">
+                            <div className="mt-auto pt-3 border-t border-neutral-100">
                               <button
-                                className="w-full py-2.5 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
-                                style={{ backgroundColor: PRIMARY_COLOR }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                                className="btn-primary w-full py-2.5 rounded-lg text-sm"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handlePresetClick(preset);
@@ -1983,7 +1923,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       })}
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-slate-500">
+                    <div className="text-center py-8 text-neutral-500">
                       <p>Unable to load presets. You can still create images using the input below.</p>
                     </div>
                   )}
@@ -1998,10 +1938,10 @@ export function Studio({ brand }: { brand: Brand }) {
                       setSelectedImage(image);
                       // GPT prompt info will be loaded from metadata in useEffect
                     }}
-                    className="group relative bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer hover:bg-white hover:shadow-xl transition-all duration-300 border border-slate-200/50"
+                    className="group relative bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer hover:bg-white hover:shadow-xl transition-all duration-300 border border-neutral-200/50"
                   >
                     {/* Image Preview */}
-                    <div className="aspect-square bg-slate-50 relative overflow-hidden flex items-center justify-center">
+                    <div className="aspect-square bg-neutral-50 relative overflow-hidden flex items-center justify-center">
                       {image.image_url ? (
                         <img
                           src={image.image_url}
@@ -2011,13 +1951,13 @@ export function Studio({ brand }: { brand: Brand }) {
                       ) : image.status === 'generating' ? (
                         <div className="w-full h-full flex items-center justify-center">
                           <div className="text-center">
-                            <Loader2 className="w-8 h-8 animate-spin text-slate-400 mx-auto mb-2" />
-                            <p className="text-xs text-slate-500">Creating...</p>
+                            <Loader2 className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-2" />
+                            <p className="text-xs text-neutral-500">Creating...</p>
                           </div>
                         </div>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Sparkles className="w-10 h-10 text-slate-300" />
+                          <Sparkles className="w-10 h-10 text-neutral-300" />
                         </div>
                       )}
 
@@ -2034,7 +1974,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           <div className="flex items-center justify-between">
                             <button
                               onClick={(e) => startEditing(image, e)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-slate-700 hover:bg-white transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               Edit
@@ -2042,14 +1982,14 @@ export function Studio({ brand }: { brand: Brand }) {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={(e) => handleDownload(image, e)}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-slate-700 hover:bg-white transition-colors"
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
                               >
                                 <Download className="w-4 h-4" />
                               </button>
                               <button
                                 onClick={(e) => handleDeleteClick(image.id, e)}
                                 disabled={deleting === image.id}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-slate-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
                               >
                                 {deleting === image.id ? (
                                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -2064,7 +2004,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       
                       {/* Edit count badge */}
                       {image.edit_count > 0 && (
-                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-slate-900/70 backdrop-blur-sm text-white text-xs font-medium flex items-center gap-1">
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-neutral-900/70 backdrop-blur-sm text-white text-xs font-medium flex items-center gap-1">
                           <Clock className="w-3 h-3" />
                           {image.edit_count}
                         </div>
@@ -2089,19 +2029,19 @@ export function Studio({ brand }: { brand: Brand }) {
         <div className="max-w-3xl mx-auto px-3 sm:px-4 overflow-visible">
           {/* Editing Badge */}
           {editingImage && (
-            <div className="mb-3 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl p-2 border border-slate-200">
+            <div className="mb-3 flex items-center gap-3 bg-white/90 backdrop-blur-sm rounded-xl p-2 border border-neutral-200">
               <img 
                 src={editingImage.image_url} 
                 alt="Editing" 
                 className="w-12 h-12 rounded-lg object-cover"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-slate-700">Editing image</p>
-                <p className="text-xs text-slate-500 truncate">{editingImage.prompt}</p>
+                <p className="text-xs font-medium text-neutral-700">Editing image</p>
+                <p className="text-xs text-neutral-500 truncate">{editingImage.prompt}</p>
               </div>
               <button
                 onClick={cancelEditing}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors shrink-0"
+                className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-700 transition-colors shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2113,7 +2053,7 @@ export function Studio({ brand }: { brand: Brand }) {
             <div className="mb-2 flex items-center justify-center">
               <button
                 onClick={() => setShowPresetsModal(true)}
-                className="text-xs text-slate-500 hover:text-slate-700 transition-colors flex items-center gap-1.5"
+                className="text-xs text-neutral-500 hover:text-neutral-700 transition-colors flex items-center gap-1.5"
               >
                 <Sparkles className="w-3 h-3" />
                 <span>Browse smart presets</span>
@@ -2124,13 +2064,13 @@ export function Studio({ brand }: { brand: Brand }) {
           {/* Prompt Version Toggle */}
           {!editingImage && (
             <div className="mb-2 flex items-center justify-center gap-3">
-              <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-slate-200 p-0.5">
+              <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-neutral-200 p-0.5">
                 <button
                   onClick={() => setPromptVersion('v1')}
                   className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
                     promptVersion === 'v1'
-                      ? 'bg-slate-900 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      ? 'bg-neutral-900 text-white shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-700'
                   }`}
                 >
                   V1
@@ -2140,7 +2080,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                     promptVersion === 'v2'
                       ? 'bg-emerald-500 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-neutral-500 hover:text-neutral-700'
                   }`}
                 >
                   <FlaskConical className="w-3 h-3" />
@@ -2151,7 +2091,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
                     promptVersion === 'v3'
                       ? 'bg-amber-500 text-white shadow-sm'
-                      : 'text-slate-500 hover:text-slate-700'
+                      : 'text-neutral-500 hover:text-neutral-700'
                   }`}
                 >
                   <Zap className="w-3 h-3" />
@@ -2176,7 +2116,7 @@ export function Studio({ brand }: { brand: Brand }) {
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
                   compareMode 
                     ? 'bg-amber-100 text-amber-700 border border-amber-300' 
-                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'
+                    : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
                 }`}
               >
                 <Columns className="w-3 h-3" />
@@ -2188,13 +2128,10 @@ export function Studio({ brand }: { brand: Brand }) {
           {/* Main Input */}
           <div 
             className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 overflow-visible ${
-              inputFocused 
-                ? 'border-slate-300 shadow-2xl' 
-                : 'border-slate-200/80'
+              inputFocused
+                ? 'border-brand-primary/40 shadow-2xl'
+                : 'border-neutral-200/80'
             }`}
-            style={{
-              borderColor: inputFocused ? `${primaryColor}40` : undefined,
-            }}
           >
             <div className={`flex gap-2 sm:gap-3 p-2.5 sm:p-3 overflow-visible ${(prompt.trim() || inputFocused) ? 'flex-col' : 'items-center'}`}>
               <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
@@ -2216,7 +2153,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     }
                   }}
                   placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
-                  className={`flex-1 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
+                  className={`flex-1 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
                     (prompt.trim() || inputFocused)
                       ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
                       : 'h-[2rem] sm:h-[2.5rem]'
@@ -2229,8 +2166,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   <button
                     onClick={editingImage ? handleEdit : handleGenerate}
                     disabled={(generating || editing) || !prompt.trim()}
-                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                    style={{ backgroundColor: primaryColor }}
+                    className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm shrink-0"
                   >
                     {(generating || editing) && (
                       <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
@@ -2243,7 +2179,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     </span>
                   </button>
                 )}
-                
+
                 {/* Compare Button - Shows when compare mode is enabled */}
                 {prompt.trim() && compareMode && !editingImage && (
                   <button
@@ -2266,7 +2202,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
               {/* Actions Row - Moves to bottom when typing or focused */}
               {(prompt.trim() || inputFocused) && (
-                <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-slate-100 flex-wrap overflow-visible">
+                <div className="flex items-center gap-2 sm:gap-3 pt-2 border-t border-neutral-100 flex-wrap overflow-visible">
                   {/* Ratio Dropdown (only for new images) */}
                   {!editingImage && (
                     <div className="relative" ref={ratioDropdownRef}>
@@ -2281,17 +2217,16 @@ export function Studio({ brand }: { brand: Brand }) {
                           // Keep input focused
                           inputRef.current?.focus();
                         }}
-                        className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300"
-                        style={{
-                          borderColor: showRatioDropdown ? `${primaryColor}40` : undefined,
-                        }}
+                        className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border hover:border-neutral-300 ${
+                          showRatioDropdown ? 'border-brand-primary/40' : 'border-neutral-200'
+                        }`}
                       >
                         <Grid3x3 className="w-4 h-4 sm:w-4 sm:h-4" />
                         <span>
-                          {selectedPlatform 
-                            ? selectedPlatform 
-                            : selectedAspectRatio === 'auto' 
-                              ? 'Size/Platform' 
+                          {selectedPlatform
+                            ? selectedPlatform
+                            : selectedAspectRatio === 'auto'
+                              ? 'Size/Platform'
                               : `Size: ${selectedAspectRatio}`
                           }
                         </span>
@@ -2299,7 +2234,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       </button>
 
                       {showRatioDropdown && (
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-1 z-50 max-h-80 overflow-y-auto">
+                        <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
                           {/* Auto Option */}
                           <div className="px-3 py-2">
                             <button
@@ -2308,26 +2243,26 @@ export function Studio({ brand }: { brand: Brand }) {
                                 setSelectedPlatform(null);
                                 setShowRatioDropdown(false);
                               }}
-                              className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                              className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                             >
                               <div className="flex items-center gap-2">
-                                <Grid3x3 className="w-4 h-4 text-slate-400" />
+                                <Grid3x3 className="w-4 h-4 text-neutral-400" />
                                 <span>Auto</span>
                               </div>
                               {selectedAspectRatio === 'auto' && !selectedPlatform && (
-                                <Check className="w-4 h-4 text-slate-600" />
+                                <Check className="w-4 h-4 text-neutral-600" />
                               )}
                             </button>
                           </div>
-                          <div className="border-t border-slate-100 my-1" />
+                          <div className="border-t border-neutral-100 my-1" />
                           
                           {/* Platforms Section */}
                           <div className="px-3 py-2">
-                            <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                            <div className="px-2 py-1 text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-2">
                               Platforms
                             </div>
                             <div className="space-y-1">
-                              {platformGroups.map((platform) => {
+                              {PLATFORM_GROUPS.map((platform) => {
                                 const isExpanded = expandedPlatforms.has(platform.name);
                                 const hasPlatformSelected = platform.sizes.some(
                                   size => selectedPlatform === `${platform.name} - ${size.label}`
@@ -2342,8 +2277,8 @@ export function Studio({ brand }: { brand: Brand }) {
                                         e.preventDefault();
                                         togglePlatformExpand(platform.name);
                                       }}
-                                      className={`w-full px-2 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded ${
-                                        hasPlatformSelected ? 'bg-slate-50' : ''
+                                      className={`w-full px-2 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded ${
+                                        hasPlatformSelected ? 'bg-neutral-50' : ''
                                       }`}
                                     >
                                       <div className="flex items-center gap-2">
@@ -2360,7 +2295,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                           <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                                         )}
                                       </div>
-                                      <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                                      <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                     </button>
                                     
                                     {/* Expanded Sizes */}
@@ -2379,7 +2314,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                                 setSelectedAspectRatio(size.ratio);
                                                 setShowRatioDropdown(false);
                                               }}
-                                              className="w-full px-2 py-1.5 text-left text-sm text-slate-600 hover:bg-slate-50 flex items-center justify-between rounded"
+                                              className="w-full px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-50 flex items-center justify-between rounded"
                                             >
                                               <span>{size.label} ({size.ratio})</span>
                                               {isSelected && (
@@ -2396,11 +2331,11 @@ export function Studio({ brand }: { brand: Brand }) {
                             </div>
                           </div>
                           
-                          <div className="border-t border-slate-100 my-1" />
+                          <div className="border-t border-neutral-100 my-1" />
                           
                           {/* Sizes Section */}
                           <div className="px-3 py-2">
-                            <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                            <div className="px-2 py-1 text-xs font-semibold text-neutral-500 uppercase tracking-wide mb-1">
                               Custom Sizes
                             </div>
                             {/* Portrait/Square Ratios */}
@@ -2421,18 +2356,18 @@ export function Studio({ brand }: { brand: Brand }) {
                                       setSelectedPlatform(null);
                                       setShowRatioDropdown(false);
                                     }}
-                                    className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                    className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                   >
                                     <span>{ratio.label}</span>
                                     {isSelected && (
-                                      <Check className="w-4 h-4 text-slate-600" />
+                                      <Check className="w-4 h-4 text-neutral-600" />
                                     )}
                                   </button>
                                 );
                               })}
                             </div>
                             
-                            <div className="border-t border-slate-100 my-1.5" />
+                            <div className="border-t border-neutral-100 my-1.5" />
                             
                             {/* Landscape Ratios */}
                             <div className="space-y-1">
@@ -2452,11 +2387,11 @@ export function Studio({ brand }: { brand: Brand }) {
                                       setSelectedPlatform(null);
                                       setShowRatioDropdown(false);
                                     }}
-                                    className="w-full px-2 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between rounded"
+                                    className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                   >
                                     <span>{ratio.label}</span>
                                     {isSelected && (
-                                      <Check className="w-4 h-4 text-slate-600" />
+                                      <Check className="w-4 h-4 text-neutral-600" />
                                     )}
                                   </button>
                                 );
@@ -2480,18 +2415,13 @@ export function Studio({ brand }: { brand: Brand }) {
                       // Keep input focused
                       inputRef.current?.focus();
                     }}
-                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-slate-700 hover:text-slate-900 transition-all rounded-lg hover:bg-slate-50 border border-slate-200 hover:border-slate-300 relative"
+                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 relative"
                     title="Attach assets"
                   >
                     <FolderOpen className="w-4 h-4 sm:w-4 sm:h-4" />
                     <span>Attach Assets</span>
                     {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
-                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold"
-                        style={{ 
-                          backgroundColor: primaryColor,
-                          color: 'white',
-                        }}
-                      >
+                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold bg-brand-primary text-white">
                         {selectedAssets.length + selectedReferences.length}
                       </span>
                     )}
@@ -2500,7 +2430,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   {/* Enhance Prompt Button (placeholder) - Commented out */}
                   {false && !editingImage && (
                     <button
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 transition-colors rounded-lg hover:bg-neutral-100"
                       onClick={() => {}}
                     >
                       <Wand2 className="w-3.5 h-3.5" />
@@ -2525,16 +2455,11 @@ export function Studio({ brand }: { brand: Brand }) {
                     e.preventDefault();
                   }}
                 >
-                  <div className="mb-2 text-xs font-medium text-slate-600 flex items-center gap-1.5">
+                  <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Quick Style Selection</span>
                     {selectedStyles.length > 0 && (
-                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
-                        style={{ 
-                          backgroundColor: primaryColor,
-                          color: 'white',
-                        }}
-                      >
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
                         {selectedStyles.length} selected
                       </span>
                     )}
@@ -2558,42 +2483,27 @@ export function Studio({ brand }: { brand: Brand }) {
                             setShowStylesPicker(true);
                           }}
                           className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                            isSelected 
-                              ? 'ring-2 ring-offset-1' 
-                              : 'border-slate-200 hover:border-slate-300 hover:shadow-md'
+                            isSelected
+                              ? 'border-brand-primary ring-2 ring-brand-primary/30 ring-offset-1'
+                              : 'border-neutral-200 hover:border-neutral-300 hover:shadow-md'
                           }`}
-                          style={isSelected ? {
-                            borderColor: primaryColor,
-                            boxShadow: `0 0 0 2px ${primaryColor}30`,
-                          } : {}}
                           aria-label={style.name}
                         >
                           {/* Thumbnail Image */}
-                          <div 
-                            className="w-14 h-14 sm:w-16 sm:h-16 relative overflow-hidden"
-                            style={{
-                              backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
-                              backgroundSize: '8px 8px',
-                              backgroundPosition: '0 0, 0 4px, 4px -4px, -4px 0px',
-                              backgroundColor: '#fafafa',
-                            }}
-                          >
+                          <div className="w-14 h-14 sm:w-16 sm:h-16 relative overflow-hidden bg-neutral-50 checkerboard">
                             <img
                               src={style.url}
                               alt={style.name}
                               className="w-full h-full object-contain p-1 group-hover:scale-110 transition-transform duration-200"
                             />
-                            
+
                             {/* Overlay on hover */}
                             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
                           </div>
 
                           {/* Selection Indicator */}
                           {isSelected && (
-                            <div 
-                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10"
-                              style={{ backgroundColor: primaryColor }}
-                            >
+                            <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full flex items-center justify-center shadow-sm z-10 bg-brand-primary">
                               <Check className="w-2.5 h-2.5 text-white" />
                             </div>
                           )}
@@ -2601,9 +2511,9 @@ export function Studio({ brand }: { brand: Brand }) {
                       );
                     })}
                   </div>
-                  
+
                   {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
-                  <div className="absolute left-0 right-0 top-8 bottom-0 bg-slate-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
+                  <div className="absolute left-0 right-0 top-8 bottom-0 bg-neutral-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
                     <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
                       <Sparkles className="w-4 h-4" />
                       <span>Click to browse all styles</span>
@@ -2656,13 +2566,13 @@ export function Studio({ brand }: { brand: Brand }) {
                 }
               }}
               disabled={modalEditing}
-              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-white transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-white transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Image Panel */}
-            <div className="flex-1 bg-slate-100 flex items-center justify-center p-6 md:p-8 relative">
+            <div className="flex-1 bg-neutral-100 flex items-center justify-center p-6 md:p-8 relative">
               {(() => {
                 const versions = getAllVersions(selectedImage);
                 const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
@@ -2689,13 +2599,13 @@ export function Studio({ brand }: { brand: Brand }) {
                       </div>
                     ) : selectedImage.status === 'generating' ? (
                       <div className="text-center">
-                        <Loader2 className="w-12 h-12 animate-spin text-slate-400 mx-auto mb-4" />
-                        <p className="text-slate-600">Creating your image...</p>
+                        <Loader2 className="w-12 h-12 animate-spin text-neutral-400 mx-auto mb-4" />
+                        <p className="text-neutral-600">Creating your image...</p>
                       </div>
                     ) : (
                       <div className="text-center">
-                        <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-500">Image not available</p>
+                        <Sparkles className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+                        <p className="text-neutral-500">Image not available</p>
                       </div>
                     )}
                   </>
@@ -2704,19 +2614,19 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
 
             {/* Info Panel */}
-            <div className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto">
+            <div className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-neutral-200 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto">
               {/* Header */}
-              <div className="p-4 sm:p-6 border-b border-slate-100">
-                <div className="flex items-center gap-2 text-xs text-slate-500 mb-3">
+              <div className="p-4 sm:p-6 border-b border-neutral-100">
+                <div className="flex items-center gap-2 text-xs text-neutral-500 mb-3">
                   <Calendar className="w-3.5 h-3.5" />
                   {formatDate(selectedImage.created_at)}
                   {selectedImage.edit_count > 0 && (
-                    <span className="px-2 py-0.5 bg-slate-100 rounded-full">
+                    <span className="px-2 py-0.5 bg-neutral-100 rounded-full">
                       {selectedImage.edit_count} edit{selectedImage.edit_count !== 1 ? 's' : ''}
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-slate-700 leading-relaxed">
+                <p className="text-sm text-neutral-700 leading-relaxed">
                   {selectedImage.prompt}
                 </p>
               </div>
@@ -2729,10 +2639,10 @@ export function Studio({ brand }: { brand: Brand }) {
                 const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
 
                 return versions.length > 1 ? (
-                  <div className="p-4 border-b border-slate-200 bg-slate-50/50">
+                  <div className="p-4 border-b border-neutral-200 bg-neutral-50/50">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-medium text-slate-600 uppercase tracking-wider">Version History</span>
-                      <span className="text-sm font-medium text-slate-700">
+                      <span className="text-xs font-medium text-neutral-600 uppercase tracking-wider">Version History</span>
+                      <span className="text-sm font-medium text-neutral-700">
                         {currentVersionIndex + 1} / {versions.length}
                       </span>
                     </div>
@@ -2742,8 +2652,8 @@ export function Studio({ brand }: { brand: Brand }) {
                         disabled={!canNavigateLeft}
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
                           canNavigateLeft
-                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
-                            : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
+                            : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
                         }`}
                       >
                         <ChevronLeft className="w-4 h-4" />
@@ -2754,8 +2664,8 @@ export function Studio({ brand }: { brand: Brand }) {
                         disabled={!canNavigateRight}
                         className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
                           canNavigateRight
-                            ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
-                            : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                            ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
+                            : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
                         }`}
                       >
                         <span className="text-sm font-medium">Next</span>
@@ -2763,7 +2673,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       </button>
                     </div>
                     {currentVersion?.edit_prompt && (
-                      <p className="mt-2 text-xs text-slate-500 italic">
+                      <p className="mt-2 text-xs text-neutral-500 italic">
                         "{currentVersion.edit_prompt}"
                       </p>
                     )}
@@ -2773,34 +2683,34 @@ export function Studio({ brand }: { brand: Brand }) {
 
               {/* GPT Prompt Info (for reference) - Only show on localhost */}
               {gptPromptInfo && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-                <div className="p-4 border-t border-slate-200 bg-slate-50/50">
+                <div className="p-4 border-t border-neutral-200 bg-neutral-50/50">
                   <button
                     onClick={() => setShowGptPrompt(!showGptPrompt)}
                     className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
                   >
                     <div className="flex items-center gap-2">
-                      <Wand2 className="w-4 h-4 text-slate-600" />
-                      <span className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      <Wand2 className="w-4 h-4 text-neutral-600" />
+                      <span className="text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                         Generated Prompt
                       </span>
                     </div>
                     {showGptPrompt ? (
-                      <ChevronUp className="w-4 h-4 text-slate-500" />
+                      <ChevronUp className="w-4 h-4 text-neutral-500" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                      <ChevronDown className="w-4 h-4 text-neutral-500" />
                     )}
                   </button>
                   {showGptPrompt && (
                     <div className="mt-3 space-y-3">
-                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
-                        <div className="text-xs font-semibold text-slate-800 mb-2">System Prompt:</div>
-                        <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-slate-50 p-2 rounded border border-slate-100">
+                      <div className="bg-white rounded-lg p-3 border border-neutral-200 shadow-sm">
+                        <div className="text-xs font-semibold text-neutral-800 mb-2">System Prompt:</div>
+                        <pre className="text-xs text-neutral-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-neutral-50 p-2 rounded border border-neutral-100">
                           {gptPromptInfo.system_prompt}
                         </pre>
                       </div>
-                      <div className="bg-white rounded-lg p-3 border border-slate-200 shadow-sm">
-                        <div className="text-xs font-semibold text-slate-800 mb-2">User Message:</div>
-                        <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-slate-50 p-2 rounded border border-slate-100">
+                      <div className="bg-white rounded-lg p-3 border border-neutral-200 shadow-sm">
+                        <div className="text-xs font-semibold text-neutral-800 mb-2">User Message:</div>
+                        <pre className="text-xs text-neutral-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-neutral-50 p-2 rounded border border-neutral-100">
                           {gptPromptInfo.user_message}
                         </pre>
                       </div>
@@ -2810,21 +2720,20 @@ export function Studio({ brand }: { brand: Brand }) {
               )}
 
               {/* Actions */}
-              <div className="p-3 sm:p-4 border-t border-slate-100 flex items-center gap-2">
+              <div className="p-3 sm:p-4 border-t border-neutral-100 flex items-center gap-2">
                 <button
                   onClick={() => {
                     setShowModalEditPrompt(true);
                   }}
                   disabled={modalEditing || selectedImage.edit_count >= selectedImage.max_edits}
-                  className="flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-white text-sm sm:text-base font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ backgroundColor: primaryColor }}
+                  className="btn-primary flex-1 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base"
                 >
                   <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">Edit</span>
                 </button>
                 <button
                   onClick={() => handleDownload(selectedImage)}
-                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 bg-slate-100 hover:bg-slate-200 rounded-lg sm:rounded-xl text-slate-700 font-medium transition-colors"
+                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 bg-neutral-100 hover:bg-neutral-200 rounded-lg sm:rounded-xl text-neutral-700 font-medium transition-colors"
                 >
                   <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
@@ -2838,13 +2747,10 @@ export function Studio({ brand }: { brand: Brand }) {
               className="relative w-full max-w-2xl mt-4 z-[60] px-2 sm:px-0"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xl p-3 sm:p-4">
+              <div className="bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-200 shadow-2xl p-3 sm:p-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div 
-                    className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: `${primaryColor}15` }}
-                  >
-                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: primaryColor }} />
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 bg-brand-primary/[0.15]">
+                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
                   </div>
                   
                   <input
@@ -2876,7 +2782,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       }
                     }}
                     placeholder="What would you like to change?"
-                    className="flex-1 w-full min-w-0 bg-transparent border-none outline-none text-slate-900 placeholder:text-slate-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2"
+                    className="flex-1 w-full min-w-0 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2"
                     disabled={modalEditing}
                   />
 
@@ -2884,19 +2790,14 @@ export function Studio({ brand }: { brand: Brand }) {
                     {/* Attach Assets Button for Modal Edit */}
                     <button
                       onClick={() => setShowMediaLibrary(true)}
-                      className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-100 relative"
+                      className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 transition-colors rounded-lg hover:bg-neutral-100 relative"
                       title="Attach assets"
                       disabled={modalEditing}
                     >
                       <FolderOpen className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Attach Assets</span>
                       {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium"
-                          style={{ 
-                            backgroundColor: primaryColor,
-                            color: 'white',
-                          }}
-                        >
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium bg-brand-primary text-white">
                           {selectedAssets.length + selectedReferences.length}
                         </span>
                       )}
@@ -2907,7 +2808,7 @@ export function Studio({ brand }: { brand: Brand }) {
                         setShowModalEditPrompt(false);
                         setModalEditPrompt('');
                       }}
-                      className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 hover:text-slate-700 transition-colors shrink-0"
+                      className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-700 transition-colors shrink-0"
                       disabled={modalEditing}
                     >
                       <X className="w-4 h-4" />
@@ -2915,8 +2816,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     <button
                       onClick={handleModalEdit}
                       disabled={modalEditing || !modalEditPrompt.trim() || selectedImage.edit_count >= selectedImage.max_edits}
-                      className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-white text-sm sm:text-base font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 min-w-[80px] sm:min-w-0"
-                      style={{ backgroundColor: primaryColor }}
+                      className="btn-primary px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm sm:text-base shrink-0 min-w-[80px] sm:min-w-0"
                     >
                       {modalEditing ? (
                         <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
@@ -2960,17 +2860,17 @@ export function Studio({ brand }: { brand: Brand }) {
                 setSelectedTemplate(null);
                 setTemplateFields({});
               }}
-              className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
+              className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 hover:text-neutral-900 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
             <div className="mb-6 pr-8">
-              <h3 className="text-lg font-bold text-slate-900 mb-1">
+              <h3 className="text-lg font-bold text-neutral-900 mb-1">
                 {selectedTemplate.name}
               </h3>
               {selectedTemplate.description && (
-                <p className="text-sm text-slate-600">
+                <p className="text-sm text-neutral-600">
                   {selectedTemplate.description}
                 </p>
               )}
@@ -2979,7 +2879,7 @@ export function Studio({ brand }: { brand: Brand }) {
             <div className="space-y-4 mb-6">
               {selectedTemplate.fields.map((field) => (
                 <div key={field.name}>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
                     {field.label}
                     {field.required && (
                       <span className="text-red-500 ml-1">*</span>
@@ -2993,7 +2893,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       [field.name]: e.target.value
                     })}
                     placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}`}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition-all"
+                    className="w-full px-4 py-2.5 bg-neutral-50 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-300 transition-all"
                   />
                 </div>
               ))}
@@ -3005,7 +2905,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   setSelectedTemplate(null);
                   setTemplateFields({});
                 }}
-                className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 rounded-xl text-slate-700 font-medium transition-colors"
+                className="flex-1 px-4 py-2.5 bg-neutral-100 hover:bg-neutral-200 rounded-xl text-neutral-700 font-medium transition-colors"
               >
                 Cancel
               </button>
@@ -3052,7 +2952,6 @@ export function Studio({ brand }: { brand: Brand }) {
         selectedAssets={selectedAssets}
         filterType="asset"
         title="Select Assets"
-        primaryColor={primaryColor}
         maxSelection={Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences)}
       />
 
@@ -3068,7 +2967,6 @@ export function Studio({ brand }: { brand: Brand }) {
           setSelectedReferences(filtered);
         }}
         selectedReferences={selectedReferences}
-        primaryColor={primaryColor}
         maxSelection={MAX_TOTAL_IMAGES - autoIncludedImages - currentAssets - selectedStyles.length}
       />
 
@@ -3086,18 +2984,18 @@ export function Studio({ brand }: { brand: Brand }) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-200 gap-3">
+            <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-200 gap-3">
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-1">
+                <h3 className="text-lg sm:text-xl font-bold text-neutral-900 mb-1">
                   Smart Presets
                 </h3>
-                <p className="text-xs sm:text-sm text-slate-600">
+                <p className="text-xs sm:text-sm text-neutral-600">
                   Personalized suggestions for <span className="font-semibold">{brand.name}</span>
                 </p>
               </div>
               <button
                 onClick={() => setShowPresetsModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors shrink-0"
+                className="w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 hover:text-neutral-900 transition-colors shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3107,8 +3005,8 @@ export function Studio({ brand }: { brand: Brand }) {
             <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
               {loadingPresets ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-                  <span className="ml-3 text-slate-600 text-sm">Loading presets...</span>
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
+                  <span className="ml-3 text-neutral-600 text-sm">Loading presets...</span>
                 </div>
               ) : smartPresets.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -3121,51 +3019,42 @@ export function Studio({ brand }: { brand: Brand }) {
                           handlePresetClick(preset);
                           setShowPresetsModal(false);
                         }}
-                        className="group relative bg-white rounded-2xl p-6 border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                        className="group relative bg-white rounded-2xl p-6 border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all text-left flex flex-col h-full"
                       >
                         {/* Tag */}
                         <div className="absolute top-4 left-4">
-                          <span className="text-xs font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
+                          <span className="text-xs font-medium text-neutral-500 bg-neutral-50 px-2.5 py-1 rounded-full border border-neutral-200">
                             {tag}
                           </span>
                         </div>
                         
                         {/* Icon */}
                         <div className="flex items-center justify-center mb-6 mt-2">
-                          <div 
-                            className="w-20 h-20 rounded-2xl flex items-center justify-center"
-                            style={{ 
-                              backgroundColor: `${PRIMARY_COLOR}08`,
-                              color: PRIMARY_COLOR
-                            }}
-                          >
-                            <IconComponent className="w-10 h-10" style={{ color: PRIMARY_COLOR }} />
+                          <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary">
+                            <IconComponent className="w-10 h-10 text-brand-primary" />
                           </div>
                         </div>
                         
                         {/* Title */}
-                        <h4 className="font-semibold text-slate-900 mb-2 text-base leading-tight">
+                        <h4 className="font-semibold text-neutral-900 mb-2 text-base leading-tight">
                           {preset.label}
                         </h4>
                         
                         {/* Description */}
                         {preset.smartContext?.whyRelevant ? (
-                          <p className="text-sm text-slate-600 mb-4 flex-1 leading-relaxed">
+                          <p className="text-sm text-neutral-600 mb-4 flex-1 leading-relaxed">
                             {preset.smartContext.whyRelevant}
                           </p>
                         ) : (
-                          <p className="text-sm text-slate-600 mb-4 flex-1 leading-relaxed">
+                          <p className="text-sm text-neutral-600 mb-4 flex-1 leading-relaxed">
                             {preset.category}
                           </p>
                         )}
                         
                         {/* Create Button */}
-                        <div className="mt-auto pt-4 border-t border-slate-100">
+                        <div className="mt-auto pt-4 border-t border-neutral-100">
                           <button
-                            className="w-full py-2.5 rounded-lg text-sm font-medium text-white transition-all hover:shadow-md"
-                            style={{ backgroundColor: PRIMARY_COLOR }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2a26a0'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = PRIMARY_COLOR}
+                            className="btn-primary w-full py-2.5 rounded-lg text-sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               handlePresetClick(preset);
@@ -3180,7 +3069,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-12 text-slate-500">
+                <div className="text-center py-12 text-neutral-500">
                   <p>No presets available. You can still create images using the input below.</p>
                 </div>
               )}
@@ -3202,19 +3091,19 @@ export function Studio({ brand }: { brand: Brand }) {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-slate-200">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-neutral-200">
               <div>
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-bold text-neutral-900 flex items-center gap-2">
                   <Columns className="w-5 h-5" />
                   Side-by-Side Comparison
                 </h3>
-                <p className="text-sm text-slate-600 mt-1">
+                <p className="text-sm text-neutral-600 mt-1">
                   Prompt: "{prompt.substring(0, 60)}{prompt.length > 60 ? '...' : ''}"
                 </p>
               </div>
               <button
                 onClick={() => setShowComparisonModal(false)}
-                className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 transition-colors"
+                className="w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 hover:text-neutral-900 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3226,15 +3115,15 @@ export function Studio({ brand }: { brand: Brand }) {
                 {/* V1 Result */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 bg-slate-900 text-white text-xs font-medium rounded-md">
+                    <span className="px-2.5 py-1 bg-neutral-900 text-white text-xs font-medium rounded-md">
                       V1
                     </span>
-                    <span className="text-xs text-slate-500">GPT + Complex</span>
+                    <span className="text-xs text-neutral-500">GPT + Complex</span>
                   </div>
                   
                   {comparisonResults.v1 ? (
                     <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200">
                         <img 
                           src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
                           alt="V1 Result"
@@ -3243,12 +3132,12 @@ export function Studio({ brand }: { brand: Brand }) {
                       </div>
                       
                       {comparisonResults.v1.gpt_prompt_info && (
-                        <details className="bg-slate-50 rounded-lg border border-slate-200">
-                          <summary className="px-3 py-2 text-xs font-medium text-slate-600 cursor-pointer hover:bg-slate-100">
+                        <details className="bg-neutral-50 rounded-lg border border-neutral-200">
+                          <summary className="px-3 py-2 text-xs font-medium text-neutral-600 cursor-pointer hover:bg-neutral-100">
                             View Prompt
                           </summary>
                           <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
                               {comparisonResults.v1.gpt_prompt_info.full_prompt}
                             </pre>
                           </div>
@@ -3269,12 +3158,12 @@ export function Studio({ brand }: { brand: Brand }) {
                       <FlaskConical className="w-3 h-3" />
                       V2
                     </span>
-                    <span className="text-xs text-slate-500">Design-type aware</span>
+                    <span className="text-xs text-neutral-500">Design-type aware</span>
                   </div>
                   
                   {comparisonResults.v2 ? (
                     <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-emerald-200">
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-emerald-200">
                         <img 
                           src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
                           alt="V2 Result"
@@ -3288,7 +3177,7 @@ export function Studio({ brand }: { brand: Brand }) {
                             View Prompt
                           </summary>
                           <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
                               {comparisonResults.v2.gpt_prompt_info.full_prompt}
                             </pre>
                           </div>
@@ -3309,12 +3198,12 @@ export function Studio({ brand }: { brand: Brand }) {
                       <Zap className="w-3 h-3" />
                       V3
                     </span>
-                    <span className="text-xs text-slate-500">Lean & Direct</span>
+                    <span className="text-xs text-neutral-500">Lean & Direct</span>
                   </div>
                   
                   {comparisonResults.v3 ? (
                     <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-slate-100 border border-amber-200">
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-amber-200">
                         <img 
                           src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
                           alt="V3 Result"
@@ -3328,7 +3217,7 @@ export function Studio({ brand }: { brand: Brand }) {
                             View Prompt
                           </summary>
                           <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
+                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
                               {comparisonResults.v3.prompt_used}
                             </pre>
                           </div>
@@ -3345,8 +3234,8 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-t border-slate-200 bg-slate-50">
-              <p className="text-xs text-slate-500">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-t border-neutral-200 bg-neutral-50">
+              <p className="text-xs text-neutral-500">
                 Comparison uses 1 credit. Select a version to save it to your gallery.
               </p>
               <div className="flex items-center gap-2">
@@ -3355,7 +3244,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     setShowComparisonModal(false);
                     setCompareMode(false);
                   }}
-                  className="px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                  className="px-3 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
                   disabled={!!savingComparison}
                 >
                   Close
@@ -3363,7 +3252,7 @@ export function Studio({ brand }: { brand: Brand }) {
                 <button
                   onClick={() => handleSaveComparisonImage('v1')}
                   disabled={!comparisonResults?.v1 || !!savingComparison}
-                  className="px-3 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  className="px-3 py-2 text-sm font-medium text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {savingComparison === 'v1' ? (
                     <>
@@ -3417,20 +3306,7 @@ export function Studio({ brand }: { brand: Brand }) {
           setSelectedStyles(filtered);
         }}
         selectedStyles={selectedStyles}
-        primaryColor={primaryColor}
       />
-
-      <style>{`
-        @keyframes blob {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -50px) scale(1.1); }
-          66% { transform: translate(-20px, 20px) scale(0.9); }
-        }
-        .animate-blob { animation: blob 7s infinite; }
-        .animation-delay-2000 { animation-delay: 2s; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
     </div>
   );
 }

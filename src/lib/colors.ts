@@ -1,21 +1,33 @@
-// Brand color palette
+/**
+ * Brand Color Palette
+ *
+ * IMPORTANT: This file re-exports from the design system for backwards compatibility.
+ * For new code, prefer importing directly from './design-system'.
+ */
+
+import { colors } from './design-system';
+
+// Brand color palette (re-export for backwards compatibility)
 export const BRAND_COLORS = {
   // Primary colors
-  royalBlue: '#3531B7',      // Primary actions, buttons, CTAs, accents
-  darkBlue: '#0D0D31',        // Headers, dark backgrounds, primary text
-  brightSnow: '#F8F7F9',     // Background color
-  
+  royalBlue: colors.brand.primary,       // Primary actions, buttons, CTAs, accents
+  darkBlue: colors.neutral[900],         // Headers, dark backgrounds, primary text
+  brightSnow: colors.neutral[50],        // Background color
+
   // Secondary colors
-  mediumGray: '#6B6F85',     // Secondary text, borders, subtle elements, placeholders
-  darkRed: '#840E25',        // Errors, warnings, critical actions, destructive buttons
+  mediumGray: colors.neutral[500],       // Secondary text, borders, subtle elements
+  darkRed: colors.semantic.errorDark,    // Errors, warnings, critical actions
 } as const;
 
 // Convenience exports for UI elements
-export const PRIMARY_COLOR = BRAND_COLORS.royalBlue;
-export const SECONDARY_COLOR = BRAND_COLORS.royalBlue; // For gradients, can use darkBlue for variety
-export const BACKGROUND_COLOR = BRAND_COLORS.brightSnow;
-export const TEXT_PRIMARY = BRAND_COLORS.darkBlue;
-export const TEXT_SECONDARY = BRAND_COLORS.mediumGray;
-export const ERROR_COLOR = BRAND_COLORS.darkRed;
-export const BORDER_COLOR = BRAND_COLORS.mediumGray;
+export const PRIMARY_COLOR = colors.brand.primary;
+export const PRIMARY_COLOR_HOVER = colors.brand.primaryHover;
+export const SECONDARY_COLOR = colors.brand.primaryHover; // For gradients
+export const BACKGROUND_COLOR = colors.neutral[50];
+export const TEXT_PRIMARY = colors.neutral[800];
+export const TEXT_SECONDARY = colors.neutral[500];
+export const ERROR_COLOR = colors.semantic.error;
+export const BORDER_COLOR = colors.neutral[200];
 
+// New exports from design system
+export { colors } from './design-system';

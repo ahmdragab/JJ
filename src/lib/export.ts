@@ -24,6 +24,11 @@ export async function exportToHTML(design: Design, template: Template): Promise<
 
   let html = '';
 
+  // Early return if style is not defined
+  if (!template.style) {
+    throw new Error('Template style is not configured');
+  }
+
   if (template.type === 'web_hero' && template.style.layout === 'split') {
     html = `
 <!DOCTYPE html>
@@ -129,8 +134,7 @@ export async function exportToPNG(design: Design, template: Template): Promise<v
   const renderElement = document.querySelector('[data-template-renderer]') as HTMLElement;
 
   if (!renderElement) {
-    alert('Unable to find design to export');
-    return;
+    throw new Error('Unable to find design to export');
   }
 
   try {
@@ -159,10 +163,10 @@ export async function exportToPNG(design: Design, template: Template): Promise<v
       return '#000000';
     };
 
-    ctx.fillStyle = getColor(template.style.background as string);
+    ctx.fillStyle = template.style ? getColor(template.style.background as string) : '#ffffff';
     ctx.fillRect(0, 0, 1920, 1080);
 
-    ctx.fillStyle = getColor(template.style.headline_color as string);
+    ctx.fillStyle = template.style ? getColor(template.style.headline_color as string) : '#000000';
     ctx.font = 'bold 60px Inter';
     ctx.fillText(design.slots.headline || 'Your Headline', 100, 300, 800);
 
@@ -180,6 +184,6 @@ export async function exportToPNG(design: Design, template: Template): Promise<v
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Failed to export PNG:', error);
-    alert('Failed to export PNG. Please try again.');
+    throw new Error('Failed to export PNG. Please try again.');
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, Image as ImageIcon, Palette } from 'lucide-react';
 import { Brand, BrandAsset, supabase } from '../lib/supabase';
-import { PRIMARY_COLOR, SECONDARY_COLOR } from '../lib/colors';
+import { useToast } from '../components/Toast';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
 
@@ -29,7 +29,7 @@ export function BrandKitEditor({
   onUpdate,
   onReExtract,
   onContinue,
-  onBack,
+  onBack: _onBack,
 }: {
   brand: Brand;
   onUpdate: (updates: Partial<Brand>) => void;
@@ -37,6 +37,8 @@ export function BrandKitEditor({
   onContinue: () => void;
   onBack: () => void;
 }) {
+  void _onBack; // Navigation handled by parent
+  const toast = useToast();
   const [localBrand, setLocalBrand] = useState(brand);
   const [saving, setSaving] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -155,13 +157,13 @@ export function BrandKitEditor({
     ];
     
     if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
-      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUploaded file: ${file.name}`);
+      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only. File: ${file.name}`);
       return;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('File size must be less than 5MB');
+      toast.error('File Too Large', 'File size must be less than 5MB');
       return;
     }
 
@@ -219,7 +221,7 @@ export function BrandKitEditor({
       setNewAssetType('asset');
     } catch (error) {
       console.error('Asset upload failed:', error);
-      alert('Failed to upload asset. Please try again.');
+      toast.error('Upload Failed', 'Failed to upload asset. Please try again.');
     } finally {
       setUploadingAsset(false);
       e.target.value = '';
@@ -251,7 +253,7 @@ export function BrandKitEditor({
       setBrandAssets(prev => prev.filter(a => a.id !== asset.id));
     } catch (error) {
       console.error('Failed to delete asset:', error);
-      alert('Failed to delete asset.');
+      toast.error('Delete Failed', 'Failed to delete asset.');
     } finally {
       setDeletingAssetId(null);
     }
@@ -376,13 +378,13 @@ export function BrandKitEditor({
     ];
     
     if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
-      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUploaded file: ${file.name}`);
+      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only. File: ${file.name}`);
       return;
     }
 
     // Validate file size (max 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      alert('File size must be less than 2MB');
+      toast.error('File Too Large', 'File size must be less than 2MB');
       return;
     }
 
@@ -437,7 +439,7 @@ export function BrandKitEditor({
     } catch (error) {
       console.error('Logo upload failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Failed to upload logo: ${errorMessage}`);
+      toast.error('Upload Failed', `Failed to upload logo: ${errorMessage}`);
     } finally {
       setUploadingLogo(null);
       // Reset input
@@ -463,9 +465,9 @@ export function BrandKitEditor({
     onContinue();
   };
 
-  // Use fixed brand colors instead of brand's extracted colors
-  const primaryColor = PRIMARY_COLOR;
-  const secondaryColor = SECONDARY_COLOR;
+  // Use fixed brand colors from design system
+  const primaryColor = '#3531B7';
+  const secondaryColor = '#5B57D1';
 
   // Exit comparison mode and apply selections
   const handleApplySelections = () => {
@@ -491,18 +493,18 @@ export function BrandKitEditor({
     return (
       <div className="min-h-screen" style={{ backgroundColor: '#F8F7F9' }}>
         {/* Comparison Header */}
-        <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-slate-200">
+        <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-neutral-200">
           <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
             <button
               onClick={handleCancelComparison}
-              className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+              className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               <span className="text-sm font-medium">Cancel</span>
             </button>
             <div className="text-center">
-              <h1 className="text-lg font-semibold text-slate-900">Compare Extractions</h1>
-              <p className="text-xs text-slate-500">Select the best version for each section</p>
+              <h1 className="text-lg font-semibold text-neutral-900">Compare Extractions</h1>
+              <p className="text-xs text-neutral-500">Select the best version for each section</p>
             </div>
             <button
               onClick={handleApplySelections}
@@ -519,7 +521,7 @@ export function BrandKitEditor({
         <main className="max-w-6xl mx-auto px-6 py-12">
           {/* Colors Comparison */}
           <section className="mb-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Colors</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Colors</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <ComparisonCard
                 label="Original"
@@ -566,7 +568,7 @@ export function BrandKitEditor({
 
           {/* Fonts Comparison */}
           <section className="mb-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Typography</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Typography</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <ComparisonCard
                 label="Original"
@@ -576,14 +578,14 @@ export function BrandKitEditor({
               >
                 <div className="space-y-4">
                   <div>
-                    <span className="text-xs text-slate-400 block mb-1">Heading</span>
-                    <p className="text-2xl text-slate-800" style={{ fontFamily: brand.fonts.heading ? `"${brand.fonts.heading}", sans-serif` : 'inherit' }}>
+                    <span className="text-xs text-neutral-400 block mb-1">Heading</span>
+                    <p className="text-2xl text-neutral-800" style={{ fontFamily: brand.fonts.heading ? `"${brand.fonts.heading}", sans-serif` : 'inherit' }}>
                       {brand.fonts.heading || 'Not detected'}
                     </p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-400 block mb-1">Body</span>
-                    <p className="text-base text-slate-600" style={{ fontFamily: brand.fonts.body ? `"${brand.fonts.body}", sans-serif` : 'inherit' }}>
+                    <span className="text-xs text-neutral-400 block mb-1">Body</span>
+                    <p className="text-base text-neutral-600" style={{ fontFamily: brand.fonts.body ? `"${brand.fonts.body}", sans-serif` : 'inherit' }}>
                       {brand.fonts.body || 'Not detected'}
                     </p>
                   </div>
@@ -597,14 +599,14 @@ export function BrandKitEditor({
               >
                 <div className="space-y-4">
                   <div>
-                    <span className="text-xs text-slate-400 block mb-1">Heading</span>
-                    <p className="text-2xl text-slate-800" style={{ fontFamily: alternativeBrand.fonts?.heading ? `"${alternativeBrand.fonts.heading}", sans-serif` : 'inherit' }}>
+                    <span className="text-xs text-neutral-400 block mb-1">Heading</span>
+                    <p className="text-2xl text-neutral-800" style={{ fontFamily: alternativeBrand.fonts?.heading ? `"${alternativeBrand.fonts.heading}", sans-serif` : 'inherit' }}>
                       {alternativeBrand.fonts?.heading || 'Not detected'}
                     </p>
                   </div>
                   <div>
-                    <span className="text-xs text-slate-400 block mb-1">Body</span>
-                    <p className="text-base text-slate-600" style={{ fontFamily: alternativeBrand.fonts?.body ? `"${alternativeBrand.fonts.body}", sans-serif` : 'inherit' }}>
+                    <span className="text-xs text-neutral-400 block mb-1">Body</span>
+                    <p className="text-base text-neutral-600" style={{ fontFamily: alternativeBrand.fonts?.body ? `"${alternativeBrand.fonts.body}", sans-serif` : 'inherit' }}>
                       {alternativeBrand.fonts?.body || 'Not detected'}
                     </p>
                   </div>
@@ -615,7 +617,7 @@ export function BrandKitEditor({
 
           {/* Logos Comparison */}
           <section className="mb-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Logos</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Logos</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <ComparisonCard
                 label="Original"
@@ -644,15 +646,15 @@ export function BrandKitEditor({
                     ))}
                   </div>
                 ) : brand.logos.primary ? (
-                  <div className="flex items-center justify-center h-32 bg-slate-50 rounded-xl">
+                  <div className="flex items-center justify-center h-32 bg-neutral-50 rounded-xl">
                     <img src={brand.logos.primary} alt="Original logo" className="max-h-24 max-w-full object-contain" />
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-32 bg-slate-50 rounded-xl">
-                    <span className="text-slate-300">No logo detected</span>
+                  <div className="flex items-center justify-center h-32 bg-neutral-50 rounded-xl">
+                    <span className="text-neutral-300">No logo detected</span>
                   </div>
                 )}
-                <p className="text-xs text-slate-400 mt-3 text-center">
+                <p className="text-xs text-neutral-400 mt-3 text-center">
                   {brand.all_logos?.length || (brand.logos.primary ? 1 : 0)} logo(s)
                 </p>
               </ComparisonCard>
@@ -683,15 +685,15 @@ export function BrandKitEditor({
                     ))}
                   </div>
                 ) : alternativeBrand.logos?.primary ? (
-                  <div className="flex items-center justify-center h-32 bg-slate-50 rounded-xl">
+                  <div className="flex items-center justify-center h-32 bg-neutral-50 rounded-xl">
                     <img src={alternativeBrand.logos.primary} alt="Alternative logo" className="max-h-24 max-w-full object-contain" />
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-32 bg-slate-50 rounded-xl">
-                    <span className="text-slate-300">No logo detected</span>
+                  <div className="flex items-center justify-center h-32 bg-neutral-50 rounded-xl">
+                    <span className="text-neutral-300">No logo detected</span>
                   </div>
                 )}
-                <p className="text-xs text-slate-400 mt-3 text-center">
+                <p className="text-xs text-neutral-400 mt-3 text-center">
                   {alternativeBrand.all_logos?.length || (alternativeBrand.logos?.primary ? 1 : 0)} logo(s)
                 </p>
               </ComparisonCard>
@@ -700,7 +702,7 @@ export function BrandKitEditor({
 
           {/* Voice Comparison */}
           <section className="mb-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Brand Voice</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Brand Voice</h2>
             <div className="grid md:grid-cols-2 gap-6">
               <ComparisonCard
                 label="Original"
@@ -710,19 +712,19 @@ export function BrandKitEditor({
               >
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">Formality</span>
-                    <span className="text-sm text-slate-800 capitalize">{brand.voice.formality || 'N/A'}</span>
+                    <span className="text-sm text-neutral-500">Formality</span>
+                    <span className="text-sm text-neutral-800 capitalize">{brand.voice.formality || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">Energy</span>
-                    <span className="text-sm text-slate-800 capitalize">{brand.voice.energy || 'N/A'}</span>
+                    <span className="text-sm text-neutral-500">Energy</span>
+                    <span className="text-sm text-neutral-800 capitalize">{brand.voice.energy || 'N/A'}</span>
                   </div>
                   {brand.voice.keywords && brand.voice.keywords.length > 0 && (
                     <div className="pt-2">
-                      <span className="text-xs text-slate-400 block mb-2">Keywords</span>
+                      <span className="text-xs text-neutral-400 block mb-2">Keywords</span>
                       <div className="flex flex-wrap gap-1">
                         {brand.voice.keywords.slice(0, 5).map((kw) => (
-                          <span key={kw} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">{kw}</span>
+                          <span key={kw} className="px-2 py-0.5 bg-neutral-100 text-neutral-600 text-xs rounded-full">{kw}</span>
                         ))}
                       </div>
                     </div>
@@ -737,19 +739,19 @@ export function BrandKitEditor({
               >
                 <div className="space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">Formality</span>
-                    <span className="text-sm text-slate-800 capitalize">{alternativeBrand.voice?.formality || 'N/A'}</span>
+                    <span className="text-sm text-neutral-500">Formality</span>
+                    <span className="text-sm text-neutral-800 capitalize">{alternativeBrand.voice?.formality || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-sm text-slate-500">Energy</span>
-                    <span className="text-sm text-slate-800 capitalize">{alternativeBrand.voice?.energy || 'N/A'}</span>
+                    <span className="text-sm text-neutral-500">Energy</span>
+                    <span className="text-sm text-neutral-800 capitalize">{alternativeBrand.voice?.energy || 'N/A'}</span>
                   </div>
                   {alternativeBrand.voice?.keywords && alternativeBrand.voice.keywords.length > 0 && (
                     <div className="pt-2">
-                      <span className="text-xs text-slate-400 block mb-2">Keywords</span>
+                      <span className="text-xs text-neutral-400 block mb-2">Keywords</span>
                       <div className="flex flex-wrap gap-1">
                         {alternativeBrand.voice.keywords.slice(0, 5).map((kw) => (
-                          <span key={kw} className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">{kw}</span>
+                          <span key={kw} className="px-2 py-0.5 bg-neutral-100 text-neutral-600 text-xs rounded-full">{kw}</span>
                         ))}
                       </div>
                     </div>
@@ -760,8 +762,8 @@ export function BrandKitEditor({
           </section>
 
           {/* Selection Summary */}
-          <section className="bg-white rounded-2xl p-8 border border-slate-200">
-            <h3 className="text-sm font-medium text-slate-800 mb-4">Your Selections</h3>
+          <section className="bg-white rounded-2xl p-8 border border-neutral-200">
+            <h3 className="text-sm font-medium text-neutral-800 mb-4">Your Selections</h3>
             <div className="flex flex-wrap gap-3">
               {Object.entries(selections).map(([section, choice]) => (
                 <div 
@@ -817,23 +819,23 @@ export function BrandKitEditor({
           </div>
 
           {/* Main heading */}
-          <h2 className="text-3xl font-light text-slate-800 mb-2 tracking-tight">
+          <h2 className="text-3xl font-light text-neutral-800 mb-2 tracking-tight">
             Extracting Brand Identity
           </h2>
 
           {/* Current step */}
           <div className="mb-8">
-            <p className="text-lg font-medium text-slate-700 mb-1">
+            <p className="text-lg font-medium text-neutral-700 mb-1">
               {steps[currentExtractionStep].label}
             </p>
-            <p className="text-slate-500 text-sm">
+            <p className="text-neutral-500 text-sm">
               {steps[currentExtractionStep].description}
             </p>
           </div>
 
           {/* Progress steps indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
-            {steps.map((step, index) => (
+            {steps.map((_, index) => (
               <div
                 key={index}
                 className={`h-2 rounded-full transition-all duration-500 ${
@@ -851,8 +853,8 @@ export function BrandKitEditor({
           </div>
 
           {/* Additional info */}
-          <div className="mt-8 pt-6 border-t border-slate-200">
-            <p className="text-xs text-slate-400">
+          <div className="mt-8 pt-6 border-t border-neutral-200">
+            <p className="text-xs text-neutral-400">
               This usually takes 30-60 seconds. We're analyzing your brand's visual identity...
             </p>
           </div>
@@ -896,10 +898,10 @@ export function BrandKitEditor({
             <div className="flex-1 pt-0 sm:pt-2 text-center sm:text-left w-full">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
                 <div>
-                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-slate-900 tracking-tight mb-2">
+                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-neutral-900 tracking-tight mb-2">
                     {localBrand.name}
                   </h1>
-                  <p className="text-slate-400 text-base sm:text-lg">{localBrand.domain}</p>
+                  <p className="text-neutral-400 text-base sm:text-lg">{localBrand.domain}</p>
                 </div>
                 <button
                   onClick={handleSaveAndContinue}
@@ -915,36 +917,36 @@ export function BrandKitEditor({
                 </button>
               </div>
               {localBrand.slogan && (
-                <p className="text-xl text-slate-600 font-light italic max-w-xl mb-4">
+                <p className="text-xl text-neutral-600 font-light italic max-w-xl mb-4">
                   "{localBrand.slogan}"
                 </p>
               )}
               {/* Summary/Description */}
-              {(localBrand.styleguide?.summary || localBrand.extraction_data?.summary) && (
-                <p className="text-sm text-slate-500 max-w-2xl leading-relaxed">
-                  {(localBrand.styleguide?.summary || localBrand.extraction_data?.summary) as string}
+              {(localBrand.styleguide?.summary || (localBrand.extraction_data as { summary?: string })?.summary) && (
+                <p className="text-sm text-neutral-500 max-w-2xl leading-relaxed">
+                  {String(localBrand.styleguide?.summary || (localBrand.extraction_data as { summary?: string })?.summary || '')}
                 </p>
               )}
               
               {/* Quick Stats */}
               <div className="flex gap-6 sm:gap-8 mt-6 sm:mt-8 justify-center sm:justify-start">
                 <div>
-                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-neutral-800">
                     {localBrand.all_logos?.length || 1}
                   </div>
-                  <div className="text-xs text-slate-400 uppercase tracking-wider">Logos</div>
+                  <div className="text-xs text-neutral-400 uppercase tracking-wider">Logos</div>
                 </div>
                 <div>
-                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-neutral-800">
                     {Object.values(localBrand.colors).filter(Boolean).length}
                   </div>
-                  <div className="text-xs text-slate-400 uppercase tracking-wider">Colors</div>
+                  <div className="text-xs text-neutral-400 uppercase tracking-wider">Colors</div>
                 </div>
                 <div>
-                  <div className="text-2xl sm:text-3xl font-light text-slate-800">
+                  <div className="text-2xl sm:text-3xl font-light text-neutral-800">
                     {[localBrand.fonts.heading, localBrand.fonts.body].filter(Boolean).length}
                   </div>
-                  <div className="text-xs text-slate-400 uppercase tracking-wider">Fonts</div>
+                  <div className="text-xs text-neutral-400 uppercase tracking-wider">Fonts</div>
                 </div>
               </div>
             </div>
@@ -955,7 +957,7 @@ export function BrandKitEditor({
       <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-12 sm:pb-20">
         {/* Color Palette - Full Width */}
         <section className="mb-12 sm:mb-16">
-          <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Color Palette</h2>
+          <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-4 sm:mb-6">Color Palette</h2>
           <div className="flex gap-2 sm:gap-3 md:gap-4 h-28 sm:h-32 md:h-36 overflow-x-auto pb-2">
             {['primary', 'secondary', 'background', 'surface', 'text_primary'].map((key) => {
               const color = localBrand.colors[key as keyof typeof localBrand.colors] || '#e5e5e5';
@@ -1000,7 +1002,7 @@ export function BrandKitEditor({
         <div className="grid lg:grid-cols-2 gap-8 sm:gap-10 md:gap-12">
           {/* Typography */}
           <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Typography</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-4 sm:mb-6">Typography</h2>
             <div className="space-y-6 sm:space-y-8">
               {/* Heading Font */}
               <div 
@@ -1010,17 +1012,17 @@ export function BrandKitEditor({
                 }}
               >
                 <div className="flex items-center justify-between mb-6">
-                  <span className="text-xs uppercase tracking-wider text-slate-400">Heading</span>
+                  <span className="text-xs uppercase tracking-wider text-neutral-400">Heading</span>
                   <input
                     type="text"
                     value={localBrand.fonts.heading || ''}
                     onChange={(e) => updateFont('heading', e.target.value)}
                     placeholder="Not detected"
-                    className="text-right text-sm text-slate-600 bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                    className="text-right text-sm text-neutral-600 bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-neutral-300"
                   />
                 </div>
                 <p
-                  className="text-4xl text-slate-800 leading-tight"
+                  className="text-4xl text-neutral-800 leading-tight"
                   style={{ fontFamily: localBrand.fonts.heading ? `"${localBrand.fonts.heading}", sans-serif` : 'inherit' }}
                 >
                   The quick brown<br />fox jumps over
@@ -1028,19 +1030,19 @@ export function BrandKitEditor({
               </div>
 
               {/* Body Font */}
-              <div className="p-8 rounded-2xl bg-white border border-slate-100">
+              <div className="p-8 rounded-2xl bg-white border border-neutral-100">
                 <div className="flex items-center justify-between mb-6">
-                  <span className="text-xs uppercase tracking-wider text-slate-400">Body</span>
+                  <span className="text-xs uppercase tracking-wider text-neutral-400">Body</span>
                   <input
                     type="text"
                     value={localBrand.fonts.body || ''}
                     onChange={(e) => updateFont('body', e.target.value)}
                     placeholder="Not detected"
-                    className="text-right text-sm text-slate-600 bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                    className="text-right text-sm text-neutral-600 bg-transparent border-none focus:outline-none focus:ring-0 placeholder:text-neutral-300"
                   />
                 </div>
                 <p
-                  className="text-lg text-slate-600 leading-relaxed"
+                  className="text-lg text-neutral-600 leading-relaxed"
                   style={{ fontFamily: localBrand.fonts.body ? `"${localBrand.fonts.body}", sans-serif` : 'inherit' }}
                 >
                   Typography is the art and technique of arranging type to make written language legible, readable and appealing when displayed.
@@ -1051,12 +1053,12 @@ export function BrandKitEditor({
 
           {/* Logo & Icon */}
           <section>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Brand Assets</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-4 sm:mb-6">Brand Assets</h2>
             <div className="grid grid-cols-2 gap-4 sm:gap-6">
               {/* Primary Logo */}
               <div className="space-y-3">
                 <label 
-                  className="relative block aspect-[3/2] rounded-2xl border border-slate-200 cursor-pointer group overflow-hidden"
+                  className="relative block aspect-[3/2] rounded-2xl border border-neutral-200 cursor-pointer group overflow-hidden"
                   style={{
                     backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
                     backgroundSize: '20px 20px',
@@ -1079,7 +1081,7 @@ export function BrandKitEditor({
                       className="w-full h-full object-contain p-6"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-neutral-300">
                       <Upload className="w-8 h-8 mb-2" />
                       <span className="text-sm">No logo</span>
                     </div>
@@ -1098,14 +1100,14 @@ export function BrandKitEditor({
                   </div>
                 </label>
                 <div className="text-center">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Logo</div>
+                  <div className="text-xs uppercase tracking-wider text-neutral-500">Logo</div>
                 </div>
               </div>
 
               {/* Icon / Favicon */}
               <div className="space-y-3">
                 <label 
-                  className="relative block aspect-[3/2] rounded-2xl border border-slate-200 cursor-pointer group overflow-hidden"
+                  className="relative block aspect-[3/2] rounded-2xl border border-neutral-200 cursor-pointer group overflow-hidden"
                   style={{
                     backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
                     backgroundSize: '20px 20px',
@@ -1135,7 +1137,7 @@ export function BrandKitEditor({
                       );
                     }
                     return (
-                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
+                      <div className="w-full h-full flex flex-col items-center justify-center text-neutral-300">
                         <Upload className="w-8 h-8 mb-2" />
                         <span className="text-sm">No icon</span>
                       </div>
@@ -1155,7 +1157,7 @@ export function BrandKitEditor({
                   </div>
                 </label>
                 <div className="text-center">
-                  <div className="text-xs uppercase tracking-wider text-slate-500">Icon / Favicon</div>
+                  <div className="text-xs uppercase tracking-wider text-neutral-500">Icon / Favicon</div>
                 </div>
               </div>
             </div>
@@ -1165,7 +1167,7 @@ export function BrandKitEditor({
         {/* Brand Voice - Horizontal */}
         {localBrand.voice && (localBrand.voice.formality || localBrand.voice.energy || (localBrand.voice.keywords && localBrand.voice.keywords.length > 0)) && (
           <section className="mt-12 sm:mt-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-4 sm:mb-6">Brand Voice</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-4 sm:mb-6">Brand Voice</h2>
             <div 
               className="p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-6 sm:gap-8 md:gap-12"
               style={{
@@ -1174,19 +1176,19 @@ export function BrandKitEditor({
             >
               {localBrand.voice.formality && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Formality</div>
-                  <div className="text-2xl font-light text-slate-700 capitalize">{localBrand.voice.formality}</div>
+                  <div className="text-xs uppercase tracking-wider text-neutral-400 mb-2">Formality</div>
+                  <div className="text-2xl font-light text-neutral-700 capitalize">{localBrand.voice.formality}</div>
                 </div>
               )}
               {localBrand.voice.energy && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Energy</div>
-                  <div className="text-2xl font-light text-slate-700 capitalize">{localBrand.voice.energy}</div>
+                  <div className="text-xs uppercase tracking-wider text-neutral-400 mb-2">Energy</div>
+                  <div className="text-2xl font-light text-neutral-700 capitalize">{localBrand.voice.energy}</div>
                 </div>
               )}
               {localBrand.voice.keywords && localBrand.voice.keywords.length > 0 && (
                 <div className="flex-1">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-3">Keywords</div>
+                  <div className="text-xs uppercase tracking-wider text-neutral-400 mb-3">Keywords</div>
                   <div className="flex flex-wrap gap-2">
                     {localBrand.voice.keywords.map((keyword) => (
                       <span
@@ -1210,9 +1212,9 @@ export function BrandKitEditor({
         {/* Asset Library */}
         <section className="mt-16">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400">
               Asset Library
-              <span className="ml-2 text-slate-300 font-normal">({brandAssets.length})</span>
+              <span className="ml-2 text-neutral-300 font-normal">({brandAssets.length})</span>
             </h2>
             <button
               onClick={() => setShowUploadModal(true)}
@@ -1232,69 +1234,69 @@ export function BrandKitEditor({
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
               <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-lg font-semibold text-slate-800">Upload Asset</h3>
+                  <h3 className="text-lg font-semibold text-neutral-800">Upload Asset</h3>
                   <button
                     onClick={() => {
                       setShowUploadModal(false);
                       setNewAssetName('');
                       setNewAssetCategory('');
                     }}
-                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
                   >
-                    <X className="w-5 h-5 text-slate-400" />
+                    <X className="w-5 h-5 text-neutral-400" />
                   </button>
                 </div>
 
                 {/* Asset Type Selection */}
                 <div className="mb-4">
-                  <label className="text-sm font-medium text-slate-700 block mb-2">Type</label>
+                  <label className="text-sm font-medium text-neutral-700 block mb-2">Type</label>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setNewAssetType('asset')}
                       className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
                         newAssetType === 'asset'
                           ? 'border-emerald-500 bg-emerald-50'
-                          : 'border-slate-200 hover:border-slate-300'
+                          : 'border-neutral-200 hover:border-neutral-300'
                       }`}
                     >
-                      <ImageIcon className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'asset' ? 'text-emerald-600' : 'text-slate-400'}`} />
-                      <div className={`text-sm font-medium ${newAssetType === 'asset' ? 'text-emerald-700' : 'text-slate-600'}`}>Asset</div>
-                      <div className="text-xs text-slate-400">Include in design</div>
+                      <ImageIcon className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'asset' ? 'text-emerald-600' : 'text-neutral-400'}`} />
+                      <div className={`text-sm font-medium ${newAssetType === 'asset' ? 'text-emerald-700' : 'text-neutral-600'}`}>Asset</div>
+                      <div className="text-xs text-neutral-400">Include in design</div>
                     </button>
                     <button
                       onClick={() => setNewAssetType('reference')}
                       className={`flex-1 py-3 px-4 rounded-xl border-2 transition-all ${
                         newAssetType === 'reference'
                           ? 'border-purple-500 bg-purple-50'
-                          : 'border-slate-200 hover:border-slate-300'
+                          : 'border-neutral-200 hover:border-neutral-300'
                       }`}
                     >
-                      <Palette className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'reference' ? 'text-purple-600' : 'text-slate-400'}`} />
-                      <div className={`text-sm font-medium ${newAssetType === 'reference' ? 'text-purple-700' : 'text-slate-600'}`}>Reference</div>
-                      <div className="text-xs text-slate-400">Style inspiration</div>
+                      <Palette className={`w-5 h-5 mx-auto mb-1 ${newAssetType === 'reference' ? 'text-purple-600' : 'text-neutral-400'}`} />
+                      <div className={`text-sm font-medium ${newAssetType === 'reference' ? 'text-purple-700' : 'text-neutral-600'}`}>Reference</div>
+                      <div className="text-xs text-neutral-400">Style inspiration</div>
                     </button>
                   </div>
                 </div>
 
                 {/* Asset Name */}
                 <div className="mb-4">
-                  <label className="text-sm font-medium text-slate-700 block mb-2">Name (optional)</label>
+                  <label className="text-sm font-medium text-neutral-700 block mb-2">Name (optional)</label>
                   <input
                     type="text"
                     value={newAssetName}
                     onChange={(e) => setNewAssetName(e.target.value)}
                     placeholder="e.g., Product Hero Shot"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                    className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                   />
                 </div>
 
                 {/* Category */}
                 <div className="mb-6">
-                  <label className="text-sm font-medium text-slate-700 block mb-2">Category (optional)</label>
+                  <label className="text-sm font-medium text-neutral-700 block mb-2">Category (optional)</label>
                   <select
                     value={newAssetCategory}
                     onChange={(e) => setNewAssetCategory(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
+                    className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
                   >
                     <option value="">Select a category</option>
                     <option value="product">Product</option>
@@ -1345,18 +1347,18 @@ export function BrandKitEditor({
           {/* Assets Grid */}
           {loadingAssets ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-slate-300" />
+              <Loader2 className="w-8 h-8 animate-spin text-neutral-300" />
             </div>
           ) : brandAssets.length === 0 ? (
             <div 
-              className="rounded-2xl border-2 border-dashed border-slate-200 p-12 text-center"
+              className="rounded-2xl border-2 border-dashed border-neutral-200 p-12 text-center"
               style={{ backgroundColor: `${primaryColor}05` }}
             >
-              <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                <ImageIcon className="w-8 h-8 text-slate-400" />
+              <div className="w-16 h-16 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-4">
+                <ImageIcon className="w-8 h-8 text-neutral-400" />
               </div>
-              <h3 className="text-slate-700 font-medium mb-2">No assets yet</h3>
-              <p className="text-slate-500 text-sm mb-4">
+              <h3 className="text-neutral-700 font-medium mb-2">No assets yet</h3>
+              <p className="text-neutral-500 text-sm mb-4">
                 Upload product photos, UI screenshots, or style references to use when generating designs.
               </p>
               <button
@@ -1375,7 +1377,7 @@ export function BrandKitEditor({
               {brandAssets.map((asset) => (
                 <div
                   key={asset.id}
-                  className="relative group rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-md transition-all"
+                  className="relative group rounded-xl overflow-hidden border border-neutral-200 bg-white shadow-sm hover:shadow-md transition-all"
                 >
                   {/* Image */}
                   <div 
@@ -1409,7 +1411,7 @@ export function BrandKitEditor({
                   <button
                     onClick={() => handleDeleteAsset(asset)}
                     disabled={deletingAssetId === asset.id}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/90 hover:bg-red-50 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-white/90 hover:bg-red-50 text-neutral-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shadow-sm"
                   >
                     {deletingAssetId === asset.id ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1419,10 +1421,10 @@ export function BrandKitEditor({
                   </button>
 
                   {/* Info */}
-                  <div className="p-3 border-t border-slate-100">
-                    <p className="text-sm font-medium text-slate-700 truncate">{asset.name}</p>
+                  <div className="p-3 border-t border-neutral-100">
+                    <p className="text-sm font-medium text-neutral-700 truncate">{asset.name}</p>
                     {asset.category && (
-                      <p className="text-xs text-slate-400 capitalize">{asset.category.replace(/_/g, ' ')}</p>
+                      <p className="text-xs text-neutral-400 capitalize">{asset.category.replace(/_/g, ' ')}</p>
                     )}
                   </div>
                 </div>
@@ -1434,7 +1436,7 @@ export function BrandKitEditor({
         {/* Backdrops */}
         {localBrand.backdrops && localBrand.backdrops.length > 0 && (
           <section className="mt-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Visual Assets</h2>
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Visual Assets</h2>
             <div className="flex gap-4 overflow-x-auto pb-4">
               {localBrand.backdrops.map((backdrop, index) => (
                 <div
@@ -1455,8 +1457,8 @@ export function BrandKitEditor({
         {/* Website Screenshot */}
         {localBrand.screenshot && (
           <section className="mt-16">
-            <h2 className="text-xs uppercase tracking-[0.2em] text-slate-400 mb-6">Website Screenshot</h2>
-            <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200">
+            <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Website Screenshot</h2>
+            <div className="rounded-2xl overflow-hidden shadow-lg border border-neutral-200">
               <img
                 src={localBrand.screenshot}
                 alt="Website screenshot"
@@ -1468,13 +1470,13 @@ export function BrandKitEditor({
 
 
         {/* Re-extract Section */}
-        <section className="mt-20 pt-12 border-t border-slate-200">
+        <section className="mt-20 pt-12 border-t border-neutral-200">
           <div className="text-center">
-            <p className="text-slate-500 mb-4">Results don't look right?</p>
+            <p className="text-neutral-500 mb-4">Results don't look right?</p>
             <button
               onClick={handleReExtract}
               disabled={isReExtracting}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-full transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-full transition-all disabled:opacity-50"
             >
               {isReExtracting ? (
                 <>
@@ -1513,17 +1515,17 @@ function ComparisonCard({
     <button
       onClick={onSelect}
       className={`w-full text-left p-6 rounded-2xl border-2 transition-all ${
-        isSelected 
-          ? 'border-current ring-2 ring-offset-2' 
-          : 'border-slate-200 hover:border-slate-300'
+        isSelected
+          ? 'border-current'
+          : 'border-neutral-200 hover:border-neutral-300'
       }`}
-      style={{ 
+      style={{
         borderColor: isSelected ? primaryColor : undefined,
-        ringColor: isSelected ? primaryColor : undefined,
+        boxShadow: isSelected ? `0 0 0 2px white, 0 0 0 4px ${primaryColor}` : undefined,
       }}
     >
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs uppercase tracking-wider text-slate-400">{label}</span>
+        <span className="text-xs uppercase tracking-wider text-neutral-400">{label}</span>
         {isSelected && (
           <div 
             className="w-5 h-5 rounded-full flex items-center justify-center"

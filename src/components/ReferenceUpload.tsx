@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, Upload, Loader2, Image as ImageIcon, Palette, Check } from 'lucide-react';
+import { X, Upload, Loader2, Check } from 'lucide-react';
 import { BrandAsset, supabase } from '../lib/supabase';
+import { useToast } from './Toast';
 
 interface ReferenceUploadProps {
   brandId: string;
@@ -8,8 +9,7 @@ interface ReferenceUploadProps {
   onClose: () => void;
   onSelect: (references: BrandAsset[]) => void;
   selectedReferences: BrandAsset[];
-  primaryColor?: string;
-  maxSelection?: number; // Maximum references that can be selected
+  maxSelection?: number;
 }
 
 export function ReferenceUpload({
@@ -18,9 +18,9 @@ export function ReferenceUpload({
   onClose,
   onSelect,
   selectedReferences,
-  primaryColor = PRIMARY_COLOR,
   maxSelection,
 }: ReferenceUploadProps) {
+  const toast = useToast();
   const [uploading, setUploading] = useState(false);
   const [uploadedReferences, setUploadedReferences] = useState<BrandAsset[]>([]);
   const [localSelection, setLocalSelection] = useState<BrandAsset[]>(selectedReferences);
@@ -82,7 +82,6 @@ export function ReferenceUpload({
     await processFiles(files);
   };
 
-  // Handle file upload (from input or drag/drop)
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -90,11 +89,7 @@ export function ReferenceUpload({
     await processFiles(files);
   };
 
-  // Process files (shared by both upload methods)
   const processFiles = async (files: File[]) => {
-
-    // Validate files - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
-    // SVG is NOT supported by Gemini API
     const SUPPORTED_TYPES = [
       'image/png',
       'image/jpeg',
@@ -104,17 +99,17 @@ export function ReferenceUpload({
       'image/heif',
       'image/gif',
     ];
-    
+
     const invalidFiles = files.filter(f => !SUPPORTED_TYPES.includes(f.type.toLowerCase()));
     if (invalidFiles.length > 0) {
       const unsupportedNames = invalidFiles.map(f => f.name).join(', ');
-      alert(`Unsupported file format. Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.\n\nUnsupported files: ${unsupportedNames}`);
+      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only. Unsupported: ${unsupportedNames}`);
       return;
     }
 
     const oversizedFiles = files.filter(f => f.size > 5 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
-      alert('File size must be less than 5MB');
+      toast.error('File Too Large', 'File size must be less than 5MB');
       return;
     }
 
@@ -164,7 +159,7 @@ export function ReferenceUpload({
       setLocalSelection(prev => [...prev, ...newReferences]);
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Failed to upload. Please try again.');
+      toast.error('Upload Failed', 'Failed to upload. Please try again.');
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
@@ -173,26 +168,22 @@ export function ReferenceUpload({
     }
   };
 
-  // Check if can add more
   const canAddMore = maxSelection === undefined || localSelection.length < maxSelection;
 
-  // Toggle selection
   const toggleSelection = (reference: BrandAsset) => {
     setLocalSelection(prev => {
       const isSelected = prev.some(r => r.id === reference.id);
       if (isSelected) {
         return prev.filter(r => r.id !== reference.id);
       } else {
-        // Check limit before adding
         if (maxSelection !== undefined && prev.length >= maxSelection) {
-          return prev; // Can't add more
+          return prev;
         }
         return [...prev, reference];
       }
     });
   };
 
-  // Confirm selection
   const handleConfirm = () => {
     onSelect(localSelection);
     onClose();
@@ -200,7 +191,7 @@ export function ReferenceUpload({
 
   if (!isOpen) return null;
 
-  // Combine all references (existing, uploaded, and selected) - avoid duplicates
+  // Combine all references - avoid duplicates
   const allReferencesMap = new Map<string, BrandAsset>();
   existingReferences.forEach(ref => allReferencesMap.set(ref.id, ref));
   uploadedReferences.forEach(ref => allReferencesMap.set(ref.id, ref));
@@ -208,57 +199,54 @@ export function ReferenceUpload({
   const allReferences = Array.from(allReferencesMap.values());
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-backdrop-enter"
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
       {/* Modal Content */}
-      <div 
-        className="relative bg-white/95 backdrop-blur-xl rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col border border-slate-200/50"
+      <div
+        className="relative glass rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-slate-100 gap-3">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-100 gap-3">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-xl font-semibold text-slate-900 mb-1">Upload Reference</h2>
-            <p className="text-xs sm:text-sm text-slate-500">
+            <h2 className="text-lg sm:text-xl font-semibold text-neutral-800 mb-1 font-heading">Upload Reference</h2>
+            <p className="text-xs sm:text-sm text-neutral-500">
               Upload style inspiration images to guide your design
               {maxSelection && ` (max ${maxSelection})`}
             </p>
             {!canAddMore && (
-              <p className="text-xs text-red-600 mt-1 font-medium">
+              <p className="text-xs text-red-500 mt-1 font-medium">
                 Selection limit reached. Remove references to add more.
               </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+            className="w-10 h-10 rounded-xl hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors touch-manipulation"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Upload Area */}
-        <div className="p-4 sm:p-6 border-b border-slate-100">
+        <div className="p-4 sm:p-6 border-b border-neutral-100">
           <label
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
-            className={`flex flex-col items-center justify-center w-full h-40 sm:h-48 border-2 border-dashed rounded-xl sm:rounded-2xl cursor-pointer transition-colors group ${
-              isDragging 
-                ? 'border-blue-400 bg-blue-50' 
-                : localSelection.length > 0 
-                ? 'hover:border-slate-300' 
-                : 'hover:border-slate-300'
+            className={`flex flex-col items-center justify-center w-full h-40 sm:h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-all group ${
+              isDragging
+                ? 'border-brand-primary bg-brand-primary/5'
+                : localSelection.length > 0
+                ? 'border-brand-primary/30 hover:border-brand-primary/50'
+                : 'border-neutral-200 hover:border-neutral-300'
             }`}
-            style={{
-              borderColor: isDragging ? undefined : (localSelection.length > 0 ? primaryColor : undefined),
-            }}
           >
             <input
               ref={fileInputRef}
@@ -271,21 +259,18 @@ export function ReferenceUpload({
             />
             {uploading ? (
               <div className="flex flex-col items-center">
-                <Loader2 className="w-8 h-8 animate-spin mb-3" style={{ color: primaryColor }} />
-                <p className="text-sm text-slate-600">Uploading...</p>
+                <Loader2 className="w-8 h-8 animate-spin mb-3 text-brand-primary" />
+                <p className="text-sm text-neutral-600">Uploading...</p>
               </div>
             ) : (
               <div className="flex flex-col items-center">
-                <div 
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3"
-                  style={{ backgroundColor: `${primaryColor}10` }}
-                >
-                  <Upload className="w-6 h-6" style={{ color: primaryColor }} />
+                <div className="w-12 h-12 rounded-2xl bg-brand-primary/10 flex items-center justify-center mb-3 group-hover:bg-brand-primary/15 transition-colors">
+                  <Upload className="w-6 h-6 text-brand-primary" />
                 </div>
-                <p className="text-sm font-medium text-slate-700 mb-1">
+                <p className="text-sm font-medium text-neutral-700 mb-1">
                   Click to upload or drag and drop
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-neutral-500">
                   PNG, JPEG, WEBP, HEIC, HEIF, GIF up to 5MB
                 </p>
               </div>
@@ -296,15 +281,15 @@ export function ReferenceUpload({
         {/* References Preview */}
         {loading ? (
           <div className="flex-1 overflow-y-auto p-6 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
+            <Loader2 className="w-6 h-6 animate-spin text-brand-primary" />
           </div>
         ) : allReferences.length > 0 ? (
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
-            <h3 className="text-xs sm:text-sm font-medium text-slate-700 mb-3 sm:mb-4">
-              {existingReferences.length > 0 ? 'Available References' : 'Uploaded References'} 
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 no-scrollbar">
+            <h3 className="text-xs sm:text-sm font-medium text-neutral-600 mb-3 sm:mb-4">
+              {existingReferences.length > 0 ? 'Available References' : 'Uploaded References'}
               ({localSelection.length}{maxSelection ? `/${maxSelection}` : ''} selected)
             </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               {allReferences.map((reference) => {
                 const isSelected = localSelection.some(r => r.id === reference.id);
                 return (
@@ -312,46 +297,28 @@ export function ReferenceUpload({
                     key={reference.id}
                     onClick={() => toggleSelection(reference)}
                     disabled={!isSelected && !canAddMore}
-                    className={`group relative rounded-2xl overflow-hidden border-2 transition-all ${
-                      isSelected 
-                        ? 'ring-2 ring-offset-2' 
+                    className={`group relative rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
+                      isSelected
+                        ? 'border-brand-primary ring-2 ring-brand-primary/20'
                         : !canAddMore
-                        ? 'border-slate-200 opacity-50 cursor-not-allowed'
-                        : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-neutral-200 opacity-50 cursor-not-allowed'
+                        : 'border-neutral-200 hover:border-neutral-300 hover:shadow-md'
                     }`}
-                    style={isSelected ? {
-                      borderColor: primaryColor,
-                      ringColor: `${primaryColor}30`,
-                    } : {}}
                     title={!isSelected && !canAddMore ? 'Selection limit reached' : reference.name}
                   >
                     {/* Image */}
-                    <div 
-                      className="aspect-square relative overflow-hidden"
-                      style={{
-                        backgroundImage: 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
-                        backgroundSize: '12px 12px',
-                        backgroundPosition: '0 0, 0 6px, 6px -6px, -6px 0px',
-                        backgroundColor: '#fafafa',
-                      }}
-                    >
+                    <div className="aspect-square relative overflow-hidden bg-neutral-100">
                       <img
                         src={reference.url}
                         alt={reference.name}
-                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-500"
                       />
-                      
-                      {/* Overlay on hover */}
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
                     </div>
 
                     {/* Selection Check */}
                     {isSelected && (
-                      <div 
-                        className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center shadow-lg"
-                        style={{ backgroundColor: primaryColor }}
-                      >
-                        <Check className="w-4 h-4 text-white" />
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand-primary flex items-center justify-center shadow-md">
+                        <Check className="w-3.5 h-3.5 text-white" />
                       </div>
                     )}
                   </button>
@@ -362,40 +329,35 @@ export function ReferenceUpload({
         ) : null}
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="text-xs sm:text-sm text-slate-600">
+        <div className="p-3 sm:p-4 border-t border-neutral-100 bg-neutral-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-xs sm:text-sm text-neutral-500">
             {localSelection.length > 0 ? (
               <>
-                <span className="font-medium">{localSelection.length}</span>
+                <span className="font-medium text-neutral-700">{localSelection.length}</span>
                 {maxSelection && (
-                  <span className={`ml-1 font-medium ${
-                    localSelection.length >= maxSelection ? 'text-red-600' : 'text-slate-500'
-                  }`}>
+                  <span className={`ml-1 ${localSelection.length >= maxSelection ? 'text-red-500' : ''}`}>
                     / {maxSelection} max
                   </span>
                 )}
-                <span className="text-slate-400 ml-1">
+                <span className="ml-1">
                   {localSelection.length === 1 ? 'reference' : 'references'} selected
                 </span>
               </>
             ) : (
-              <span className="text-slate-400">
-                No references selected{maxSelection && ` (max ${maxSelection})`}
-              </span>
+              <span>No references selected{maxSelection && ` (max ${maxSelection})`}</span>
             )}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             <button
               onClick={onClose}
-              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-white transition-colors"
+              className="btn-ghost flex-1 sm:flex-none px-5 py-2.5 rounded-xl border border-neutral-200"
             >
               Cancel
             </button>
             <button
               onClick={handleConfirm}
               disabled={localSelection.length === 0}
-              className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-white text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: primaryColor }}
+              className="btn-primary flex-1 sm:flex-none px-5 py-2.5 rounded-xl"
             >
               Confirm
             </button>
@@ -405,4 +367,3 @@ export function ReferenceUpload({
     </div>
   );
 }
-
