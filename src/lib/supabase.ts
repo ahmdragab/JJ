@@ -27,9 +27,25 @@ export async function getAccessToken(): Promise<string | null> {
 /**
  * Get auth headers for Edge Function calls
  * Throws an error if not authenticated
+ * Includes retry logic to handle race conditions after OAuth callback
  */
 export async function getAuthHeaders(): Promise<{ Authorization: string; 'Content-Type': string }> {
-  const token = await getAccessToken();
+  // Try to get token, with retries for OAuth callback race condition
+  let token = await getAccessToken();
+
+  // If no token, wait briefly and retry (handles OAuth callback race condition)
+  if (!token) {
+    // Wait for session to be persisted after OAuth callback
+    await new Promise(resolve => setTimeout(resolve, 500));
+    token = await getAccessToken();
+  }
+
+  // Second retry if still no token
+  if (!token) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    token = await getAccessToken();
+  }
+
   if (!token) {
     throw new Error('Not authenticated');
   }
