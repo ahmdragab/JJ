@@ -204,15 +204,15 @@ export function ReferenceUpload({
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60" />
 
       {/* Modal Content */}
       <div
-        className="relative glass rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col modal-content-enter"
+        className="relative bg-white rounded-xl shadow-lg w-full max-w-2xl max-h-[95vh] sm:max-h-[85vh] flex flex-col modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-100 gap-3">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-semibold text-neutral-800 mb-1 font-heading">Upload Reference</h2>
             <p className="text-xs sm:text-sm text-neutral-500">
@@ -234,7 +234,7 @@ export function ReferenceUpload({
         </div>
 
         {/* Upload Area */}
-        <div className="p-4 sm:p-6 border-b border-neutral-100">
+        <div className="px-4 sm:px-6">
           <label
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
@@ -329,7 +329,7 @@ export function ReferenceUpload({
         ) : null}
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-neutral-100 bg-neutral-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="text-xs sm:text-sm text-neutral-500">
             {localSelection.length > 0 ? (
               <>

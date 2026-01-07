@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Upload, Loader2, Trash2, Edit2, Save, Image as ImageIcon, Link2, CheckCircle, XCircle, Sparkles, Search } from 'lucide-react';
 import { Style, supabase, getAuthHeaders } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { Button } from '../components/ui';
 
 export function StylesAdmin() {
   const toast = useToast();
@@ -590,8 +591,8 @@ export function StylesAdmin() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -729,60 +730,60 @@ export function StylesAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 p-6 md:p-12">
+    <div className="min-h-screen bg-neutral-50 p-6 md:p-12">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Styles Management</h1>
-            <p className="text-slate-600">Upload and manage style reference images</p>
+            <h1 className="text-3xl font-bold text-neutral-800 mb-2">Styles Management</h1>
+            <p className="text-neutral-600">Upload and manage style reference images</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
+            <Button
               onClick={handleBulkAnalyze}
               disabled={analyzing || styles.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              loading={analyzing}
+              className="bg-purple-600 hover:bg-purple-700"
             >
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4 mr-2" />
               {analyzing ? 'Analyzing...' : 'Analyze All Styles'}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setShowBulkImport(!showBulkImport)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
             >
-              <Link2 className="w-4 h-4" />
+              <Link2 className="w-4 h-4 mr-2" />
               Bulk Import from URLs
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Bulk Import Section */}
         {showBulkImport && (
-          <div className="mb-8 bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-slate-200/50">
+          <div className="mb-8 bg-white rounded-2xl p-6 border border-neutral-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-900">Bulk Import from URLs</h2>
+              <h2 className="text-xl font-semibold text-neutral-800">Bulk Import from URLs</h2>
               <button
                 onClick={() => {
                   setShowBulkImport(false);
                   setBulkUrls('');
                   setImportProgress([]);
                 }}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600"
+                className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-sm text-slate-600 mb-4">
+            <p className="text-sm text-neutral-600 mb-4">
               Paste image URLs (one per line). Images will be automatically converted to PNG format (AVIF, WebP, etc. supported).
             </p>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Category
                 </label>
                 <select
                   value={bulkCategory}
                   onChange={(e) => setBulkCategory(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
                 >
                   {categories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
@@ -790,7 +791,7 @@ export function StylesAdmin() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-neutral-700 mb-2">
                   Image URLs (one per line)
                 </label>
                 <textarea
@@ -798,27 +799,25 @@ export function StylesAdmin() {
                   onChange={(e) => setBulkUrls(e.target.value)}
                   placeholder="https://example.com/image1.avif&#10;https://example.com/image2.webp&#10;https://example.com/image3.png"
                   rows={8}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                  className="w-full px-3 py-2 border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary font-mono text-sm"
                   disabled={importing}
                 />
               </div>
-              <button
+              <Button
                 onClick={handleBulkImport}
                 disabled={importing || !bulkUrls.trim()}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                loading={importing}
+                className="w-full"
               >
                 {importing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Importing...
-                  </>
+                  'Importing...'
                 ) : (
                   <>
-                    <Upload className="w-4 h-4" />
+                    <Upload className="w-4 h-4 mr-2" />
                     Import {bulkUrls.split('\n').filter(l => l.trim()).length} Image(s)
                   </>
                 )}
-              </button>
+              </Button>
               
               {/* Progress */}
               {importProgress.length > 0 && (
@@ -830,7 +829,7 @@ export function StylesAdmin() {
                         item.status === 'success' ? 'bg-green-50 text-green-700' :
                         item.status === 'error' ? 'bg-red-50 text-red-700' :
                         item.status === 'processing' ? 'bg-blue-50 text-blue-700' :
-                        'bg-slate-50 text-slate-600'
+                        'bg-neutral-50 text-neutral-600'
                       }`}
                     >
                       {item.status === 'success' && <CheckCircle className="w-4 h-4 shrink-0" />}
@@ -849,12 +848,12 @@ export function StylesAdmin() {
 
         {/* Bulk Analysis Progress */}
         {analysisProgress.length > 0 && (
-          <div className="mb-8 bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-slate-200/50">
+          <div className="mb-8 bg-white rounded-2xl p-6 border border-neutral-200">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold text-slate-900">Analysis Progress</h2>
+              <h2 className="text-xl font-semibold text-neutral-800">Analysis Progress</h2>
               <button
                 onClick={() => setAnalysisProgress([])}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600"
+                className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -869,7 +868,7 @@ export function StylesAdmin() {
                       item.status === 'success' ? 'bg-green-50 text-green-700' :
                       item.status === 'error' ? 'bg-red-50 text-red-700' :
                       item.status === 'processing' ? 'bg-purple-50 text-purple-700' :
-                      'bg-slate-50 text-slate-600'
+                      'bg-neutral-50 text-neutral-600'
                     }`}
                   >
                     {item.status === 'success' && <CheckCircle className="w-4 h-4 shrink-0" />}
@@ -888,17 +887,17 @@ export function StylesAdmin() {
         )}
 
         {/* Search and Filter Section */}
-        <div className="mb-6 bg-white/70 backdrop-blur-sm rounded-2xl p-4 border border-slate-200/50">
+        <div className="mb-6 bg-white rounded-2xl p-4 border border-neutral-200">
           <div className="flex flex-col gap-4">
             {/* Search Bar */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-neutral-400" />
               <input
                 type="text"
                 placeholder="Search styles by name, description, category, or tags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
               />
             </div>
 
@@ -926,14 +925,14 @@ export function StylesAdmin() {
                         onClick={() => setOpenCategory(openCategory === category ? null : category)}
                         className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
                           openCategory === category
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                            ? 'bg-brand-primary text-white'
+                            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
                         }`}
                       >
                         {categoryLabels[category] || category}
                         {categorySelectedCount > 0 && (
                           <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-                            openCategory === category ? 'bg-white/20 text-white' : 'bg-blue-600 text-white'
+                            openCategory === category ? 'bg-white/20 text-white' : 'bg-brand-primary text-white'
                           }`}>
                             {categorySelectedCount}
                           </span>
@@ -942,7 +941,7 @@ export function StylesAdmin() {
 
                       {/* Dropdown for this category */}
                       {openCategory === category && (
-                        <div className="absolute top-full left-0 mt-2 z-10 bg-white border border-slate-200 rounded-lg shadow-lg p-3 min-w-[200px] max-w-[300px] max-h-[300px] overflow-y-auto tag-filter-dropdown">
+                        <div className="absolute top-full left-0 mt-2 z-10 bg-white border border-neutral-200 rounded-lg shadow-lg p-3 min-w-[200px] max-w-[300px] max-h-[300px] overflow-y-auto tag-filter-dropdown">
                           <div className="space-y-2">
                             {tags.map(tag => {
                               // Find the original tag (case-insensitive) for matching
@@ -952,17 +951,17 @@ export function StylesAdmin() {
                                   return Array.isArray(catTags) ? catTags : [];
                                 })
                                 .find(t => t.toLowerCase() === tag.toLowerCase()) || tag;
-                              
+
                               const isSelected = Array.from(selectedTags).some(st => st.toLowerCase() === originalTag.toLowerCase());
-                              
+
                               return (
                                 <button
                                   key={`${category}-${tag}`}
                                   onClick={() => toggleTag(originalTag)}
                                   className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${
                                     isSelected
-                                      ? 'bg-blue-600 text-white'
-                                      : 'text-slate-700 hover:bg-slate-50'
+                                      ? 'bg-brand-primary text-white'
+                                      : 'text-neutral-700 hover:bg-neutral-50'
                                   }`}
                                 >
                                   {tag}
@@ -975,14 +974,14 @@ export function StylesAdmin() {
                     </div>
                   );
                 })}
-                
+
                 {selectedTags.size > 0 && (
                   <button
                     onClick={() => {
                       setSelectedTags(new Set());
                       setOpenCategory(null);
                     }}
-                    className="px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                    className="px-3 py-1.5 text-sm text-neutral-600 hover:text-neutral-800 hover:bg-neutral-100 rounded-lg transition-colors"
                   >
                     Clear all
                   </button>
@@ -992,7 +991,7 @@ export function StylesAdmin() {
 
             {/* Results count */}
             {(searchQuery || selectedTags.size > 0) && (
-              <div className="text-sm text-slate-600">
+              <div className="text-sm text-neutral-600">
                 Showing {filteredStyles.length} of {styles.length} styles
               </div>
             )}
@@ -1007,9 +1006,9 @@ export function StylesAdmin() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={`flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl cursor-pointer transition-colors ${
-              isDragging 
-                ? 'border-blue-400 bg-blue-50' 
-                : 'border-slate-300 hover:border-slate-400'
+              isDragging
+                ? 'border-brand-primary bg-brand-primary/5'
+                : 'border-neutral-300 hover:border-neutral-400'
             }`}
           >
             <input
@@ -1023,16 +1022,16 @@ export function StylesAdmin() {
             />
             {uploading ? (
               <div className="flex flex-col items-center">
-                <Loader2 className="w-8 h-8 animate-spin mb-3 text-slate-600" />
-                <p className="text-sm text-slate-600">Uploading...</p>
+                <Loader2 className="w-8 h-8 animate-spin mb-3 text-neutral-600" />
+                <p className="text-sm text-neutral-600">Uploading...</p>
               </div>
             ) : (
               <div className="flex flex-col items-center">
-                <Upload className="w-8 h-8 mb-3 text-slate-400" />
-                <p className="text-sm font-medium text-slate-700 mb-1">
+                <Upload className="w-8 h-8 mb-3 text-neutral-400" />
+                <p className="text-sm font-medium text-neutral-700 mb-1">
                   Click to upload or drag and drop
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-neutral-500">
                   PNG, JPEG, WEBP, HEIC, HEIF, GIF
                 </p>
               </div>
@@ -1043,10 +1042,10 @@ export function StylesAdmin() {
         {/* Styles by Category */}
         {Object.keys(groupedStyles).length === 0 ? (
           <div className="text-center py-12">
-            <ImageIcon className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-            <p className="text-slate-500">
-              {searchQuery || selectedTags.size > 0 
-                ? 'No styles match your filters' 
+            <ImageIcon className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+            <p className="text-neutral-500">
+              {searchQuery || selectedTags.size > 0
+                ? 'No styles match your filters'
                 : 'No styles uploaded yet'}
             </p>
             {(searchQuery || selectedTags.size > 0) && (
@@ -1055,7 +1054,7 @@ export function StylesAdmin() {
                   setSearchQuery('');
                   setSelectedTags(new Set());
                 }}
-                className="mt-4 px-4 py-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                className="mt-4 px-4 py-2 text-sm text-brand-primary hover:bg-brand-primary/5 rounded-lg transition-colors"
               >
                 Clear all filters
               </button>
@@ -1066,18 +1065,18 @@ export function StylesAdmin() {
             {Object.entries(groupedStyles)
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([category, categoryStyles]) => (
-                <div key={category} className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 border border-slate-200/50">
-                  <h2 className="text-xl font-semibold text-slate-900 mb-4 capitalize">
+                <div key={category} className="bg-white rounded-2xl p-6 border border-neutral-200">
+                  <h2 className="text-xl font-semibold text-neutral-800 mb-4 capitalize">
                     {category} ({categoryStyles.length})
                   </h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {categoryStyles.map((style) => (
                       <div
                         key={style.id}
-                        className="group relative bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-lg transition-all"
+                        className="group relative bg-white rounded-xl border border-neutral-200 overflow-hidden hover:shadow-lg transition-all"
                       >
                         {/* Image */}
-                        <div className="aspect-square bg-slate-50 relative overflow-hidden">
+                        <div className="aspect-square bg-neutral-50 relative overflow-hidden">
                           <img
                             src={style.url}
                             alt={style.name}
@@ -1091,7 +1090,7 @@ export function StylesAdmin() {
                         </div>
 
                         {/* Actions */}
-                        <div className="p-3 border-t border-slate-100">
+                        <div className="p-3 border-t border-neutral-100">
                           {editingId === style.id ? (
                             <div className="space-y-2">
                               <input
@@ -1099,19 +1098,19 @@ export function StylesAdmin() {
                                 value={editingStyle.name || ''}
                                 onChange={(e) => setEditingStyle({ ...editingStyle, name: e.target.value })}
                                 placeholder="Name"
-                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded"
+                                className="w-full px-2 py-1 text-sm border border-neutral-200 rounded"
                               />
                               <textarea
                                 value={editingStyle.description || ''}
                                 onChange={(e) => setEditingStyle({ ...editingStyle, description: e.target.value })}
                                 placeholder="Description (shown on hover)"
                                 rows={2}
-                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded resize-none"
+                                className="w-full px-2 py-1 text-sm border border-neutral-200 rounded resize-none"
                               />
                               <select
                                 value={editingStyle.category || ''}
                                 onChange={(e) => setEditingStyle({ ...editingStyle, category: e.target.value })}
-                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded"
+                                className="w-full px-2 py-1 text-sm border border-neutral-200 rounded"
                               >
                                 {categories.map(cat => (
                                   <option key={cat} value={cat}>{cat}</option>
@@ -1122,10 +1121,10 @@ export function StylesAdmin() {
                                 value={editingStyle.display_order || 0}
                                 onChange={(e) => setEditingStyle({ ...editingStyle, display_order: parseInt(e.target.value) || 0 })}
                                 placeholder="Display Order"
-                                className="w-full px-2 py-1 text-sm border border-slate-200 rounded"
+                                className="w-full px-2 py-1 text-sm border border-neutral-200 rounded"
                               />
                               <div className="flex items-center gap-2">
-                                <label className="flex items-center gap-1 text-xs text-slate-600">
+                                <label className="flex items-center gap-1 text-xs text-neutral-600">
                                   <input
                                     type="checkbox"
                                     checked={editingStyle.is_active !== false}
@@ -1138,14 +1137,14 @@ export function StylesAdmin() {
                               <div className="flex gap-1">
                                 <button
                                   onClick={() => handleSave(style.id)}
-                                  className="flex-1 px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                  className="flex-1 px-2 py-1 bg-brand-primary text-white text-xs rounded hover:bg-brand-primary-hover"
                                 >
                                   <Save className="w-3 h-3 inline mr-1" />
                                   Save
                                 </button>
                                 <button
                                   onClick={handleCancelEdit}
-                                  className="px-2 py-1 bg-slate-200 text-slate-700 text-xs rounded hover:bg-slate-300"
+                                  className="px-2 py-1 bg-neutral-200 text-neutral-700 text-xs rounded hover:bg-neutral-300"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>
@@ -1153,25 +1152,25 @@ export function StylesAdmin() {
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              <p className="text-sm font-medium text-slate-900 truncate" title={style.name}>
+                              <p className="text-sm font-medium text-neutral-800 truncate" title={style.name}>
                                 {style.name}
                               </p>
-                              
+
                               {/* Style Description */}
                               {style.style_description && (
-                                <p className="text-xs text-slate-600 italic line-clamp-2" title={style.style_description}>
+                                <p className="text-xs text-neutral-600 italic line-clamp-2" title={style.style_description}>
                                   {style.style_description}
                                 </p>
                               )}
-                              
+
                               {/* Tags */}
                               {style.tags && Object.keys(style.tags).length > 0 && (
                                 <div className="flex flex-wrap gap-1">
-                                  {Object.entries(style.tags).map(([group, tags]) => 
+                                  {Object.entries(style.tags).map(([group, tags]) =>
                                     Array.isArray(tags) && tags.map((tag, idx) => (
                                       <span
                                         key={`${group}-${idx}`}
-                                        className="px-1.5 py-0.5 text-[10px] rounded bg-slate-100 text-slate-700 truncate max-w-[80px]"
+                                        className="px-1.5 py-0.5 text-[10px] rounded bg-neutral-100 text-neutral-700 truncate max-w-[80px]"
                                         title={`${categoryLabels[group] || group}: ${capitalize(tag)}`}
                                       >
                                         {capitalize(tag)}
@@ -1180,18 +1179,18 @@ export function StylesAdmin() {
                                   )}
                                 </div>
                               )}
-                              
+
                               {/* Old description fallback */}
                               {!style.style_description && style.description && (
-                                <p className="text-xs text-slate-500 line-clamp-2" title={style.description}>
+                                <p className="text-xs text-neutral-500 line-clamp-2" title={style.description}>
                                   {style.description}
                                 </p>
                               )}
-                              
+
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => handleEdit(style)}
-                                  className="flex-1 px-2 py-1 bg-slate-100 text-slate-700 text-xs rounded hover:bg-slate-200"
+                                  className="flex-1 px-2 py-1 bg-neutral-100 text-neutral-700 text-xs rounded hover:bg-neutral-200"
                                 >
                                   <Edit2 className="w-3 h-3 inline mr-1" />
                                   Edit

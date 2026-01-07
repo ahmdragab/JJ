@@ -175,13 +175,12 @@ export const transitions = {
     slower: '500ms',
   },
 
-  // Easings
+  // Easings - subtle, professional curves only
   easings: {
     default: 'cubic-bezier(0.4, 0, 0.2, 1)',
     in: 'cubic-bezier(0.4, 0, 1, 1)',
     out: 'cubic-bezier(0, 0, 0.2, 1)',
     inOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
-    bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
   },
 } as const;
 
@@ -316,7 +315,6 @@ export function generateCSSVariables(): string {
       --transition-normal: ${transitions.durations.normal};
       --transition-slow: ${transitions.durations.slow};
       --ease-default: ${transitions.easings.default};
-      --ease-bounce: ${transitions.easings.bounce};
     }
   `;
 }

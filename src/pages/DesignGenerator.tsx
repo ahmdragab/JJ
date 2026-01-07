@@ -51,17 +51,17 @@ export function DesignGenerator({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <nav className="border-b border-slate-200 bg-white">
+    <div className="min-h-screen bg-neutral-50">
+      <nav className="border-b border-neutral-200 bg-white">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-900"
+            className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900"
           >
             <ArrowLeft className="w-5 h-5" />
             Back to Brand Kit
           </button>
-          <div className="flex items-center gap-2 text-slate-900 font-semibold">
+          <div className="flex items-center gap-2 text-neutral-900 font-semibold">
             <Sparkles className="w-5 h-5" />
             Generate Design
           </div>
@@ -71,8 +71,8 @@ export function DesignGenerator({
 
       <div className="max-w-6xl mx-auto px-6 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 mb-2">Choose a Template</h1>
-          <p className="text-slate-600">
+          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Choose a Template</h1>
+          <p className="text-neutral-600">
             Select a template and provide a brief for AI-generated content
           </p>
         </div>
@@ -91,22 +91,22 @@ export function DesignGenerator({
                   className={`bg-white rounded-xl p-6 border-2 transition-all text-left ${
                     selectedTemplate === template.id
                       ? 'border-emerald-500 shadow-lg'
-                      : 'border-slate-200 hover:border-slate-300'
+                      : 'border-neutral-200 hover:border-neutral-300'
                   }`}
                 >
                   <div className="aspect-video bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg mb-4 flex items-center justify-center">
-                    <Sparkles className="w-8 h-8 text-slate-400" />
+                    <Sparkles className="w-8 h-8 text-neutral-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                  <h3 className="text-lg font-semibold text-neutral-900 mb-1">
                     {template.name}
                   </h3>
-                  <p className="text-sm text-slate-600 mb-2">{template.category}</p>
-                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                    <span className="px-2 py-1 bg-slate-100 rounded">
+                  <p className="text-sm text-neutral-600 mb-2">{template.category}</p>
+                  <div className="flex items-center gap-2 text-xs text-neutral-500">
+                    <span className="px-2 py-1 bg-neutral-100 rounded">
                       {template.aspect_ratio}
                     </span>
                     {template.type && (
-                      <span className="px-2 py-1 bg-slate-100 rounded capitalize">
+                      <span className="px-2 py-1 bg-neutral-100 rounded capitalize">
                         {template.type.replace('_', ' ')}
                       </span>
                     )}
@@ -116,15 +116,15 @@ export function DesignGenerator({
             </div>
 
             {selectedTemplate && (
-              <div className="bg-white rounded-xl p-6 border border-slate-200">
-                <h2 className="text-xl font-semibold text-slate-900 mb-4">
+              <div className="bg-white rounded-xl p-6 border border-neutral-200">
+                <h2 className="text-xl font-semibold text-neutral-900 mb-4">
                   Design Brief
                 </h2>
                 <textarea
                   value={brief}
                   onChange={(e) => setBrief(e.target.value)}
                   placeholder="Describe what you want to promote or communicate (e.g., 'Announce new AI analytics feature for small businesses')"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg resize-none h-32 mb-4"
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg resize-none h-32 mb-4"
                 />
                 <button
                   onClick={handleGenerate}

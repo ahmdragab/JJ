@@ -430,7 +430,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         {/* Navigation */}
         <header className="w-full px-6 sm:px-8 lg:px-16 py-5 flex justify-between items-center">
           <div className="flex items-center gap-2.5">
-            <img src={alwanLogo} alt="Alwan" className="w-9 h-9 rounded-lg" />
+            <img src={alwanLogo} alt="Alwan" className="h-10 w-auto object-contain" />
             <span className="font-semibold text-xl tracking-tight text-gray-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>
               Alwan
             </span>
@@ -1000,7 +1000,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         <footer className="px-6 sm:px-8 lg:px-16 py-8 bg-gray-900 border-t border-gray-800">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src={alwanLogo} alt="Alwan" className="w-6 h-6 rounded" />
+              <img src={alwanLogo} alt="Alwan" className="h-7 w-auto object-contain" />
               <span className="text-sm text-gray-500" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                 Alwan — AI-powered brand ads
               </span>

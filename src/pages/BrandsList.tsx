@@ -4,6 +4,7 @@ import { supabase, Brand } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { Button } from '../components/ui';
 
 export function BrandsList({
   onSelectBrand,
@@ -146,17 +147,11 @@ export function BrandsList({
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50 relative overflow-hidden">
-      {/* Subtle background gradient */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[40%] -right-[20%] w-[80%] h-[80%] bg-gradient-to-br from-brand-primary/[0.03] to-transparent rounded-full blur-3xl" />
-        <div className="absolute -bottom-[30%] -left-[20%] w-[70%] h-[70%] bg-gradient-to-tr from-brand-primary/[0.02] to-transparent rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative z-10 pt-24 sm:pt-28 md:pt-32 pb-12 sm:pb-16 page-enter">
+    <div className="min-h-screen bg-neutral-50">
+      <div className="pt-10 sm:pt-12 pb-12 sm:pb-16 page-enter">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="mb-12 sm:mb-16">
+          <div className="mb-8">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
               <div>
                 <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold mb-3 text-neutral-800 tracking-tight font-display">
@@ -166,13 +161,10 @@ export function BrandsList({
                   A collection of your creative identities
                 </p>
               </div>
-              <button
-                onClick={onCreateNew}
-                className="btn-primary px-6 py-3 text-sm rounded-xl w-full sm:w-auto min-h-[48px]"
-              >
+              <Button size="lg" onClick={onCreateNew} className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 New Brand
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -189,12 +181,9 @@ export function BrandsList({
                 <p className="text-neutral-500 mb-8">
                   Create your first brand and bring it to life
                 </p>
-                <button
-                  onClick={onCreateNew}
-                  className="btn-primary px-8 py-3.5 rounded-xl min-h-[48px]"
-                >
+                <Button size="lg" onClick={onCreateNew}>
                   Create Your First Brand
-                </button>
+                </Button>
               </div>
             </div>
           ) : (

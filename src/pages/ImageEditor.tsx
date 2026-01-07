@@ -244,7 +244,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -259,10 +259,10 @@ export function ImageEditor({ brand }: { brand: Brand }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50 flex flex-col">
       {/* Header */}
-      <header className="flex-shrink-0 p-4 md:p-6 flex items-center justify-between border-b border-slate-200/50 bg-white/50 backdrop-blur-sm">
+      <header className="flex-shrink-0 p-4 md:p-6 flex items-center justify-between border-b border-neutral-200/50 bg-white/50 backdrop-blur-sm">
         <button
           onClick={() => navigate(`/brands/${brand.slug}/gallery`)}
-          className="flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full text-slate-600 hover:text-slate-900 hover:bg-white shadow-sm transition-all"
+          className="flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full text-neutral-600 hover:text-neutral-900 hover:bg-white shadow-sm transition-all"
         >
           <ArrowLeft className="w-4 h-4" />
           <span className="text-sm font-medium">Gallery</span>
@@ -272,7 +272,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
           {image.image_url && (
             <button
               onClick={handleDownload}
-              className="flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full text-slate-600 hover:text-slate-900 hover:bg-white shadow-sm transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-white/80 rounded-full text-neutral-600 hover:text-neutral-900 hover:bg-white shadow-sm transition-all"
             >
               <Download className="w-4 h-4" />
               <span className="text-sm font-medium hidden md:inline">Download</span>
@@ -303,8 +303,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                   >
                     <Sparkles className="w-10 h-10" style={{ color: primaryColor }} />
                   </div>
-                  <p className="text-lg font-medium text-slate-700 mb-2">Creating your image...</p>
-                  <p className="text-sm text-slate-500">This may take a few moments</p>
+                  <p className="text-lg font-medium text-neutral-700 mb-2">Creating your image...</p>
+                  <p className="text-sm text-neutral-500">This may take a few moments</p>
                 </div>
               </div>
             ) : currentVersion?.image_url ? (
@@ -315,26 +315,26 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                       <button
                         onClick={() => navigateVersion(-1, versions.length)}
                         disabled={!canNavigateLeft}
-                        className={`absolute left-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-slate-200 transition-all ${
+                        className={`absolute left-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-neutral-200 transition-all ${
                           canNavigateLeft
-                            ? 'hover:bg-slate-50 hover:scale-110 cursor-pointer opacity-100'
+                            ? 'hover:bg-neutral-50 hover:scale-110 cursor-pointer opacity-100'
                             : 'opacity-30 cursor-not-allowed'
                         }`}
                         aria-label="Previous version"
                       >
-                        <ChevronLeft className="w-7 h-7 text-slate-700" />
+                        <ChevronLeft className="w-7 h-7 text-neutral-700" />
                       </button>
                       <button
                         onClick={() => navigateVersion(1, versions.length)}
                         disabled={!canNavigateRight}
-                        className={`absolute right-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-slate-200 transition-all ${
+                        className={`absolute right-4 top-1/2 -translate-y-1/2 z-20 p-4 rounded-full bg-white backdrop-blur-sm shadow-xl border-2 border-neutral-200 transition-all ${
                           canNavigateRight
-                            ? 'hover:bg-slate-50 hover:scale-110 cursor-pointer opacity-100'
+                            ? 'hover:bg-neutral-50 hover:scale-110 cursor-pointer opacity-100'
                             : 'opacity-30 cursor-not-allowed'
                         }`}
                         aria-label="Next version"
                       >
-                        <ChevronRight className="w-7 h-7 text-slate-700" />
+                        <ChevronRight className="w-7 h-7 text-neutral-700" />
                       </button>
                     </>
                   )}
@@ -342,11 +342,11 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                 {/* Version Indicator */}
                 {versions.length > 1 && (
                   <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 px-4 py-2 rounded-full bg-white/90 backdrop-blur-sm shadow-lg">
-                    <span className="text-sm font-medium text-slate-700">
+                    <span className="text-sm font-medium text-neutral-700">
                       Version {currentVersionIndex + 1} of {versions.length}
                     </span>
                     {currentVersion.edit_prompt && (
-                      <span className="text-xs text-slate-500 block mt-1 text-center">
+                      <span className="text-xs text-neutral-500 block mt-1 text-center">
                         {currentVersion.edit_prompt}
                       </span>
                     )}
@@ -370,8 +370,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             ) : (
               <div className="aspect-square bg-white/80 rounded-3xl flex items-center justify-center shadow-lg">
                 <div className="text-center">
-                  <RefreshCw className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <p className="text-slate-500">Image not available</p>
+                  <RefreshCw className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+                  <p className="text-neutral-500">Image not available</p>
                 </div>
               </div>
             )}
@@ -379,27 +379,27 @@ export function ImageEditor({ brand }: { brand: Brand }) {
         </div>
 
         {/* Chat/Edit Panel */}
-        <div className="lg:w-96 border-t lg:border-t-0 lg:border-l border-slate-200/50 bg-white/50 backdrop-blur-sm flex flex-col">
+        <div className="lg:w-96 border-t lg:border-t-0 lg:border-l border-neutral-200/50 bg-white/50 backdrop-blur-sm flex flex-col">
           {/* Chat Toggle (mobile) */}
           <button
             onClick={() => setShowChat(!showChat)}
-            className="lg:hidden p-4 flex items-center justify-between border-b border-slate-200/50"
+            className="lg:hidden p-4 flex items-center justify-between border-b border-neutral-200/50"
           >
-            <span className="font-medium text-slate-700 flex items-center gap-2">
+            <span className="font-medium text-neutral-700 flex items-center gap-2">
               <MessageCircle className="w-5 h-5" />
               Edit Conversation
             </span>
-            {showChat ? <X className="w-5 h-5" /> : <span className="text-sm text-slate-500">{image.conversation?.length || 0} messages</span>}
+            {showChat ? <X className="w-5 h-5" /> : <span className="text-sm text-neutral-500">{image.conversation?.length || 0} messages</span>}
           </button>
 
           {/* Chat Content */}
           <div className={`flex-1 flex flex-col ${showChat ? 'block' : 'hidden lg:flex'}`}>
             {/* Version Navigation */}
             {versions.length > 1 && (
-              <div className="p-4 border-b border-slate-200/50 bg-slate-50/50">
+              <div className="p-4 border-b border-neutral-200/50 bg-neutral-50/50">
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-medium text-slate-600 uppercase tracking-wider">Version History</span>
-                  <span className="text-sm font-medium text-slate-700">
+                  <span className="text-xs font-medium text-neutral-600 uppercase tracking-wider">Version History</span>
+                  <span className="text-sm font-medium text-neutral-700">
                     {currentVersionIndex + 1} / {versions.length}
                   </span>
                 </div>
@@ -409,8 +409,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                     disabled={!canNavigateLeft}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
                       canNavigateLeft
-                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
-                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
+                        : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
                     }`}
                   >
                     <ChevronLeft className="w-4 h-4" />
@@ -421,8 +421,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                     disabled={!canNavigateRight}
                     className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
                       canNavigateRight
-                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50 hover:border-slate-400 cursor-pointer'
-                        : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
+                        ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
+                        : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
                     }`}
                   >
                     <span className="text-sm font-medium">Next</span>
@@ -430,7 +430,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                   </button>
                 </div>
                 {currentVersion.edit_prompt && (
-                  <p className="mt-2 text-xs text-slate-500 italic">
+                  <p className="mt-2 text-xs text-neutral-500 italic">
                     "{currentVersion.edit_prompt}"
                   </p>
                 )}
@@ -438,16 +438,16 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             )}
 
             {/* Edit Limit Banner */}
-            <div className="p-4 border-b border-slate-200/50">
+            <div className="p-4 border-b border-neutral-200/50">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Edits remaining</span>
+                <span className="text-neutral-600">Edits remaining</span>
                 <span 
-                  className={`font-medium ${editsRemaining <= 2 ? 'text-amber-600' : 'text-slate-700'}`}
+                  className={`font-medium ${editsRemaining <= 2 ? 'text-amber-600' : 'text-neutral-700'}`}
                 >
                   {editsRemaining} / {image.max_edits}
                 </span>
               </div>
-              <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+              <div className="mt-2 h-1.5 bg-neutral-200 rounded-full overflow-hidden">
                 <div 
                   className="h-full rounded-full transition-all"
                   style={{ 
@@ -461,9 +461,9 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             {/* Conversation */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Original prompt */}
-              <div className="bg-slate-100 rounded-2xl rounded-tl-sm p-4">
-                <p className="text-xs text-slate-500 mb-1 font-medium">Original prompt</p>
-                <p className="text-sm text-slate-700">{image.prompt}</p>
+              <div className="bg-neutral-100 rounded-2xl rounded-tl-sm p-4">
+                <p className="text-xs text-neutral-500 mb-1 font-medium">Original prompt</p>
+                <p className="text-sm text-neutral-700">{image.prompt}</p>
               </div>
 
               {/* Conversation history */}
@@ -472,8 +472,8 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                   key={index}
                   className={`rounded-2xl p-4 ${
                     msg.role === 'user'
-                      ? 'bg-slate-900 text-white rounded-br-sm ml-8'
-                      : 'bg-slate-100 text-slate-700 rounded-tl-sm mr-8'
+                      ? 'bg-neutral-900 text-white rounded-br-sm ml-8'
+                      : 'bg-neutral-100 text-neutral-700 rounded-tl-sm mr-8'
                   }`}
                 >
                   <p className="text-sm">{msg.content}</p>
@@ -490,7 +490,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
             </div>
 
             {/* Input */}
-            <div className="p-4 border-t border-slate-200/50">
+            <div className="p-4 border-t border-neutral-200/50">
               {canEdit ? (
                 <form 
                   onSubmit={(e) => { e.preventDefault(); handleEdit(); }}
@@ -502,7 +502,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                     onChange={(e) => setEditPrompt(e.target.value)}
                     placeholder="Describe your edit..."
                     disabled={editing || image.status === 'generating'}
-                    className="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 transition-all disabled:opacity-50"
+                    className="flex-1 px-4 py-3 bg-white border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-neutral-300 transition-all disabled:opacity-50"
                   />
                   <button
                     type="submit"
@@ -519,7 +519,7 @@ export function ImageEditor({ brand }: { brand: Brand }) {
                 </form>
               ) : (
                 <div className="text-center py-2">
-                  <p className="text-sm text-slate-500 mb-3">
+                  <p className="text-sm text-neutral-500 mb-3">
                     You've reached the edit limit for this image.
                   </p>
                   <button

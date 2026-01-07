@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Check, Sparkles, XCircle, Filter, Upload } from 'lucide-react';
 import { Style, supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { Button } from './ui';
 
 interface StylesPickerProps {
   isOpen: boolean;
@@ -67,6 +68,20 @@ export function StylesPicker({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openCategory]);
+
+  // Close modal on ESC key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
 
   // Capitalize first letter
   const capitalize = (str: string): string => {
@@ -297,15 +312,15 @@ export function StylesPicker({
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60" />
 
       {/* Modal Content */}
       <div
-        className="relative glass rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] flex flex-col modal-content-enter"
+        className="relative bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] flex flex-col modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-100 gap-3">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-semibold text-neutral-800 mb-1 font-heading">Choose a Style</h2>
             <p className="text-xs sm:text-sm text-neutral-500">
@@ -327,7 +342,7 @@ export function StylesPicker({
 
         {/* Tag Filters */}
         {Object.keys(tagsByCategory).some(cat => tagsByCategory[cat].length > 0) && (
-          <div className="p-3 sm:p-4 border-b border-neutral-100 relative">
+          <div className="p-3 sm:p-4 relative">
             <div className="mb-3 flex items-center gap-2">
               <Filter className="w-4 h-4 text-neutral-400" />
               <h3 className="text-sm font-medium text-neutral-600">Filters</h3>
@@ -438,7 +453,7 @@ export function StylesPicker({
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="group relative rounded-2xl overflow-hidden border-2 border-dashed border-neutral-200 hover:border-brand-primary/30 transition-all bg-neutral-50/50 hover:bg-brand-primary/5 aspect-square flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="group relative rounded-xl overflow-hidden border border-dashed border-neutral-200 hover:border-neutral-300 transition-all bg-neutral-50 hover:bg-neutral-100 aspect-square flex flex-col items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? (
                   <>
@@ -470,12 +485,12 @@ export function StylesPicker({
                     key={style.id}
                     onClick={() => handleStyleClick(style)}
                     disabled={!isSelected && !canAddMore}
-                    className={`group relative rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
+                    className={`group relative rounded-xl overflow-hidden border transition-all duration-200 ${
                       isSelected
-                        ? 'border-brand-primary ring-2 ring-brand-primary/20'
+                        ? 'border-brand-primary ring-1 ring-brand-primary/20'
                         : !canAddMore
                         ? 'border-neutral-200 opacity-50 cursor-not-allowed'
-                        : 'border-neutral-200 hover:border-neutral-300 hover:shadow-md'
+                        : 'border-neutral-200 hover:border-neutral-300'
                     }`}
                     aria-label={!isSelected && !canAddMore ? 'Selection limit reached' : style.name}
                   >
@@ -484,7 +499,7 @@ export function StylesPicker({
                       <img
                         src={style.url}
                         alt=""
-                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-contain p-2"
                       />
                     </div>
 
@@ -526,7 +541,7 @@ export function StylesPicker({
         )}
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-neutral-100 bg-neutral-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="text-xs sm:text-sm text-neutral-500">
             {localSelection.length > 0 ? (
               <>
@@ -540,20 +555,18 @@ export function StylesPicker({
               <span>Select up to {MAX_STYLES} styles</span>
             )}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
-            <button
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Button
+              variant="ghost"
               onClick={onClose}
-              className="btn-ghost flex-1 sm:flex-none px-5 py-2.5 rounded-xl border border-neutral-200"
+              className="flex-1 sm:flex-none border border-neutral-200"
             >
               Cancel
-            </button>
+            </Button>
             {localSelection.length > 0 && (
-              <button
-                onClick={handleAdd}
-                className="btn-primary flex-1 sm:flex-none px-5 py-2.5 rounded-xl"
-              >
+              <Button onClick={handleAdd} className="flex-1 sm:flex-none">
                 Add Style
-              </button>
+              </Button>
             )}
           </div>
         </div>

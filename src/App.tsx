@@ -22,7 +22,7 @@ const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pri
 function PageLoader() {
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
-      <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+      <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
     </div>
   );
 }
@@ -34,7 +34,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -53,7 +53,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }
@@ -239,7 +239,7 @@ function BrandRoutes() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8F7F9' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-slate-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-neutral-600" />
       </div>
     );
   }

@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { Check, Loader2, CreditCard } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
+import { Button } from '../components/ui';
 
 interface Plan {
   id: string;
@@ -111,11 +112,8 @@ export function Pricing() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center gradient-surface">
-        <div className="relative">
-          <div className="w-20 h-20 rounded-full bg-brand-primary/20 animate-pulse blur-xl opacity-40" />
-          <Loader2 className="w-8 h-8 animate-spin text-brand-primary absolute inset-0 m-auto" />
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-primary" />
       </div>
     );
   }
@@ -240,25 +238,18 @@ export function Pricing() {
                 </div>
 
                 {plan.name !== 'free' && !isDowngrade && (
-                  <button
+                  <Button
                     onClick={() => handleSubscribe(plan.id)}
                     disabled={isActive || processing === plan.id}
-                    className={`w-full py-3 px-4 rounded-xl font-semibold transition-all touch-manipulation active:scale-[0.98] ${
-                      isActive
-                        ? 'bg-green-100 text-green-700 cursor-not-allowed'
-                        : isRecommended
-                        ? 'btn-primary shadow-lg hover:shadow-xl'
-                        : 'btn-secondary'
-                    } ${processing === plan.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    loading={processing === plan.id}
+                    variant={isActive ? 'ghost' : isRecommended ? 'primary' : 'secondary'}
+                    className={`w-full ${isActive ? 'bg-green-100 text-green-700' : ''}`}
                   >
-                    {processing === plan.id ? (
-                      <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                    ) : isActive ? (
-                      'Current Plan'
-                    ) : (
-                      `${isUpgrade ? 'Upgrade' : 'Subscribe'}${billingCycle === 'yearly' ? ' Annually' : ''}`
-                    )}
-                  </button>
+                    {isActive
+                      ? 'Current Plan'
+                      : `${isUpgrade ? 'Upgrade' : 'Subscribe'}${billingCycle === 'yearly' ? ' Annually' : ''}`
+                    }
+                  </Button>
                 )}
               </div>
             );

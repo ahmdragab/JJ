@@ -144,16 +144,16 @@ export function ImageGenerator({
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-slate-50 to-emerald-50">
       {/* Header */}
-      <nav className="border-b border-slate-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
+      <nav className="border-b border-neutral-200 bg-white/80 backdrop-blur-sm sticky top-0 z-10 shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
             onClick={onBack}
-            className="flex items-center gap-2 text-slate-600 hover:text-slate-900 transition-colors"
+            className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
             Back to Brand Kit
           </button>
-          <div className="flex items-center gap-2 text-slate-900 font-semibold">
+          <div className="flex items-center gap-2 text-neutral-900 font-semibold">
             <Wand2 className="w-5 h-5 text-emerald-500" />
             AI Image Generator
           </div>
@@ -163,32 +163,32 @@ export function ImageGenerator({
 
       <div className="max-w-6xl mx-auto px-6 py-12">
         {/* Brand Context Card */}
-        <div className="mb-8 rounded-xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        <div className="mb-8 rounded-xl bg-white border border-neutral-200 shadow-sm overflow-hidden">
           <div className="p-4 flex items-center gap-4">
             {brand.logos.primary && (
               <img
                 src={brand.logos.primary}
                 alt={brand.name}
-                className="w-12 h-12 object-contain rounded-lg bg-slate-50 p-2"
+                className="w-12 h-12 object-contain rounded-lg bg-neutral-50 p-2"
               />
             )}
             <div className="flex-1">
-              <h2 className="text-slate-900 font-semibold">{brand.name}</h2>
+              <h2 className="text-neutral-900 font-semibold">{brand.name}</h2>
               {brand.slogan && (
-                <p className="text-slate-600 text-sm">{brand.slogan}</p>
+                <p className="text-neutral-600 text-sm">{brand.slogan}</p>
               )}
             </div>
             <div className="flex gap-2">
               {brand.colors.primary && (
                 <div
-                  className="w-8 h-8 rounded-full border-2 border-slate-200"
+                  className="w-8 h-8 rounded-full border-2 border-neutral-200"
                   style={{ backgroundColor: brand.colors.primary }}
                   title="Primary color"
                 />
               )}
               {brand.colors.secondary && (
                 <div
-                  className="w-8 h-8 rounded-full border-2 border-slate-200"
+                  className="w-8 h-8 rounded-full border-2 border-neutral-200"
                   style={{ backgroundColor: brand.colors.secondary }}
                   title="Secondary color"
                 />
@@ -196,21 +196,21 @@ export function ImageGenerator({
             </div>
             <button
               onClick={() => setShowBrandContext(!showBrandContext)}
-              className="p-2 hover:bg-slate-50 rounded-lg transition-colors"
+              className="p-2 hover:bg-neutral-50 rounded-lg transition-colors"
               title="Show brand context sent to AI"
             >
               {showBrandContext ? (
-                <ChevronUp className="w-5 h-5 text-slate-600" />
+                <ChevronUp className="w-5 h-5 text-neutral-600" />
               ) : (
-                <ChevronDown className="w-5 h-5 text-slate-600" />
+                <ChevronDown className="w-5 h-5 text-neutral-600" />
               )}
             </button>
           </div>
 
           {/* Expandable Brand Context Details */}
           {showBrandContext && (
-            <div className="px-4 pb-4 border-t border-slate-200 pt-4 bg-slate-50">
-              <p className="text-slate-500 text-xs uppercase tracking-wide mb-3">Brand elements sent to Nano Banana</p>
+            <div className="px-4 pb-4 border-t border-neutral-200 pt-4 bg-neutral-50">
+              <p className="text-neutral-500 text-xs uppercase tracking-wide mb-3">Brand elements sent to Nano Banana</p>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                 {/* Logo Reference */}
                 <div className="flex items-center gap-2">
@@ -219,7 +219,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.logos.primary ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.logos.primary ? 'text-neutral-700' : 'text-neutral-400'}>
                     Logo image
                   </span>
                 </div>
@@ -231,7 +231,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.backdrops?.length ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.backdrops?.length ? 'text-neutral-700' : 'text-neutral-400'}>
                     Backdrop image
                   </span>
                 </div>
@@ -243,7 +243,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.slogan ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.slogan ? 'text-neutral-700' : 'text-neutral-400'}>
                     Tagline
                   </span>
                 </div>
@@ -253,15 +253,15 @@ export function ImageGenerator({
                   {brand.colors.primary ? (
                     <>
                       <div 
-                        className="w-4 h-4 rounded-full border border-slate-300"
+                        className="w-4 h-4 rounded-full border border-neutral-300"
                         style={{ backgroundColor: brand.colors.primary }}
                       />
-                      <span className="text-slate-700">Primary: {brand.colors.primary}</span>
+                      <span className="text-neutral-700">Primary: {brand.colors.primary}</span>
                     </>
                   ) : (
                     <>
                       <X className="w-4 h-4 text-red-400" />
-                      <span className="text-slate-400">Primary color</span>
+                      <span className="text-neutral-400">Primary color</span>
                     </>
                   )}
                 </div>
@@ -271,15 +271,15 @@ export function ImageGenerator({
                   {brand.colors.secondary ? (
                     <>
                       <div 
-                        className="w-4 h-4 rounded-full border border-slate-300"
+                        className="w-4 h-4 rounded-full border border-neutral-300"
                         style={{ backgroundColor: brand.colors.secondary }}
                       />
-                      <span className="text-slate-700">Secondary: {brand.colors.secondary}</span>
+                      <span className="text-neutral-700">Secondary: {brand.colors.secondary}</span>
                     </>
                   ) : (
                     <>
                       <X className="w-4 h-4 text-red-400" />
-                      <span className="text-slate-400">Secondary color</span>
+                      <span className="text-neutral-400">Secondary color</span>
                     </>
                   )}
                 </div>
@@ -289,15 +289,15 @@ export function ImageGenerator({
                   {brand.colors.background ? (
                     <>
                       <div 
-                        className="w-4 h-4 rounded-full border border-slate-300"
+                        className="w-4 h-4 rounded-full border border-neutral-300"
                         style={{ backgroundColor: brand.colors.background }}
                       />
-                      <span className="text-slate-700">Background</span>
+                      <span className="text-neutral-700">Background</span>
                     </>
                   ) : (
                     <>
                       <X className="w-4 h-4 text-red-400" />
-                      <span className="text-slate-400">Background</span>
+                      <span className="text-neutral-400">Background</span>
                     </>
                   )}
                 </div>
@@ -309,7 +309,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.fonts.heading ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.fonts.heading ? 'text-neutral-700' : 'text-neutral-400'}>
                     {brand.fonts.heading || 'Heading font'}
                   </span>
                 </div>
@@ -321,7 +321,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.voice?.formality ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.voice?.formality ? 'text-neutral-700' : 'text-neutral-400'}>
                     {brand.voice?.formality || 'Voice style'}
                   </span>
                 </div>
@@ -333,7 +333,7 @@ export function ImageGenerator({
                   ) : (
                     <X className="w-4 h-4 text-red-400" />
                   )}
-                  <span className={brand.voice?.keywords?.length ? 'text-slate-700' : 'text-slate-400'}>
+                  <span className={brand.voice?.keywords?.length ? 'text-neutral-700' : 'text-neutral-400'}>
                     {brand.voice?.keywords?.length || 0} keywords
                   </span>
                 </div>
@@ -346,7 +346,7 @@ export function ImageGenerator({
           {/* Input Section */}
           <div className="space-y-6">
             <div>
-              <label className="block text-slate-700 font-medium mb-3">
+              <label className="block text-neutral-700 font-medium mb-3">
                 Describe your image
               </label>
               <div className="relative">
@@ -354,7 +354,7 @@ export function ImageGenerator({
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Describe the image you want to create..."
-                  className="w-full h-32 px-4 py-3 pr-14 bg-white border border-slate-300 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none shadow-sm"
+                  className="w-full h-32 px-4 py-3 pr-14 bg-white border border-neutral-300 rounded-xl text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none shadow-sm"
                 />
                 <button
                   onClick={() => setShowMediaLibrary(true)}
@@ -375,16 +375,16 @@ export function ImageGenerator({
               {/* Assets Section */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  <label className="text-sm font-medium text-neutral-700 flex items-center gap-2">
                     <ImageIcon className="w-4 h-4 text-emerald-600" />
                     Assets to Include
-                    <span className="text-xs text-slate-400 font-normal">(will appear in design)</span>
+                    <span className="text-xs text-neutral-400 font-normal">(will appear in design)</span>
                     <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                       currentAssets >= MAX_HIGH_FIDELITY 
                         ? 'bg-red-100 text-red-700' 
                         : currentAssets >= MAX_HIGH_FIDELITY - 1
                         ? 'bg-amber-100 text-amber-700'
-                        : 'bg-slate-100 text-slate-600'
+                        : 'bg-neutral-100 text-neutral-600'
                     }`}>
                       {currentAssets}/{MAX_HIGH_FIDELITY}
                     </span>
@@ -419,7 +419,7 @@ export function ImageGenerator({
                     {selectedAssets.map((asset) => (
                       <div
                         key={asset.id}
-                        className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm"
+                        className="relative group rounded-lg overflow-hidden border border-neutral-200 bg-white shadow-sm"
                       >
                         <img
                           src={asset.url}
@@ -441,9 +441,9 @@ export function ImageGenerator({
                 ) : (
                   <div 
                     onClick={() => setShowAssetPicker(true)}
-                    className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
+                    className="border-2 border-dashed border-neutral-200 rounded-xl p-4 text-center cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors"
                   >
-                    <p className="text-slate-400 text-sm">Click to add product photos, UI screenshots, etc.</p>
+                    <p className="text-neutral-400 text-sm">Click to add product photos, UI screenshots, etc.</p>
                   </div>
                 )}
               </div>
@@ -451,10 +451,10 @@ export function ImageGenerator({
               {/* References Section */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                  <label className="text-sm font-medium text-neutral-700 flex items-center gap-2">
                     <Palette className="w-4 h-4 text-purple-600" />
                     Style References
-                    <span className="text-xs text-slate-400 font-normal">(for mood/style only)</span>
+                    <span className="text-xs text-neutral-400 font-normal">(for mood/style only)</span>
                   </label>
                   <button
                     onClick={() => setShowReferencePicker(true)}
@@ -477,7 +477,7 @@ export function ImageGenerator({
                     {selectedReferences.map((ref) => (
                       <div
                         key={ref.id}
-                        className="relative group rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm"
+                        className="relative group rounded-lg overflow-hidden border border-neutral-200 bg-white shadow-sm"
                       >
                         <img
                           src={ref.url}
@@ -499,9 +499,9 @@ export function ImageGenerator({
                 ) : (
                   <div 
                     onClick={() => setShowReferencePicker(true)}
-                    className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
+                    className="border-2 border-dashed border-neutral-200 rounded-xl p-4 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
                   >
-                    <p className="text-slate-400 text-sm">Click to add moodboards, inspiration images, etc.</p>
+                    <p className="text-neutral-400 text-sm">Click to add moodboards, inspiration images, etc.</p>
                   </div>
                 )}
               </div>
@@ -509,20 +509,20 @@ export function ImageGenerator({
 
             {/* Image Count Summary */}
             {currentTotal > 0 && (
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="p-3 bg-neutral-50 rounded-xl border border-neutral-200">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-600">Total images:</span>
+                  <span className="text-neutral-600">Total images:</span>
                   <span className={`font-semibold ${
                     currentTotal >= MAX_TOTAL_IMAGES 
                       ? 'text-red-600' 
                       : currentTotal >= MAX_TOTAL_IMAGES - 2
                       ? 'text-amber-600'
-                      : 'text-slate-900'
+                      : 'text-neutral-900'
                   }`}>
                     {currentTotal}/{MAX_TOTAL_IMAGES}
                   </span>
                 </div>
-                <div className="mt-2 text-xs text-slate-500 space-y-1">
+                <div className="mt-2 text-xs text-neutral-500 space-y-1">
                   <div className="flex justify-between">
                     <span>• Assets (high-fidelity):</span>
                     <span className={currentAssets >= MAX_HIGH_FIDELITY ? 'text-red-600 font-medium' : ''}>
@@ -534,7 +534,7 @@ export function ImageGenerator({
                     <span>{currentReferences}</span>
                   </div>
                   {autoIncludedImages > 0 && (
-                    <div className="flex justify-between text-slate-400">
+                    <div className="flex justify-between text-neutral-400">
                       <span>• Auto-included (logo, backdrop, screenshot):</span>
                       <span>{autoIncludedImages}</span>
                     </div>
@@ -568,13 +568,13 @@ export function ImageGenerator({
 
             {/* Example Prompts */}
             <div>
-              <p className="text-slate-600 text-sm mb-3">Try an example:</p>
+              <p className="text-neutral-600 text-sm mb-3">Try an example:</p>
               <div className="flex flex-wrap gap-2">
                 {examplePrompts.map((example, i) => (
                   <button
                     key={i}
                     onClick={() => setPrompt(example)}
-                    className="px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 border border-slate-200 rounded-lg text-slate-700 hover:text-emerald-700 transition-colors shadow-sm"
+                    className="px-3 py-1.5 text-xs bg-white hover:bg-emerald-50 border border-neutral-200 rounded-lg text-neutral-700 hover:text-emerald-700 transition-colors shadow-sm"
                   >
                     {example.slice(0, 40)}...
                   </button>
@@ -585,12 +585,12 @@ export function ImageGenerator({
 
           {/* Output Section */}
           <div className="space-y-4">
-            <div className="aspect-square rounded-xl bg-slate-100 border border-slate-300 shadow-sm overflow-hidden flex items-center justify-center">
+            <div className="aspect-square rounded-xl bg-neutral-100 border border-neutral-300 shadow-sm overflow-hidden flex items-center justify-center">
               {generating ? (
                 <div className="text-center">
                   <Loader2 className="w-12 h-12 text-emerald-500 animate-spin mx-auto mb-4" />
-                  <p className="text-slate-800 font-medium">Creating your on-brand image...</p>
-                  <p className="text-slate-600 text-sm mt-2">This may take a few seconds</p>
+                  <p className="text-neutral-800 font-medium">Creating your on-brand image...</p>
+                  <p className="text-neutral-600 text-sm mt-2">This may take a few seconds</p>
                 </div>
               ) : generatedImage ? (
                 <img
@@ -604,14 +604,14 @@ export function ImageGenerator({
                     <span className="text-2xl">⚠️</span>
                   </div>
                   <p className="text-red-700 mb-2 font-medium">Generation failed</p>
-                  <p className="text-slate-700 text-sm">{error}</p>
+                  <p className="text-neutral-700 text-sm">{error}</p>
                 </div>
               ) : (
                 <div className="text-center p-8">
-                  <div className="w-20 h-20 bg-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <Wand2 className="w-10 h-10 text-slate-500" />
+                  <div className="w-20 h-20 bg-neutral-200 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Wand2 className="w-10 h-10 text-neutral-500" />
                   </div>
-                  <p className="text-slate-600">Your generated image will appear here</p>
+                  <p className="text-neutral-600">Your generated image will appear here</p>
                 </div>
               )}
             </div>
@@ -621,7 +621,7 @@ export function ImageGenerator({
               <div className="flex gap-3">
                 <button
                   onClick={handleDownload}
-                  className="flex-1 py-3 bg-white hover:bg-slate-50 text-slate-700 font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
+                  className="flex-1 py-3 bg-white hover:bg-neutral-50 text-neutral-700 font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-neutral-200 shadow-sm"
                 >
                   <Download className="w-5 h-5" />
                   Download
@@ -629,7 +629,7 @@ export function ImageGenerator({
                 <button
                   onClick={handleGenerate}
                   disabled={generating}
-                  className="flex-1 py-3 bg-white hover:bg-slate-50 text-slate-700 font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-200 shadow-sm"
+                  className="flex-1 py-3 bg-white hover:bg-neutral-50 text-neutral-700 font-medium rounded-xl transition-colors flex items-center justify-center gap-2 border border-neutral-200 shadow-sm"
                 >
                   <RefreshCw className="w-5 h-5" />
                   Regenerate
@@ -639,8 +639,8 @@ export function ImageGenerator({
 
             {/* Text Response */}
             {textResponse && (
-              <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <p className="text-slate-600 text-sm">{textResponse}</p>
+              <div className="p-4 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                <p className="text-neutral-600 text-sm">{textResponse}</p>
               </div>
             )}
           </div>

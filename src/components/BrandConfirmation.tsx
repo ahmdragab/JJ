@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { Upload, Check, Loader2, Pencil } from 'lucide-react';
 import { Brand, supabase } from '../lib/supabase';
 import { useToast } from './Toast';
+import { Button } from './ui';
+import { Card } from './ui';
 
 type ConfirmationStep = 'logos' | 'colors';
 
@@ -231,7 +233,7 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
         </div>
 
         {/* Main Card */}
-        <div className="card p-8 md:p-12">
+        <Card variant="elevated" rounded="2xl" padding="lg" className="md:p-12">
           {currentStep === 'logos' ? (
             <div className="text-center">
               {/* Question Text */}
@@ -326,12 +328,9 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
 
               {/* Action Button */}
               <div className="flex justify-center">
-                <button
-                  onClick={handleContinue}
-                  className="btn-primary px-8 py-3 rounded-xl text-base min-h-[48px]"
-                >
+                <Button size="lg" onClick={handleContinue}>
                   Looks Good
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
@@ -381,39 +380,28 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
 
               {/* Action Buttons */}
               <div className="flex justify-center gap-3">
-                <button
+                <Button
+                  variant="ghost"
+                  size="lg"
                   onClick={handleReExtractColors}
                   disabled={reExtractingColors || (!localBrand.styleguide?.ai_extracted_colors && !localBrand.screenshot)}
-                  className="btn-ghost px-6 py-3 rounded-xl border border-neutral-200 min-h-[48px]"
-                  title={(!localBrand.styleguide?.ai_extracted_colors && !localBrand.screenshot) ? 'No screenshot available for color re-extraction' : 'Re-extract colors using AI'}
+                  loading={reExtractingColors}
+                  className="border border-neutral-200"
                 >
-                  {reExtractingColors ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Retrying...
-                    </span>
-                  ) : (
-                    'Retry'
-                  )}
-                </button>
-                <button
+                  {reExtractingColors ? 'Retrying...' : 'Retry'}
+                </Button>
+                <Button
+                  size="lg"
                   onClick={handleContinue}
                   disabled={saving || reExtractingColors}
-                  className="btn-primary px-8 py-3 rounded-xl min-h-[48px]"
+                  loading={saving}
                 >
-                  {saving ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </span>
-                  ) : (
-                    'Looks Good'
-                  )}
-                </button>
+                  {saving ? 'Saving...' : 'Looks Good'}
+                </Button>
               </div>
             </div>
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

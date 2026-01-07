@@ -11,6 +11,7 @@ import {
 import favIcon from '../fav.png';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, Brand, getUserCredits, normalizeDomain } from '../lib/supabase';
+import { Button } from './ui';
 
 interface NavbarProps {
   currentBrand?: Brand;
@@ -151,12 +152,12 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
           <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto shrink-0">
             <button
               onClick={() => navigate('/brands')}
-              className="group flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 rounded-full hover:bg-white/60 active:bg-white/70 transition-all duration-300 touch-manipulation"
+              className="flex items-center hover:opacity-80 transition-opacity touch-manipulation"
             >
               <img
                 src={favIcon}
                 alt="Alwan"
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-full object-cover transition-transform group-hover:scale-105"
+                style={{ width: 100, height: 'auto' }}
               />
             </button>
           </div>
@@ -258,13 +259,14 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
 
             {/* Studio Button */}
             {activeBrand && !isOnStudioPage && !isOnBrandKitEditor && (
-              <button
+              <Button
+                size="sm"
                 onClick={() => navigate(`/brands/${activeBrand.slug}/studio`)}
-                className="btn-primary min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 px-3 sm:px-4 py-2 rounded-xl text-sm font-medium shadow-sm hover:shadow-md"
+                className="shadow-sm hover:shadow-md"
               >
                 <Sparkles className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1.5">Studio</span>
-              </button>
+              </Button>
             )}
 
             {/* User Menu */}

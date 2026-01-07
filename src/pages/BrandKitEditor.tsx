@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, Image as ImageIcon, Palette } from 'lucide-react';
+import { useState, useEffect, useRef, ReactNode } from 'react';
+import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, Image as ImageIcon, Palette, Globe, Type, BarChart2, Sparkles, ArrowRight } from 'lucide-react';
 import { Brand, BrandAsset, supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import { Button, Select } from '../components/ui';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
 
@@ -785,36 +786,30 @@ export function BrandKitEditor({
   }
 
   if (brand.status === 'extracting') {
-    // Animated extraction steps
-    const steps = [
-      { icon: '🌐', label: 'Crawling website', description: 'Scanning homepage and gathering assets' },
-      { icon: '🎨', label: 'Extracting colors', description: 'Identifying brand color palette' },
-      { icon: '🔤', label: 'Analyzing typography', description: 'Detecting fonts and text styles' },
-      { icon: '🖼️', label: 'Collecting images', description: 'Gathering logos and visual assets' },
-      { icon: '📊', label: 'Analyzing design style', description: 'Understanding visual patterns and aesthetics' },
-      { icon: '✨', label: 'Finalizing brand kit', description: 'Putting everything together' },
+    // Animated extraction steps with Lucide icons
+    const steps: { icon: ReactNode; label: string; description: string }[] = [
+      { icon: <Globe className="w-8 h-8" />, label: 'Crawling website', description: 'Scanning homepage and gathering assets' },
+      { icon: <Palette className="w-8 h-8" />, label: 'Extracting colors', description: 'Identifying brand color palette' },
+      { icon: <Type className="w-8 h-8" />, label: 'Analyzing typography', description: 'Detecting fonts and text styles' },
+      { icon: <ImageIcon className="w-8 h-8" />, label: 'Collecting images', description: 'Gathering logos and visual assets' },
+      { icon: <BarChart2 className="w-8 h-8" />, label: 'Analyzing design style', description: 'Understanding visual patterns and aesthetics' },
+      { icon: <Sparkles className="w-8 h-8" />, label: 'Finalizing brand kit', description: 'Putting everything together' },
     ];
 
     return (
-      <div 
-        className="min-h-screen flex items-center justify-center p-6"
-        style={{
-          background: `linear-gradient(135deg, ${primaryColor}15 0%, ${secondaryColor}10 100%)`,
-        }}
-      >
+      <div className="min-h-screen flex items-center justify-center p-6 bg-neutral-50">
         <div className="text-center max-w-2xl w-full">
           {/* Animated loader */}
-          <div className="relative w-32 h-32 mx-auto mb-8">
-            <div 
-              className="absolute inset-0 rounded-full animate-ping opacity-20"
-              style={{ backgroundColor: primaryColor }}
+          <div className="relative w-24 h-24 mx-auto mb-8">
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{ backgroundColor: `${primaryColor}15` }}
             />
-            <div 
-              className="absolute inset-2 rounded-full animate-pulse"
-              style={{ backgroundColor: primaryColor, opacity: 0.3 }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-5xl animate-bounce">{steps[currentExtractionStep].icon}</span>
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ color: primaryColor }}
+            >
+              {steps[currentExtractionStep].icon}
             </div>
           </div>
 
@@ -903,18 +898,16 @@ export function BrandKitEditor({
                   </h1>
                   <p className="text-neutral-400 text-base sm:text-lg">{localBrand.domain}</p>
                 </div>
-                <button
+                <Button
                   onClick={handleSaveAndContinue}
                   disabled={saving}
-                  className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-full text-white text-sm font-medium hover:shadow-2xl hover:scale-105 transition-all duration-300 disabled:opacity-50 shrink-0 mx-auto sm:mx-0"
-                  style={{ 
-                    backgroundColor: '#3531B7',
-                  }}
-                  onMouseEnter={(e) => !saving && (e.currentTarget.style.backgroundColor = '#2a26a0')}
-                  onMouseLeave={(e) => !saving && (e.currentTarget.style.backgroundColor = '#3531B7')}
+                  loading={saving}
+                  size="lg"
+                  className="shrink-0 mx-auto sm:mx-0"
                 >
-                  {saving ? 'Saving...' : 'Continue to Create →'}
-                </button>
+                  Continue to Studio
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
               </div>
               {localBrand.slogan && (
                 <p className="text-xl text-neutral-600 font-light italic max-w-xl mb-4">
@@ -1292,22 +1285,22 @@ export function BrandKitEditor({
 
                 {/* Category */}
                 <div className="mb-6">
-                  <label className="text-sm font-medium text-neutral-700 block mb-2">Category (optional)</label>
-                  <select
+                  <Select
+                    label="Category (optional)"
                     value={newAssetCategory}
-                    onChange={(e) => setNewAssetCategory(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white"
-                  >
-                    <option value="">Select a category</option>
-                    <option value="product">Product</option>
-                    <option value="ui_screen">UI / Screenshot</option>
-                    <option value="lifestyle">Lifestyle</option>
-                    <option value="team">Team / People</option>
-                    <option value="moodboard">Moodboard</option>
-                    <option value="campaign">Campaign</option>
-                    <option value="icon">Icon / Graphic</option>
-                    <option value="other">Other</option>
-                  </select>
+                    onChange={setNewAssetCategory}
+                    options={[
+                      { value: 'product', label: 'Product' },
+                      { value: 'ui_screen', label: 'UI / Screenshot' },
+                      { value: 'lifestyle', label: 'Lifestyle' },
+                      { value: 'team', label: 'Team / People' },
+                      { value: 'moodboard', label: 'Moodboard' },
+                      { value: 'campaign', label: 'Campaign' },
+                      { value: 'icon', label: 'Icon / Graphic' },
+                      { value: 'other', label: 'Other' },
+                    ]}
+                    placeholder="Select a category"
+                  />
                 </div>
 
                 {/* Upload Button */}

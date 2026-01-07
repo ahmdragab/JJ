@@ -31,7 +31,7 @@ export function TemplateRenderer({
   // Early return if style is not defined
   if (!template.style) {
     return (
-      <div className="w-full aspect-video bg-slate-100 flex items-center justify-center text-slate-500">
+      <div className="w-full aspect-video bg-neutral-100 flex items-center justify-center text-neutral-500">
         Template style not configured
       </div>
     );
@@ -102,7 +102,7 @@ export function TemplateRenderer({
                 className="w-full h-full object-cover rounded-2xl shadow-2xl"
               />
             ) : (
-              <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 rounded-2xl flex items-center justify-center text-slate-500">
+              <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 rounded-2xl flex items-center justify-center text-neutral-500">
                 Image Placeholder
               </div>
             )}
@@ -171,7 +171,7 @@ export function TemplateRenderer({
   }
 
   return (
-    <div className="w-full aspect-video bg-slate-100 flex items-center justify-center text-slate-500">
+    <div className="w-full aspect-video bg-neutral-100 flex items-center justify-center text-neutral-500">
       Template renderer not implemented for {template.type}
     </div>
   );

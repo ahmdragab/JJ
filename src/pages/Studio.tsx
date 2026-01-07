@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Loader2,
   Trash2,
-  Calendar,
   Sparkles,
   ImageIcon,
   Download,
@@ -28,7 +27,8 @@ import {
   Camera,
   Share2,
   Play,
-  Package
+  Package,
+  Copy
 } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, getAuthHeaders } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -39,6 +39,7 @@ import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
 import { logger } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { Button } from '../components/ui';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -1321,15 +1322,9 @@ export function Studio({ brand }: { brand: Brand }) {
   }
 
   return (
-    <div className={`${images.length === 0 ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'min-h-screen'} bg-neutral-50 relative`}>
-      {/* Subtle background texture */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-brand-primary mix-blend-multiply filter blur-3xl opacity-[0.08] animate-blob" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-brand-primary mix-blend-multiply filter blur-3xl opacity-[0.08] animate-blob animation-delay-2000" />
-      </div>
-
+    <div className={`${images.length === 0 ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'min-h-screen'} bg-neutral-50`}>
       {/* Main Content */}
-      <div className={`relative z-10 ${images.length === 0 ? 'pt-4 sm:pt-6 pb-2' : 'pt-8 sm:pt-10 md:pt-12 pb-32 sm:pb-40'}`}>
+      <div className={`${images.length === 0 ? 'pt-12 sm:pt-16 pb-2' : 'pt-8 sm:pt-10 md:pt-12 pb-32 sm:pb-40'}`}>
         <div className={`${images.length === 0 ? 'p-4 sm:p-6 md:p-6' : 'p-4 sm:p-6 md:p-8'}`}>
           <div className="max-w-7xl mx-auto">
             {/* TEMPLATES COMMENTED OUT */}
@@ -1497,21 +1492,19 @@ export function Studio({ brand }: { brand: Brand }) {
 
                         {/* Submit Button - Always visible on right when there's text */}
                         {prompt.trim() && !compareMode && (
-                          <button
+                          <Button
+                            size="sm"
                             onClick={editingImage ? handleEdit : handleGenerate}
                             disabled={(generating || editing) || !prompt.trim()}
-                            className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm shrink-0"
+                            loading={generating || editing}
                           >
-                            {(generating || editing) && (
-                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                            )}
                             <span className="sm:hidden">
                               {editingImage ? 'Apply' : 'Go'}
                             </span>
                             <span className="hidden sm:inline">
                               {editingImage ? 'Apply' : 'Create'}
                             </span>
-                          </button>
+                          </Button>
                         )}
                         
                         {/* Compare Button - Shows when compare mode is enabled */}
@@ -1854,7 +1847,7 @@ export function Studio({ brand }: { brand: Brand }) {
                 </div>
 
                 {/* Smart Presets Section */}
-                <div>
+                <div className="mt-8">
                   <div className="mb-4 text-center">
                     <h3 className="text-sm sm:text-base font-medium text-neutral-600">
                       Some ideas to get started
@@ -1867,58 +1860,32 @@ export function Studio({ brand }: { brand: Brand }) {
                       <span className="ml-3 text-neutral-600 text-sm sm:text-base">Generating smart presets...</span>
                     </div>
                   ) : smartPresets.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {smartPresets.slice(0, 3).map((preset) => {
                         const { tag, IconComponent } = getPresetIconAndTag(preset.category, preset.label);
                         return (
-                          <button
+                          <div
                             key={preset.id}
                             onClick={() => handlePresetClick(preset)}
-                            className="group relative bg-white rounded-2xl p-4 border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                            className="group bg-white rounded-xl p-3 border border-neutral-200 hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer flex items-start gap-3"
                           >
-                            {/* Tag */}
-                            <div className="absolute top-3 left-3">
-                              <span className="text-xs font-medium text-neutral-500 bg-neutral-50 px-2 py-0.5 rounded-full border border-neutral-200">
-                                {tag}
-                              </span>
-                            </div>
-                            
                             {/* Icon */}
-                            <div className="flex items-center justify-center mb-4 mt-1">
-                              <div className="w-16 h-16 rounded-xl flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary">
-                                <IconComponent className="w-8 h-8 text-brand-primary" />
+                            <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary shrink-0">
+                              <IconComponent className="w-5 h-5 text-brand-primary" />
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
+                                  {tag}
+                                </span>
                               </div>
-                            </div>
-                            
-                            {/* Title */}
-                            <h4 className="font-semibold text-neutral-900 mb-1.5 text-sm leading-tight">
-                              {preset.label}
-                            </h4>
-                            
-                            {/* Description */}
-                            {preset.smartContext?.whyRelevant ? (
-                              <p className="text-xs text-neutral-600 mb-3 flex-1 leading-relaxed line-clamp-2">
-                                {preset.smartContext.whyRelevant}
+                              <p className="text-sm text-neutral-700 leading-relaxed">
+                                {preset.prompt}
                               </p>
-                            ) : (
-                              <p className="text-xs text-neutral-600 mb-3 flex-1 leading-relaxed">
-                                {preset.category}
-                              </p>
-                            )}
-                            
-                            {/* Create Button */}
-                            <div className="mt-auto pt-3 border-t border-neutral-100">
-                              <button
-                                className="btn-primary w-full py-2.5 rounded-lg text-sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handlePresetClick(preset);
-                                }}
-                              >
-                                Create
-                              </button>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -2163,21 +2130,19 @@ export function Studio({ brand }: { brand: Brand }) {
 
                 {/* Submit Button - Always visible on right when there's text */}
                 {prompt.trim() && !compareMode && (
-                  <button
+                  <Button
+                    size="sm"
                     onClick={editingImage ? handleEdit : handleGenerate}
                     disabled={(generating || editing) || !prompt.trim()}
-                    className="btn-primary px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-sm shrink-0"
+                    loading={generating || editing}
                   >
-                    {(generating || editing) && (
-                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                    )}
                     <span className="sm:hidden">
                       {editingImage ? 'Apply' : 'Go'}
                     </span>
                     <span className="hidden sm:inline">
                       {editingImage ? 'Apply' : 'Create'}
                     </span>
-                  </button>
+                  </Button>
                 )}
 
                 {/* Compare Button - Shows when compare mode is enabled */}
@@ -2547,11 +2512,11 @@ export function Studio({ brand }: { brand: Brand }) {
           }}
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" data-backdrop="true" />
-          
+          <div className="absolute inset-0 bg-black/60" data-backdrop="true" />
+
           {/* Modal Content */}
-          <div 
-            className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col md:flex-row"
+          <div
+            className="relative bg-white rounded-xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col md:flex-row border border-neutral-200 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Close Button */}
@@ -2566,13 +2531,13 @@ export function Studio({ brand }: { brand: Brand }) {
                 }
               }}
               disabled={modalEditing}
-              className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-600 hover:text-neutral-900 hover:bg-white transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
 
             {/* Image Panel */}
-            <div className="flex-1 bg-neutral-100 flex items-center justify-center p-6 md:p-8 relative">
+            <div className="flex-1 bg-neutral-50 flex items-center justify-center p-6 md:p-8 relative">
               {(() => {
                 const versions = getAllVersions(selectedImage);
                 const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
@@ -2584,13 +2549,13 @@ export function Studio({ brand }: { brand: Brand }) {
                         <img
                           src={currentVersion.image_url}
                           alt={`Generated version ${currentVersionIndex + 1}`}
-                          className="max-w-full max-h-[60vh] md:max-h-[70vh] rounded-2xl shadow-lg object-contain"
+                          className="max-w-full max-h-[60vh] md:max-h-[70vh] rounded-lg object-contain"
                         />
                         {(modalEditing || selectedImage.status === 'generating') && (
-                          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
+                          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center z-10">
                             <div className="text-center text-white">
-                              <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-                              <p className="font-medium">
+                              <Loader2 className="w-10 h-10 animate-spin mx-auto mb-3" />
+                              <p className="text-sm font-medium">
                                 {selectedImage.status === 'generating' ? 'Creating your image...' : 'Applying your edits...'}
                               </p>
                             </div>
@@ -2599,13 +2564,13 @@ export function Studio({ brand }: { brand: Brand }) {
                       </div>
                     ) : selectedImage.status === 'generating' ? (
                       <div className="text-center">
-                        <Loader2 className="w-12 h-12 animate-spin text-neutral-400 mx-auto mb-4" />
-                        <p className="text-neutral-600">Creating your image...</p>
+                        <Loader2 className="w-10 h-10 animate-spin text-neutral-400 mx-auto mb-3" />
+                        <p className="text-sm text-neutral-600">Creating your image...</p>
                       </div>
                     ) : (
                       <div className="text-center">
-                        <Sparkles className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
-                        <p className="text-neutral-500">Image not available</p>
+                        <Sparkles className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
+                        <p className="text-sm text-neutral-500">Image not available</p>
                       </div>
                     )}
                   </>
@@ -2614,145 +2579,139 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
 
             {/* Info Panel */}
-            <div className="w-full md:w-80 lg:w-96 border-t md:border-t-0 md:border-l border-neutral-200 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto">
-              {/* Header */}
-              <div className="p-4 sm:p-6 border-b border-neutral-100">
-                <div className="flex items-center gap-2 text-xs text-neutral-500 mb-3">
-                  <Calendar className="w-3.5 h-3.5" />
-                  {formatDate(selectedImage.created_at)}
+            <div className="w-full md:w-80 lg:w-96 flex flex-col max-h-[50vh] md:max-h-none overflow-y-auto bg-white">
+              {/* Content */}
+              <div className="flex-1 p-5 pr-12">
+                {/* Prompt */}
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm font-medium text-neutral-900">Prompt</span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(selectedImage.prompt);
+                      }}
+                      className="p-1 rounded hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600 transition-colors"
+                      title="Copy prompt"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-neutral-600 leading-relaxed">
+                    {selectedImage.prompt}
+                  </p>
+                </div>
+
+                {/* Meta */}
+                <div className="flex items-center gap-3 text-xs text-neutral-400 mb-5">
+                  <span className="tabular-nums">{formatDate(selectedImage.created_at)}</span>
                   {selectedImage.edit_count > 0 && (
-                    <span className="px-2 py-0.5 bg-neutral-100 rounded-full">
-                      {selectedImage.edit_count} edit{selectedImage.edit_count !== 1 ? 's' : ''}
-                    </span>
+                    <>
+                      <span>·</span>
+                      <span>{selectedImage.edit_count} edit{selectedImage.edit_count !== 1 ? 's' : ''}</span>
+                    </>
                   )}
                 </div>
-                <p className="text-sm text-neutral-700 leading-relaxed">
-                  {selectedImage.prompt}
-                </p>
-              </div>
 
-              {/* Version Navigation */}
-              {(() => {
-                const versions = getAllVersions(selectedImage);
-                const canNavigateLeft = currentVersionIndex > 0;
-                const canNavigateRight = currentVersionIndex < versions.length - 1;
-                const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
+                {/* Version Navigation */}
+                {(() => {
+                  const versions = getAllVersions(selectedImage);
+                  const canNavigateLeft = currentVersionIndex > 0;
+                  const canNavigateRight = currentVersionIndex < versions.length - 1;
+                  const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
 
-                return versions.length > 1 ? (
-                  <div className="p-4 border-b border-neutral-200 bg-neutral-50/50">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-medium text-neutral-600 uppercase tracking-wider">Version History</span>
-                      <span className="text-sm font-medium text-neutral-700">
-                        {currentVersionIndex + 1} / {versions.length}
-                      </span>
+                  return versions.length > 1 ? (
+                    <div className="mb-5">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-neutral-500">Version {currentVersionIndex + 1} of {versions.length}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => navigateVersion(-1, versions.length)}
+                            disabled={!canNavigateLeft}
+                            className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                              canNavigateLeft
+                                ? 'text-neutral-600 hover:bg-neutral-100'
+                                : 'text-neutral-300 cursor-not-allowed'
+                            }`}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => navigateVersion(1, versions.length)}
+                            disabled={!canNavigateRight}
+                            className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors ${
+                              canNavigateRight
+                                ? 'text-neutral-600 hover:bg-neutral-100'
+                                : 'text-neutral-300 cursor-not-allowed'
+                            }`}
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                      {currentVersion?.edit_prompt && (
+                        <p className="text-xs text-neutral-500 italic">
+                          "{currentVersion.edit_prompt}"
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => navigateVersion(-1, versions.length)}
-                        disabled={!canNavigateLeft}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-                          canNavigateLeft
-                            ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
-                            : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <ChevronLeft className="w-4 h-4" />
-                        <span className="text-sm font-medium">Previous</span>
-                      </button>
-                      <button
-                        onClick={() => navigateVersion(1, versions.length)}
-                        disabled={!canNavigateRight}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-                          canNavigateRight
-                            ? 'bg-white border-neutral-300 text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 cursor-pointer'
-                            : 'bg-neutral-100 border-neutral-200 text-neutral-400 cursor-not-allowed'
-                        }`}
-                      >
-                        <span className="text-sm font-medium">Next</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {currentVersion?.edit_prompt && (
-                      <p className="mt-2 text-xs text-neutral-500 italic">
-                        "{currentVersion.edit_prompt}"
-                      </p>
-                    )}
-                  </div>
-                ) : null;
-              })()}
+                  ) : null;
+                })()}
 
-              {/* GPT Prompt Info (for reference) - Only show on localhost */}
-              {gptPromptInfo && (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && (
-                <div className="p-4 border-t border-neutral-200 bg-neutral-50/50">
-                  <button
-                    onClick={() => setShowGptPrompt(!showGptPrompt)}
-                    className="w-full flex items-center justify-between text-left hover:opacity-80 transition-opacity"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Wand2 className="w-4 h-4 text-neutral-600" />
-                      <span className="text-xs font-semibold text-neutral-700 uppercase tracking-wider">
-                        Generated Prompt
-                      </span>
-                    </div>
-                    {showGptPrompt ? (
-                      <ChevronUp className="w-4 h-4 text-neutral-500" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-neutral-500" />
-                    )}
-                  </button>
-                  {showGptPrompt && (
-                    <div className="mt-3 space-y-3">
-                      <div className="bg-white rounded-lg p-3 border border-neutral-200 shadow-sm">
-                        <div className="text-xs font-semibold text-neutral-800 mb-2">System Prompt:</div>
-                        <pre className="text-xs text-neutral-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-neutral-50 p-2 rounded border border-neutral-100">
+                {/* Debug: GPT Prompt (dev only) */}
+                {gptPromptInfo && (import.meta.env.DEV || window.location.hostname === 'localhost') && (
+                  <div className="pt-4 border-t border-neutral-100">
+                    <button
+                      onClick={() => setShowGptPrompt(!showGptPrompt)}
+                      className="flex items-center gap-2 text-xs text-neutral-400 hover:text-neutral-600 transition-colors"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span>Debug prompt</span>
+                      {showGptPrompt ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </button>
+                    {showGptPrompt && (
+                      <div className="mt-3 space-y-2">
+                        <pre className="text-[11px] text-neutral-600 whitespace-pre-wrap break-words font-mono overflow-auto max-h-32 bg-neutral-50 p-2 rounded-md">
                           {gptPromptInfo.system_prompt}
                         </pre>
-                      </div>
-                      <div className="bg-white rounded-lg p-3 border border-neutral-200 shadow-sm">
-                        <div className="text-xs font-semibold text-neutral-800 mb-2">User Message:</div>
-                        <pre className="text-xs text-neutral-700 whitespace-pre-wrap break-words font-mono overflow-auto max-h-48 bg-neutral-50 p-2 rounded border border-neutral-100">
+                        <pre className="text-[11px] text-neutral-600 whitespace-pre-wrap break-words font-mono overflow-auto max-h-32 bg-neutral-50 p-2 rounded-md">
                           {gptPromptInfo.user_message}
                         </pre>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
 
-              {/* Actions */}
-              <div className="p-3 sm:p-4 border-t border-neutral-100 flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setShowModalEditPrompt(true);
-                  }}
-                  disabled={modalEditing || selectedImage.edit_count >= selectedImage.max_edits}
-                  className="btn-primary flex-1 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-sm sm:text-base"
-                >
-                  <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className="hidden sm:inline">Edit</span>
-                </button>
-                <button
-                  onClick={() => handleDownload(selectedImage)}
-                  className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-3 bg-neutral-100 hover:bg-neutral-200 rounded-lg sm:rounded-xl text-neutral-700 font-medium transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
+              {/* Actions - pinned to bottom */}
+              <div className="p-5 mt-auto">
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={() => setShowModalEditPrompt(true)}
+                    disabled={modalEditing || selectedImage.edit_count >= selectedImage.max_edits}
+                    className="flex-1"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    <span className="ml-1.5">Edit</span>
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleDownload(selectedImage)}
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Floating Edit Prompt Box */}
           {showModalEditPrompt && (
-            <div 
-              className="relative w-full max-w-2xl mt-4 z-[60] px-2 sm:px-0"
+            <div
+              className="relative w-full max-w-2xl mt-4 z-[60] px-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border border-neutral-200 shadow-2xl p-3 sm:p-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 bg-brand-primary/[0.15]">
-                    <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-primary" />
-                  </div>
-                  
+              <div className="bg-white rounded-xl border border-neutral-200 shadow-lg p-4">
+                <div className="flex items-center gap-3">
                   <input
                     ref={modalEditInputRef}
                     type="text"
@@ -2761,8 +2720,7 @@ export function Studio({ brand }: { brand: Brand }) {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        e.stopPropagation(); // Prevent event bubbling
-                        console.log('Enter pressed in modal edit input');
+                        e.stopPropagation();
                         if (modalEditPrompt.trim() && !modalEditing) {
                           handleModalEdit();
                         }
@@ -2774,28 +2732,19 @@ export function Studio({ brand }: { brand: Brand }) {
                         setModalEditPrompt('');
                       }
                     }}
-                    onKeyPress={(e) => {
-                      // Additional prevention
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }
-                    }}
                     placeholder="What would you like to change?"
-                    className="flex-1 w-full min-w-0 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2"
+                    className="flex-1 min-w-0 bg-transparent border-none outline-none text-neutral-800 placeholder:text-neutral-400 text-sm"
                     disabled={modalEditing}
                   />
 
-                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end sm:justify-start">
-                    {/* Attach Assets Button for Modal Edit */}
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => setShowMediaLibrary(true)}
-                      className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 transition-colors rounded-lg hover:bg-neutral-100 relative"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 transition-colors rounded-lg hover:bg-neutral-100 relative"
                       title="Attach assets"
                       disabled={modalEditing}
                     >
-                      <FolderOpen className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">Attach Assets</span>
+                      <FolderOpen className="w-4 h-4" />
                       {(selectedAssets.length > 0 || selectedReferences.length > 0) && (
                         <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium bg-brand-primary text-white">
                           {selectedAssets.length + selectedReferences.length}
@@ -2808,29 +2757,25 @@ export function Studio({ brand }: { brand: Brand }) {
                         setShowModalEditPrompt(false);
                         setModalEditPrompt('');
                       }}
-                      className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-700 transition-colors shrink-0"
+                      className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors"
                       disabled={modalEditing}
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <button
+                    <Button
+                      size="sm"
                       onClick={handleModalEdit}
                       disabled={modalEditing || !modalEditPrompt.trim() || selectedImage.edit_count >= selectedImage.max_edits}
-                      className="btn-primary px-3 sm:px-4 py-2 rounded-lg sm:rounded-xl text-sm sm:text-base shrink-0 min-w-[80px] sm:min-w-0"
+                      loading={modalEditing}
                     >
-                      {modalEditing ? (
-                        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      )}
-                      <span className="sm:hidden">Go</span>
-                      <span className="hidden sm:inline">Apply</span>
-                    </button>
+                      {!modalEditing && <Send className="w-4 h-4" />}
+                      <span className="ml-1.5">Apply</span>
+                    </Button>
                   </div>
                 </div>
                 {selectedImage.edit_count >= selectedImage.max_edits && (
-                  <p className="mt-2 text-xs text-amber-600 text-center">
-                    You've reached the maximum of {selectedImage.max_edits} edits for this image.
+                  <p className="mt-3 text-xs text-amber-600">
+                    Maximum of {selectedImage.max_edits} edits reached for this image.
                   </p>
                 )}
               </div>
@@ -2973,18 +2918,18 @@ export function Studio({ brand }: { brand: Brand }) {
       {/* Styles Picker */}
       {/* Smart Presets Modal */}
       {showPresetsModal && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={() => setShowPresetsModal(false)}
         >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          
-          <div 
-            className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
+          <div className="absolute inset-0 bg-black/60" />
+
+          <div
+            className="relative bg-white rounded-xl shadow-lg max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-200 gap-3">
+            <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
               <div className="flex-1 min-w-0">
                 <h3 className="text-lg sm:text-xl font-bold text-neutral-900 mb-1">
                   Smart Presets
@@ -3009,62 +2954,35 @@ export function Studio({ brand }: { brand: Brand }) {
                   <span className="ml-3 text-neutral-600 text-sm">Loading presets...</span>
                 </div>
               ) : smartPresets.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {smartPresets.map((preset) => {
                     const { tag, IconComponent } = getPresetIconAndTag(preset.category, preset.label);
                     return (
-                      <button
+                      <div
                         key={preset.id}
                         onClick={() => {
                           handlePresetClick(preset);
                           setShowPresetsModal(false);
                         }}
-                        className="group relative bg-white rounded-2xl p-6 border border-neutral-200 hover:border-neutral-300 hover:shadow-md transition-all text-left flex flex-col h-full"
+                        className="group bg-white rounded-xl p-3 border border-neutral-200 hover:border-neutral-300 hover:shadow-sm transition-all cursor-pointer flex items-start gap-3"
                       >
-                        {/* Tag */}
-                        <div className="absolute top-4 left-4">
-                          <span className="text-xs font-medium text-neutral-500 bg-neutral-50 px-2.5 py-1 rounded-full border border-neutral-200">
-                            {tag}
-                          </span>
-                        </div>
-                        
                         {/* Icon */}
-                        <div className="flex items-center justify-center mb-6 mt-2">
-                          <div className="w-20 h-20 rounded-2xl flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary">
-                            <IconComponent className="w-10 h-10 text-brand-primary" />
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-brand-primary/[0.08] text-brand-primary shrink-0">
+                          <IconComponent className="w-5 h-5 text-brand-primary" />
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
+                              {tag}
+                            </span>
                           </div>
-                        </div>
-                        
-                        {/* Title */}
-                        <h4 className="font-semibold text-neutral-900 mb-2 text-base leading-tight">
-                          {preset.label}
-                        </h4>
-                        
-                        {/* Description */}
-                        {preset.smartContext?.whyRelevant ? (
-                          <p className="text-sm text-neutral-600 mb-4 flex-1 leading-relaxed">
-                            {preset.smartContext.whyRelevant}
+                          <p className="text-sm text-neutral-700 leading-relaxed">
+                            {preset.prompt}
                           </p>
-                        ) : (
-                          <p className="text-sm text-neutral-600 mb-4 flex-1 leading-relaxed">
-                            {preset.category}
-                          </p>
-                        )}
-                        
-                        {/* Create Button */}
-                        <div className="mt-auto pt-4 border-t border-neutral-100">
-                          <button
-                            className="btn-primary w-full py-2.5 rounded-lg text-sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePresetClick(preset);
-                              setShowPresetsModal(false);
-                            }}
-                          >
-                            Create
-                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -3080,18 +2998,18 @@ export function Studio({ brand }: { brand: Brand }) {
 
       {/* Comparison Modal */}
       {showComparisonModal && comparisonResults && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
           onClick={() => setShowComparisonModal(false)}
         >
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-          
-          <div 
-            className="relative bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col"
+          <div className="absolute inset-0 bg-black/60" />
+
+          <div
+            className="relative bg-white rounded-xl shadow-lg w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-neutral-200">
+            <div className="flex items-center justify-between p-4 sm:p-6">
               <div>
                 <h3 className="text-lg sm:text-xl font-bold text-neutral-900 flex items-center gap-2">
                   <Columns className="w-5 h-5" />
@@ -3234,7 +3152,7 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-t border-neutral-200 bg-neutral-50">
+            <div className="flex items-center justify-between p-4 sm:p-6">
               <p className="text-xs text-neutral-500">
                 Comparison uses 1 credit. Select a version to save it to your gallery.
               </p>

@@ -90,12 +90,9 @@ export default {
         'slide-in-down': 'slideInDown 0.3s ease-out forwards',
 
         // Special animations
-        'blob': 'blob 7s infinite',
-        'float': 'float 6s ease-in-out infinite',
         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'shimmer': 'shimmer 2s linear infinite',
         'spin-slow': 'spin 3s linear infinite',
-        'bounce-subtle': 'bounceSubtle 2s ease-in-out infinite',
 
         // Stagger delays (use with animation-delay utility)
         'stagger-1': 'fadeInUp 0.5s ease-out 0.1s forwards',
@@ -138,22 +135,9 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(-10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
-        blob: {
-          '0%, 100%': { transform: 'translate(0, 0) scale(1)' },
-          '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-          '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-        },
-        float: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-10px)' },
-        },
         shimmer: {
           '0%': { backgroundPosition: '-200% 0' },
           '100%': { backgroundPosition: '200% 0' },
-        },
-        bounceSubtle: {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-5px)' },
         },
       },
 
@@ -162,9 +146,6 @@ export default {
       // =============================================================================
       transitionDuration: {
         '400': '400ms',
-      },
-      transitionTimingFunction: {
-        'bounce': 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
       },
 
       // =============================================================================

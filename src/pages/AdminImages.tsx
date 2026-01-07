@@ -3,6 +3,7 @@ import { Loader2, RefreshCw, ShieldCheck, Image as ImageIcon, History, Clock3, S
 import { supabase, GeneratedImage } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminUser } from '../lib/admin';
+import { Button } from '../components/ui';
 
 type StatusFilter = 'all' | 'ready' | 'generating' | 'error';
 
@@ -106,50 +107,50 @@ export function AdminImages() {
 
   if (!canView) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
-        <div className="bg-white shadow-sm rounded-2xl p-8 text-center border border-slate-200/60">
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
+        <div className="bg-white shadow-sm rounded-2xl p-8 text-center border border-neutral-200">
           <ShieldCheck className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-          <h2 className="text-xl font-semibold text-slate-900">Access restricted</h2>
-          <p className="text-slate-600 text-sm mt-2">You need admin access to view generated images.</p>
+          <h2 className="text-xl font-semibold text-neutral-800">Access restricted</h2>
+          <p className="text-neutral-600 text-sm mt-2">You need admin access to view generated images.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-neutral-50 to-zinc-50">
+    <div className="min-h-screen bg-neutral-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500 flex items-center gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-neutral-500 flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
               Admin only
             </p>
-            <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mt-2">Generated Images</h1>
-            <p className="text-slate-600 mt-2">
+            <h1 className="text-3xl md:text-4xl font-bold text-neutral-800 mt-2">Generated Images</h1>
+            <p className="text-neutral-600 mt-2">
               Browse all generated designs by brand. Only you can see this dashboard.
             </p>
           </div>
-          <button
+          <Button
+            variant="secondary"
             onClick={() => selectedBrandId && loadImages(selectedBrandId, statusFilter, searchPrompt)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white shadow-sm border border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
-          </button>
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-6">
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/70 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-slate-900">Brands</h3>
-              {loadingBrands && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+              <h3 className="text-sm font-semibold text-neutral-800">Brands</h3>
+              {loadingBrands && <Loader2 className="w-4 h-4 animate-spin text-neutral-400" />}
             </div>
 
             {loadingBrands ? (
-              <div className="text-sm text-slate-500">Loading brands…</div>
+              <div className="text-sm text-neutral-500">Loading brands…</div>
             ) : brands.length === 0 ? (
-              <div className="text-sm text-slate-500">No brands available.</div>
+              <div className="text-sm text-neutral-500">No brands available.</div>
             ) : (
               <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
                 {brands.map((brand) => (
@@ -158,12 +159,12 @@ export function AdminImages() {
                     onClick={() => setSelectedBrandId(brand.id)}
                     className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${
                       selectedBrandId === brand.id
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 hover:border-slate-300 bg-white text-slate-800'
+                        ? 'border-neutral-800 bg-neutral-800 text-white'
+                        : 'border-neutral-200 hover:border-neutral-300 bg-white text-neutral-700'
                     }`}
                   >
                     <div className="text-sm font-semibold">{brand.name || brand.domain}</div>
-                    <div className={selectedBrandId === brand.id ? 'text-slate-200' : 'text-slate-500'}>
+                    <div className={selectedBrandId === brand.id ? 'text-neutral-300' : 'text-neutral-500'}>
                       {brand.domain}
                     </div>
                   </button>
@@ -172,33 +173,33 @@ export function AdminImages() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/70 p-5">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 p-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
               <div>
-                <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">
+                <p className="text-xs uppercase tracking-wide text-neutral-500 font-semibold">
                   {selectedBrand ? selectedBrand.name : 'Select a brand'}
                 </p>
-                <div className="text-slate-700 text-sm">
+                <div className="text-neutral-700 text-sm">
                   {images.length} {images.length === 1 ? 'image' : 'images'}
                 </div>
               </div>
 
               <div className="flex flex-wrap gap-3">
                 <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     value={searchPrompt}
                     onChange={e => setSearchPrompt(e.target.value)}
                     placeholder="Search prompt…"
-                    className="pl-9 pr-3 py-2 rounded-full border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+                    className="pl-9 pr-3 py-2 rounded-full border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-brand-primary"
                   />
                 </div>
-                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-slate-200 text-sm bg-slate-50">
-                  <Filter className="w-4 h-4 text-slate-500" />
+                <div className="inline-flex items-center gap-2 px-3 py-2 rounded-full border border-neutral-200 text-sm bg-neutral-50">
+                  <Filter className="w-4 h-4 text-neutral-500" />
                   <select
                     value={statusFilter}
                     onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-                    className="bg-transparent focus:outline-none text-slate-700"
+                    className="bg-transparent focus:outline-none text-neutral-700"
                   >
                     <option value="all">All statuses</option>
                     <option value="ready">Ready</option>
@@ -216,26 +217,26 @@ export function AdminImages() {
             )}
 
             {loadingImages ? (
-              <div className="flex items-center justify-center py-16 text-slate-500">
+              <div className="flex items-center justify-center py-16 text-neutral-500">
                 <Loader2 className="w-6 h-6 animate-spin mr-2" />
                 Loading images…
               </div>
             ) : images.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
-                  <ImageIcon className="w-8 h-8 text-slate-400" />
+                <div className="w-16 h-16 rounded-2xl bg-neutral-100 flex items-center justify-center mb-4">
+                  <ImageIcon className="w-8 h-8 text-neutral-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900">No images yet</h3>
-                <p className="text-slate-600 text-sm mt-1">Generate an image for this brand to see it here.</p>
+                <h3 className="text-lg font-semibold text-neutral-800">No images yet</h3>
+                <p className="text-neutral-600 text-sm mt-1">Generate an image for this brand to see it here.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {images.map(image => (
                   <div
                     key={image.id}
-                    className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow"
                   >
-                    <div className="relative aspect-square bg-slate-100">
+                    <div className="relative aspect-square bg-neutral-100">
                       {image.image_url ? (
                         <img
                           src={image.image_url}
@@ -244,7 +245,7 @@ export function AdminImages() {
                           loading="lazy"
                         />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
+                        <div className="w-full h-full flex flex-col items-center justify-center text-neutral-500">
                           <ImageIcon className="w-8 h-8 mb-2" />
                           <span className="text-xs">No preview</span>
                         </div>
@@ -263,24 +264,24 @@ export function AdminImages() {
                     </div>
 
                     <div className="p-4 space-y-3">
-                      <div className="text-sm text-slate-700 line-clamp-2">{image.prompt}</div>
+                      <div className="text-sm text-neutral-700 line-clamp-2">{image.prompt}</div>
 
-                      <div className="flex items-center justify-between text-xs text-slate-500">
+                      <div className="flex items-center justify-between text-xs text-neutral-500">
                         <div className="flex items-center gap-1.5">
                           <Clock3 className="w-3.5 h-3.5" />
                           {formatDate(image.created_at)}
                         </div>
                         {image.edit_count > 0 && (
-                          <span className="px-2 py-0.5 bg-slate-100 rounded-full">
+                          <span className="px-2 py-0.5 bg-neutral-100 rounded-full">
                             {image.edit_count} edit{image.edit_count === 1 ? '' : 's'}
                           </span>
                         )}
                       </div>
 
                       {image.version_history?.length ? (
-                        <div className="border-t border-slate-100 pt-3">
+                        <div className="border-t border-neutral-100 pt-3">
                           <button
-                            className="flex items-center gap-2 text-xs text-slate-700 hover:text-slate-900"
+                            className="flex items-center gap-2 text-xs text-neutral-700 hover:text-neutral-800"
                             onClick={() =>
                               setShowVersions(prev => ({
                                 ...prev,
@@ -297,21 +298,21 @@ export function AdminImages() {
                               {image.version_history.map((version, idx) => (
                                 <div
                                   key={idx}
-                                  className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg p-2"
+                                  className="text-xs text-neutral-600 bg-neutral-50 border border-neutral-100 rounded-lg p-2"
                                 >
                                   <div className="flex items-center justify-between">
-                                    <span className="font-medium text-slate-700">{formatDate(version.timestamp)}</span>
+                                    <span className="font-medium text-neutral-700">{formatDate(version.timestamp)}</span>
                                     <a
                                       href={version.image_url}
                                       target="_blank"
                                       rel="noreferrer"
-                                      className="text-slate-700 hover:text-slate-900 underline"
+                                      className="text-neutral-700 hover:text-neutral-800 underline"
                                     >
                                       Open
                                     </a>
                                   </div>
                                   {version.edit_prompt && (
-                                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">
+                                    <p className="text-[11px] text-neutral-500 mt-1 line-clamp-2">
                                       {version.edit_prompt}
                                     </p>
                                   )}

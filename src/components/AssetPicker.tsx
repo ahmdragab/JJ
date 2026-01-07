@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Search, Loader2, Image as ImageIcon, Palette, Check, Plus } from 'lucide-react';
+import { X, Search, Loader2, Image as ImageIcon, Check, Plus } from 'lucide-react';
 import { BrandAsset, supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 
@@ -234,15 +234,15 @@ export function AssetPicker({
       onClick={onClose}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/60" />
 
       {/* Modal Content */}
       <div
-        className="relative glass rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col modal-content-enter"
+        className="relative bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 border-b border-neutral-100 gap-3">
+        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-semibold text-neutral-800 mb-1 font-heading">{title}</h2>
             <p className="text-xs sm:text-sm text-neutral-500">
@@ -273,7 +273,7 @@ export function AssetPicker({
         </div>
 
         {/* Search & Upload Bar */}
-        <div className="p-3 sm:p-4 border-b border-neutral-100 bg-neutral-50/50">
+        <div className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             {/* Search */}
             <div className="flex-1 relative">
@@ -352,7 +352,7 @@ export function AssetPicker({
             </div>
           ) : filteredAssets.length === 0 ? (
             <div className="text-center py-20">
-              <div className="w-16 h-16 rounded-2xl bg-brand-primary/10 flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 rounded-xl bg-neutral-100 flex items-center justify-center mx-auto mb-4">
                 <ImageIcon className="w-8 h-8 text-brand-primary" />
               </div>
               <h3 className="text-lg font-semibold text-neutral-800 mb-2 font-heading">
@@ -373,12 +373,12 @@ export function AssetPicker({
                     key={asset.id}
                     onClick={() => toggleSelection(asset)}
                     disabled={!isSelected && !canAddMore}
-                    className={`group relative rounded-2xl overflow-hidden border-2 transition-all duration-300 ${
+                    className={`group relative rounded-xl overflow-hidden border transition-all duration-200 ${
                       isSelected
-                        ? 'border-brand-primary ring-2 ring-brand-primary/20'
+                        ? 'border-brand-primary ring-1 ring-brand-primary/20'
                         : !canAddMore
                         ? 'border-neutral-200 opacity-50 cursor-not-allowed'
-                        : 'border-neutral-200 hover:border-neutral-300 hover:shadow-md'
+                        : 'border-neutral-200 hover:border-neutral-300'
                     }`}
                     title={!isSelected && !canAddMore ? 'Selection limit reached' : asset.name}
                   >
@@ -387,7 +387,7 @@ export function AssetPicker({
                       <img
                         src={asset.url}
                         alt={asset.name}
-                        className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-contain p-2"
                       />
                     </div>
 
@@ -398,23 +398,8 @@ export function AssetPicker({
                       </div>
                     )}
 
-                    {/* Type Badge */}
-                    <div
-                      className={`absolute top-2 left-2 p-1.5 rounded-lg backdrop-blur-sm ${
-                        asset.type === 'asset'
-                          ? 'bg-brand-primary/10 text-brand-primary'
-                          : 'bg-brand-primary/15 text-brand-primary'
-                      }`}
-                    >
-                      {asset.type === 'asset' ? (
-                        <ImageIcon className="w-3 h-3" />
-                      ) : (
-                        <Palette className="w-3 h-3" />
-                      )}
-                    </div>
-
                     {/* Name */}
-                    <div className="p-2.5 bg-white border-t border-neutral-100">
+                    <div className="p-2.5 bg-white">
                       <p className="text-xs text-neutral-700 truncate font-medium">{asset.name}</p>
                     </div>
                   </button>
@@ -425,7 +410,7 @@ export function AssetPicker({
         </div>
 
         {/* Footer */}
-        <div className="p-3 sm:p-4 border-t border-neutral-100 bg-neutral-50/50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div className="text-xs sm:text-sm text-neutral-500">
             {localSelection.length > 0 ? (
               <>
