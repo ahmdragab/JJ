@@ -56,10 +56,40 @@ async function convertSvgToPng(
     console.warn("[ConvertAPI] CONVERTAPI_SECRET not set, skipping SVG conversion");
     return null;
   }
-  
+
   try {
-    console.log(`[ConvertAPI] Converting ${logoType} logo from: ${svgUrl}`);
-    
+    console.log(`[ConvertAPI] Converting ${logoType} logo from: ${svgUrl.substring(0, 60)}...`);
+
+    // Build file parameter based on whether it's a data URI or HTTP URL
+    let fileParam: { Name: string; FileValue: { Url?: string; FileData?: string; FileName?: string } };
+
+    if (svgUrl.startsWith('data:image/svg+xml')) {
+      // Data URI - extract content and send as base64
+      const base64Match = svgUrl.match(/base64,(.+)$/);
+      const utf8Match = svgUrl.match(/utf8,(.+)$/);
+
+      let svgContent: string;
+      if (base64Match) {
+        // Already base64 encoded
+        svgContent = base64Match[1];
+        console.log("[ConvertAPI] Data URI is base64 encoded");
+      } else if (utf8Match) {
+        // URL-encoded UTF-8 - decode and convert to base64
+        const decoded = decodeURIComponent(utf8Match[1]);
+        svgContent = btoa(decoded);
+        console.log("[ConvertAPI] Data URI is UTF-8 encoded, converted to base64");
+      } else {
+        console.error("[ConvertAPI] Unable to parse SVG data URI format");
+        return null;
+      }
+
+      fileParam = { Name: "File", FileValue: { FileData: svgContent, FileName: "logo.svg" } };
+    } else {
+      // HTTP URL - let ConvertAPI fetch it
+      fileParam = { Name: "File", FileValue: { Url: svgUrl } };
+      console.log("[ConvertAPI] Using URL for HTTP source");
+    }
+
     // Call ConvertAPI
     const convertResponse = await fetch(
       `https://v2.convertapi.com/convert/svg/to/png?Secret=${CONVERTAPI_SECRET}`,
@@ -70,7 +100,7 @@ async function convertSvgToPng(
         },
         body: JSON.stringify({
           Parameters: [
-            { Name: "File", FileValue: { Url: svgUrl } },
+            fileParam,
             { Name: "ImageResolution", Value: "300" },
             { Name: "ScaleImage", Value: "true" },
             { Name: "ScaleProportions", Value: "true" },
@@ -622,6 +652,69 @@ Deno.serve(async (req: Request) => {
         console.error('Failed to trigger style analysis (non-blocking):', error);
         // Don't fail the extraction if style analysis fails
       });
+
+      // Also trigger ad personality analysis asynchronously with status tracking
+      // This uses GPT-4o to extract observable visual traits for ad generation
+      const adPersonalityUrl = `${supabaseUrl}/functions/v1/analyze-ad-personality`;
+
+      // Set status to 'processing' before making the request
+      const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+      await supabaseClient
+        .from('brands')
+        .update({
+          ad_personality_status: 'processing',
+          ad_personality_error: null
+        })
+        .eq('id', brandId);
+
+      // Make the request and track success/failure
+      fetch(adPersonalityUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseServiceKey}`,
+        },
+        body: JSON.stringify({
+          brandId: brandId,
+          screenshotUrl: brandData.screenshot,
+        }),
+      })
+        .then(async (response) => {
+          if (response.ok) {
+            // Success - the analyze-ad-personality function already updates the styleguide
+            await supabaseClient
+              .from('brands')
+              .update({ ad_personality_status: 'completed' })
+              .eq('id', brandId);
+            console.log(`[Ad Personality] Analysis completed for brand ${brandId}`);
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `HTTP ${response.status}`);
+          }
+        })
+        .catch(async (error) => {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('Failed to analyze ad personality:', errorMessage);
+
+          // Update status to failed with error message
+          await supabaseClient
+            .from('brands')
+            .update({
+              ad_personality_status: 'failed',
+              ad_personality_error: errorMessage.substring(0, 500),
+            })
+            .eq('id', brandId);
+
+          // Increment attempts counter
+          await supabaseClient.rpc('increment_ad_personality_attempts', { brand_id: brandId })
+            .catch(() => {
+              // If RPC doesn't exist, update directly
+              supabaseClient
+                .from('brands')
+                .update({ ad_personality_attempts: 1 }) // Simple update, not atomic
+                .eq('id', brandId);
+            });
+        });
     }
 
     const duration = performance.now() - startTime;

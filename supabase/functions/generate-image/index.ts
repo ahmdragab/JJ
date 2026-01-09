@@ -5,6 +5,47 @@ import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, verifyBrandOwnership } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
+// =============================================================================
+// TODO: HIGH-CONVERTING AD GENERATION ORCHESTRATION
+// =============================================================================
+//
+// PHASE 1: Product Context Integration ✅ COMPLETE
+// - [x] Accept productId in request body
+// - [x] Fetch product data (name, description, price, key_features, value_prop)
+// - [x] Auto-attach product images as high-fidelity assets
+// - [x] Inject product context into GPT prompt layer
+//
+// PHASE 2: Brand Ad Personality
+// - [ ] Read ad_personality from brand.styleguide.ad_personality
+// - [ ] Use ad_personality to drive creative direction (when no reference)
+//       Fields: visual_approach, human_presence, color_treatment, composition, copy_style
+// - [ ] When reference provided: reference overrides ad_personality
+//
+// PHASE 3: Three-Tier Prompt Restructure
+// - [ ] Tier 1 - PLATFORM CONSTRAINTS (always enforce):
+//       Safe zones, aspect ratios, text limits - never bypassed
+// - [ ] Tier 2 - BEST PRACTICES (defaults, can override):
+//       Contrast, hierarchy, CTA visibility - brand style can override
+// - [ ] Tier 3 - BRAND STYLE (fully adaptive):
+//       ad_personality OR reference (reference takes priority)
+//
+// PHASE 4: GPT Layer Refinement
+// - [ ] GPT outputs: copy (headline, CTA), emphasis, combination instructions
+// - [ ] GPT does NOT output verbose visual descriptions
+// - [ ] Let Gemini see images directly (visual-to-visual)
+//
+// PHASE 5: Gemini Prompt - Clear Image Role Instructions
+// - [ ] Website screenshot → Brand aesthetic source (always include)
+// - [ ] Logo → Include exactly (always include)
+// - [ ] Reference (if any) → "Match this STYLE" (style transfer)
+// - [ ] Assets (if any) → "Put this IN the ad" (must appear in output)
+// - [ ] Product images (if any) → Feature prominently
+//
+// REFERENCE vs ASSET:
+// - Reference: Style transfer - match the aesthetic, doesn't appear in output
+// - Asset: Content inclusion - must appear in output, preserved faithfully
+// =============================================================================
+
 // CORS headers function - uses validated origin from request
 function getCors(request: Request): Record<string, string> {
   return {
@@ -84,6 +125,16 @@ interface Brand {
         patterns?: boolean;
         textures?: boolean;
       };
+    };
+    // Ad Personality - Observable traits for ad generation
+    ad_personality?: {
+      visual_approach?: 'photography' | 'illustration' | '3D' | 'clean_UI' | 'abstract' | 'mixed';
+      human_presence?: 'prominent' | 'subtle' | 'none';
+      color_treatment?: 'bold_saturated' | 'muted_pastel' | 'monochrome' | 'gradient_heavy';
+      composition?: 'centered' | 'asymmetric' | 'editorial' | 'grid' | 'chaotic';
+      copy_style?: 'punchy_minimal' | 'data_driven' | 'storytelling' | 'conversational';
+      tone?: 'serious' | 'playful' | 'provocative' | 'inspirational';
+      imagery_subjects?: string[];
     };
   };
 }
@@ -167,7 +218,7 @@ function describeColor(hex: string): string {
   return `color ${hex}`;
 }
 
-function buildBrandContext(brand: Brand): { hardConstraints: string; softGuidelines: string } {
+function buildBrandContext(brand: Brand, skipAdPersonality = false): { hardConstraints: string; softGuidelines: string } {
   // ============================================================================
   // HARD CONSTRAINTS (Identity Level - MUST OBEY)
   // ============================================================================
@@ -326,6 +377,86 @@ function buildBrandContext(brand: Brand): { hardConstraints: string; softGuideli
     }
   }
 
+  // Ad Personality (if available) - Observable traits for ad generation
+  // Skip this section when skipAdPersonality is true (for A/B testing)
+  const adPersonality = brand.styleguide?.ad_personality;
+  if (adPersonality && !skipAdPersonality) {
+    softGuidelines.push(`\nAD CREATIVE DIRECTION (use these as primary creative guidance for ads):`);
+
+    // Visual approach
+    if (adPersonality.visual_approach) {
+      const visualApproachMap: Record<string, string> = {
+        'photography': 'Use real photography - lifestyle shots, product photos, real people',
+        'illustration': 'Use custom illustrations, icons, and graphic elements',
+        '3D': 'Use 3D renders, dimensional graphics, abstract 3D shapes',
+        'clean_UI': 'Use clean UI elements, product screenshots, interface-focused design',
+        'abstract': 'Use abstract patterns, shapes, and artistic elements',
+        'mixed': 'Mix photography with graphics/illustrations as appropriate',
+      };
+      softGuidelines.push(`- Visual approach: ${visualApproachMap[adPersonality.visual_approach] || adPersonality.visual_approach}`);
+    }
+
+    // Human presence
+    if (adPersonality.human_presence) {
+      const humanPresenceMap: Record<string, string> = {
+        'prominent': 'Feature people prominently - faces visible, human connection',
+        'subtle': 'Include people subtly - hands, silhouettes, or in background',
+        'none': 'No people - focus on product, graphics, or abstract elements',
+      };
+      softGuidelines.push(`- Human presence: ${humanPresenceMap[adPersonality.human_presence] || adPersonality.human_presence}`);
+    }
+
+    // Color treatment
+    if (adPersonality.color_treatment) {
+      const colorTreatmentMap: Record<string, string> = {
+        'bold_saturated': 'Use bold, vibrant, high-saturation colors',
+        'muted_pastel': 'Use soft, muted, pastel color palette',
+        'monochrome': 'Use monochromatic or limited color palette',
+        'gradient_heavy': 'Use gradients and smooth color transitions',
+      };
+      softGuidelines.push(`- Color treatment: ${colorTreatmentMap[adPersonality.color_treatment] || adPersonality.color_treatment}`);
+    }
+
+    // Composition
+    if (adPersonality.composition) {
+      const compositionMap: Record<string, string> = {
+        'centered': 'Use centered, symmetrical layouts',
+        'asymmetric': 'Use dynamic, off-center, asymmetric layouts',
+        'editorial': 'Use editorial/magazine-style layouts',
+        'grid': 'Use structured grid-based layouts',
+        'chaotic': 'Use energetic, overlapping, busy layouts',
+      };
+      softGuidelines.push(`- Composition: ${compositionMap[adPersonality.composition] || adPersonality.composition}`);
+    }
+
+    // Copy style
+    if (adPersonality.copy_style) {
+      const copyStyleMap: Record<string, string> = {
+        'punchy_minimal': 'Short, bold headlines with minimal text',
+        'data_driven': 'Include stats, numbers, and proof points',
+        'storytelling': 'Use narrative, emotional copy',
+        'conversational': 'Use casual, direct, question-based copy',
+      };
+      softGuidelines.push(`- Copy style: ${copyStyleMap[adPersonality.copy_style] || adPersonality.copy_style}`);
+    }
+
+    // Tone
+    if (adPersonality.tone) {
+      const toneMap: Record<string, string> = {
+        'serious': 'Professional, authoritative, trust-focused tone',
+        'playful': 'Fun, whimsical, lighthearted tone',
+        'provocative': 'Bold, challenging, attention-grabbing tone',
+        'inspirational': 'Aspirational, motivating, empowering tone',
+      };
+      softGuidelines.push(`- Tone: ${toneMap[adPersonality.tone] || adPersonality.tone}`);
+    }
+
+    // Imagery subjects
+    if (adPersonality.imagery_subjects && adPersonality.imagery_subjects.length > 0) {
+      softGuidelines.push(`- Typical imagery: ${adPersonality.imagery_subjects.join(', ')}`);
+    }
+  }
+
   return {
     hardConstraints: hardConstraints.join('\n'),
     softGuidelines: softGuidelines.length > 0 
@@ -343,7 +474,18 @@ async function callGPT51(
   brand: Brand,
   assets: AssetInput[],
   references: AssetInput[],
-  aspectRatio?: string | null  // User-selected aspect ratio (null/undefined/'auto' means let GPT decide)
+  aspectRatio?: string | null,  // User-selected aspect ratio (null/undefined/'auto' means let GPT decide)
+  product?: {
+    name: string;
+    description?: string;
+    short_description?: string;
+    price?: number;
+    currency?: string;
+    key_features?: string[];
+    value_proposition?: string;
+    ad_angles?: Array<{ angle: string; headline_idea: string }>;
+  } | null,
+  skipAdPersonality = false  // For A/B testing: skip ad_personality in prompt
 ): Promise<{ renderPlan: RenderPlan; promptInfo: GPTPromptInfo | null }> {
   if (!OPENAI_API_KEY) {
     // Fallback to simple prompt if no OpenAI key
@@ -354,8 +496,8 @@ async function callGPT51(
     };
   }
 
-  const { hardConstraints, softGuidelines } = buildBrandContext(brand);
-  
+  const { hardConstraints, softGuidelines } = buildBrandContext(brand, skipAdPersonality);
+
   const assetsContext = assets.length > 0 
     ? `HIGH-FIDELITY ASSETS TO INCLUDE (must appear accurately in the final design):
 These are product images, logos, or specific objects that MUST be included in the generated image with high accuracy. The image generation model will receive these as high-fidelity references and should reproduce them faithfully in the design.
@@ -391,6 +533,32 @@ The user has specified that the design MUST use aspect ratio: ${aspectRatio}
 - For landscape ratios (16:9, 21:9, 3:2, 4:3, 5:4), suggest horizontal compositions with elements arranged left-to-right`
     : '';
 
+  // Build product context if product is provided
+  const productContext = product
+    ? `\n\n================================================================================
+PRODUCT TO FEATURE
+================================================================================
+This ad should prominently feature the following product:
+
+PRODUCT NAME: ${product.name}
+${product.short_description ? `DESCRIPTION: ${product.short_description}` : product.description ? `DESCRIPTION: ${product.description.slice(0, 300)}` : ''}
+${product.price ? `PRICE: ${product.currency || '$'}${product.price}` : ''}
+${product.key_features && product.key_features.length > 0 ? `
+KEY FEATURES:
+${product.key_features.map(f => `- ${f}`).join('\n')}` : ''}
+${product.value_proposition ? `
+VALUE PROPOSITION: ${product.value_proposition}` : ''}
+${product.ad_angles && product.ad_angles.length > 0 ? `
+SUGGESTED AD ANGLES (use as inspiration):
+${product.ad_angles.map(a => `- ${a.angle}: "${a.headline_idea}"`).join('\n')}` : ''}
+
+PRODUCT INTEGRATION REQUIREMENTS:
+1. The product should be the HERO ELEMENT of the ad - make it visually prominent
+2. Product images are attached as high-fidelity assets - feature them accurately
+3. The headline/copy should relate to the product's value proposition
+4. Consider using one of the suggested ad angles if appropriate for the campaign`
+    : '';
+
   // Build the core system prompt - focused exclusively on paid media ad designs
   const systemPrompt = `You are a design prompt architect specializing in paid media ad designs. Your job is to take a user's simple request and transform it into a detailed, optimized prompt for an AI image generation model to create scroll-stopping, attention-grabbing paid media advertisements.
 
@@ -418,7 +586,7 @@ ASSETS & REFERENCES
 ================================================================================
 ${assetsContext}
 
-${referencesContext}${aspectRatioContext}
+${referencesContext}${aspectRatioContext}${productContext}
 
 ================================================================================
 CRITICAL RULES FOR PAID MEDIA AD DESIGNS
@@ -852,7 +1020,12 @@ function getBestLogoUrl(brand: Brand): string | null {
 
   if (brand.all_logos?.length) {
     const rasterLogos = brand.all_logos
-      .filter(logo => logo.url && isLikelyRaster(logo.url))
+      .filter(logo => {
+        if (!logo.url || !isLikelyRaster(logo.url)) return false;
+        // Exclude og-image - these are social preview images, not logos
+        if (logo.type === 'og-image') return false;
+        return true;
+      })
       .sort((a, b) => {
         const getPriority = (url: string): number => {
           const lower = url.toLowerCase();
@@ -1049,6 +1222,7 @@ Deno.serve(async (req: Request) => {
   // Track credit state for refund on failure
   let creditDeducted = false;
   let deductedUserId: string | null = null;
+  let deductedAmount = 0; // Track actual amount deducted for accurate refunds
 
   try {
     logger.setContext({ request_id: requestId });
@@ -1074,17 +1248,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { 
-      prompt, 
-      brandId, 
+    const {
+      prompt,
+      brandId,
       imageId,
+      productId,        // Optional: Product to feature in the ad
       includeLogoReference = true,
       assets = [],      // Assets to include
       references = [],  // Style references
-      aspectRatio,     // Aspect ratio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto'
+      aspectRatio,      // Aspect ratio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto'
       // Default to 2K resolution (same token cost as 1K but better quality)
       resolution: resolutionLevel = '2K', // Resolution level: '1K' | '2K' | '4K'
+      skipAdPersonality = false, // For A/B testing: skip ad_personality in prompt
+      creditCost: rawCreditCost = 1, // Number of credits to deduct (default 1, use 2 for variations mode)
+      sessionId, // Optional: session ID from start-variations-session (skips credit deduction)
     } = requestBody;
+
+    // Validate creditCost server-side to prevent manipulation (must be 1 or 2)
+    const creditCost = Math.max(1, Math.min(2, Math.floor(Number(rawCreditCost) || 1)));
+    if (creditCost !== rawCreditCost) {
+      console.warn(`[Security] Invalid creditCost ${rawCreditCost} normalized to ${creditCost}`);
+    }
 
     if (!prompt) {
       return new Response(
@@ -1129,6 +1313,37 @@ Deno.serve(async (req: Request) => {
       logger.setContext({ brand_id: brandId });
     }
 
+    // Fetch product data if productId is provided
+    let product: {
+      id: string;
+      name: string;
+      description?: string;
+      short_description?: string;
+      price?: number;
+      currency?: string;
+      images?: Array<{ url: string; is_primary?: boolean }>;
+      key_features?: string[];
+      value_proposition?: string;
+      ad_angles?: Array<{ angle: string; headline_idea: string }>;
+    } | null = null;
+
+    if (productId && brandId) {
+      const { data: productData, error: productError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", productId)
+        .eq("brand_id", brandId)
+        .eq("user_id", userId)
+        .single();
+
+      if (productError) {
+        console.warn("Product fetch warning:", productError);
+      } else if (productData) {
+        product = productData;
+        logger.info("Product loaded for generation", { productId, productName: product.name });
+      }
+    }
+
     // If we have imageId, verify the user owns it
     if (imageId) {
       const { data: imageData } = await supabase
@@ -1146,115 +1361,165 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Credit deduction logic: Always deduct 1 credit for new generations
+    // Credit handling: Either validate session or deduct credits
     if (userId) {
-      // First, check current credits
-      const { data: creditsData, error: creditsError } = await supabase
-        .from("user_credits")
-        .select("credits")
-        .eq("user_id", userId)
-        .single();
+      if (sessionId) {
+        // Session-based generation: Validate session instead of deducting credits
+        // This is used by variations mode where credits were already deducted upfront
+        const { data: session, error: sessionError } = await supabase
+          .from("generation_sessions")
+          .select("*")
+          .eq("id", sessionId)
+          .eq("user_id", userId)
+          .single();
 
-      const currentCredits = creditsData?.credits ?? 0;
-      
-      // If no credits record or insufficient credits
-      if (creditsError || currentCredits < 1) {
-        console.log("Credit check failed:", { creditsError, currentCredits, userId });
-        return new Response(
-          JSON.stringify({ 
-            error: "Insufficient credits. Please purchase more credits to generate images.",
-            credits: currentCredits
-          }),
-          { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
-        );
-      }
+        if (sessionError || !session) {
+          console.warn("Invalid session:", { sessionId, userId, error: sessionError });
+          return new Response(
+            JSON.stringify({ error: "Invalid or expired session" }),
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
+          );
+        }
 
-      // Deduct credit using atomic UPDATE with optimistic locking
-      // The .eq("credits", currentCredits) ensures we only update if credits haven't changed
-      const { data: updateResult, error: deductError } = await supabase
-        .from("user_credits")
-        .update({
-          credits: currentCredits - 1,
-          updated_at: new Date().toISOString()
-        })
-        .eq("user_id", userId)
-        .eq("credits", currentCredits) // Optimistic lock
-        .select("credits");
+        // Check if session is expired
+        if (new Date(session.expires_at) < new Date()) {
+          console.warn("Session expired:", { sessionId, expiresAt: session.expires_at });
+          return new Response(
+            JSON.stringify({ error: "Session has expired" }),
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
+          );
+        }
 
-      if (deductError) {
-        console.error("Failed to deduct credit:", deductError);
-        return new Response(
-          JSON.stringify({
-            error: "Failed to process credits. Please try again.",
-            credits: currentCredits
-          }),
-          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
-        );
-      }
+        // Check if max generations reached
+        if (session.generations_used >= session.max_generations) {
+          console.warn("Session exhausted:", { sessionId, used: session.generations_used, max: session.max_generations });
+          return new Response(
+            JSON.stringify({ error: "Session has reached maximum generations" }),
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
+          );
+        }
 
-      // If no rows were updated, the optimistic lock failed (race condition)
-      if (!updateResult || updateResult.length === 0) {
-        console.warn("Credit deduction race condition detected, retrying...");
-        // Retry once with fresh data
-        const { data: retryData } = await supabase
+        // Increment generations_used atomically
+        const { error: incrementError } = await supabase
+          .from("generation_sessions")
+          .update({ generations_used: session.generations_used + 1 })
+          .eq("id", sessionId)
+          .eq("generations_used", session.generations_used); // Optimistic lock
+
+        if (incrementError) {
+          console.error("Failed to increment session usage:", incrementError);
+          // Don't fail - the session check passed, continue with generation
+        }
+
+        console.log(`Session ${sessionId} used: ${session.generations_used + 1}/${session.max_generations}`);
+        // Don't set creditDeducted - session already handled credits upfront
+      } else {
+        // Standard credit deduction for single generations
+        const { data: creditsData, error: creditsError } = await supabase
           .from("user_credits")
           .select("credits")
           .eq("user_id", userId)
           .single();
 
-        const retryCredits = retryData?.credits ?? 0;
-        if (retryCredits < 1) {
+        const currentCredits = creditsData?.credits ?? 0;
+
+        // If no credits record or insufficient credits
+        if (creditsError || currentCredits < creditCost) {
+          console.log("Credit check failed:", { creditsError, currentCredits, userId, creditCost });
           return new Response(
             JSON.stringify({
-              error: "Insufficient credits. Please purchase more credits to generate images.",
-              credits: retryCredits
+              error: `Insufficient credits. You need ${creditCost} credit${creditCost > 1 ? 's' : ''} but have ${currentCredits}.`,
+              credits: currentCredits
             }),
             { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
-        const { data: retryResult, error: retryError } = await supabase
+        // Deduct credits using atomic UPDATE with optimistic locking
+        const { data: updateResult, error: deductError } = await supabase
           .from("user_credits")
           .update({
-            credits: retryCredits - 1,
+            credits: currentCredits - creditCost,
             updated_at: new Date().toISOString()
           })
           .eq("user_id", userId)
-          .eq("credits", retryCredits)
+          .eq("credits", currentCredits) // Optimistic lock
           .select("credits");
 
-        if (retryError || !retryResult || retryResult.length === 0) {
-          console.error("Credit deduction retry failed");
+        if (deductError) {
+          console.error("Failed to deduct credit:", deductError);
           return new Response(
             JSON.stringify({
-              error: "Failed to process credits due to high demand. Please try again.",
-              credits: retryCredits
+              error: "Failed to process credits. Please try again.",
+              credits: currentCredits
             }),
-            { status: 503, headers: { ...getCors(req), "Content-Type": "application/json" } }
+            { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
-      }
 
-      // Log the transaction (non-blocking - don't fail if this errors)
-      try {
-        await supabase
-          .from("credit_transactions")
-          .insert({
-            user_id: userId,
-            type: 'deducted',
-            amount: -1,
-            balance_after: currentCredits - 1,
-            source: 'usage',
-            description: 'Credit used for image generation'
-          });
-      } catch (txError) {
-        console.warn("Failed to log credit transaction:", txError);
-        // Don't fail the request - credit was already deducted
-      }
+        // If no rows were updated, the optimistic lock failed (race condition)
+        if (!updateResult || updateResult.length === 0) {
+          console.warn("Credit deduction race condition detected, retrying...");
+          const { data: retryData } = await supabase
+            .from("user_credits")
+            .select("credits")
+            .eq("user_id", userId)
+            .single();
 
-      console.log(`Credit deducted for user ${userId}: ${currentCredits} -> ${currentCredits - 1}`);
-      creditDeducted = true;
-      deductedUserId = userId;
+          const retryCredits = retryData?.credits ?? 0;
+          if (retryCredits < creditCost) {
+            return new Response(
+              JSON.stringify({
+                error: `Insufficient credits. You need ${creditCost} credit${creditCost > 1 ? 's' : ''} but have ${retryCredits}.`,
+                credits: retryCredits
+              }),
+              { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
+            );
+          }
+
+          const { data: retryResult, error: retryError } = await supabase
+            .from("user_credits")
+            .update({
+              credits: retryCredits - creditCost,
+              updated_at: new Date().toISOString()
+            })
+            .eq("user_id", userId)
+            .eq("credits", retryCredits)
+            .select("credits");
+
+          if (retryError || !retryResult || retryResult.length === 0) {
+            console.error("Credit deduction retry failed");
+            return new Response(
+              JSON.stringify({
+                error: "Failed to process credits due to high demand. Please try again.",
+                credits: retryCredits
+              }),
+              { status: 503, headers: { ...getCors(req), "Content-Type": "application/json" } }
+            );
+          }
+        }
+
+        // Log the transaction (non-blocking)
+        try {
+          await supabase
+            .from("credit_transactions")
+            .insert({
+              user_id: userId,
+              type: 'deducted',
+              amount: -creditCost,
+              balance_after: currentCredits - creditCost,
+              source: 'usage',
+              description: 'Credit used for image generation'
+            });
+        } catch (txError) {
+          console.warn("Failed to log credit transaction:", txError);
+        }
+
+        console.log(`Credit deducted for user ${userId}: ${currentCredits} -> ${currentCredits - creditCost} (cost: ${creditCost})`);
+        creditDeducted = true;
+        deductedUserId = userId;
+        deductedAmount = creditCost;
+      }
     }
 
     // Consolidated request logging
@@ -1321,7 +1586,9 @@ Deno.serve(async (req: Request) => {
         brand,
         assets as AssetInput[],
         references as AssetInput[],
-        aspectRatioToPass
+        aspectRatioToPass,
+        product,  // Pass product context for ad generation
+        skipAdPersonality  // For A/B testing: skip ad_personality in prompt
       );
       renderPlan = gptResult.renderPlan;
       gptPromptInfo = gptResult.promptInfo;
@@ -1370,9 +1637,31 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // Add user-selected assets (must_include)
+    // Auto-inject product images as high-fidelity assets
+    // Product images should appear prominently in the ad
+    const productAssets: AssetInput[] = [];
+    if (product?.images && product.images.length > 0) {
+      // Add product images as must_include assets (up to 3 images)
+      const productImagesToInclude = product.images.slice(0, 3);
+      for (let i = 0; i < productImagesToInclude.length; i++) {
+        const img = productImagesToInclude[i];
+        productAssets.push({
+          id: `product-image-${i}`,
+          url: img.url,
+          name: i === 0 ? `${product.name} (Primary)` : `${product.name} (Image ${i + 1})`,
+          category: 'product',
+          role: 'must_include',
+        });
+      }
+      console.log(`[Product] Auto-injected ${productAssets.length} product image(s) as high-fidelity assets`);
+    }
+
+    // Combine user assets with product assets
+    const allAssets = [...productAssets, ...(assets as AssetInput[])];
+
+    // Add user-selected assets (must_include) and product assets
     const attachedAssetNames: string[] = [];
-    for (const asset of (assets as AssetInput[])) {
+    for (const asset of allAssets) {
       const assetData = await fetchImageAsBase64(asset.url);
       if (assetData) {
         const instruction = renderPlan?.asset_instructions.find(ai => ai.asset_id === asset.id);
@@ -1723,7 +2012,7 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
           const { error: refundError } = await refundClient
             .from("user_credits")
             .update({
-              credits: currentCredits + 1,
+              credits: currentCredits + deductedAmount, // Refund actual amount deducted
               updated_at: new Date().toISOString()
             })
             .eq("user_id", deductedUserId);
@@ -1738,13 +2027,13 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
             .insert({
               user_id: deductedUserId,
               type: 'refunded',
-              amount: 1,
+              amount: deductedAmount, // Track actual refund amount
               source: 'error_refund',
-              description: `Credit refunded due to generation error: ${errorObj.message.substring(0, 100)}`
+              description: `${deductedAmount} credit(s) refunded due to generation error: ${errorObj.message.substring(0, 100)}`
             });
 
-          console.log(`Credit refunded for user ${deductedUserId} due to error`);
-          logger.info("Credit refunded due to error", { user_id: deductedUserId });
+          console.log(`${deductedAmount} credit(s) refunded for user ${deductedUserId} due to error`);
+          logger.info("Credit refunded due to error", { user_id: deductedUserId, amount: deductedAmount });
         }
       } catch (refundErr) {
         // Log but don't fail - we still need to return the error response

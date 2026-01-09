@@ -529,8 +529,8 @@ function AppRoutes() {
           </AdminRoute>
         } 
       />
-      <Route 
-        path="/pricing" 
+      <Route
+        path="/pricing"
         element={
           <>
             <Navbar />
@@ -538,7 +538,7 @@ function AppRoutes() {
               <Pricing />
             </div>
           </>
-        } 
+        }
       />
     </Routes>
   );

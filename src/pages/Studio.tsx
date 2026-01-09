@@ -17,9 +17,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  FlaskConical,
-  Columns,
-  Zap,
   Megaphone,
   BarChart3,
   Monitor,
@@ -181,11 +178,11 @@ export function Studio({ brand }: { brand: Brand }) {
   const [loadingPresets, setLoadingPresets] = useState(false);
   const [showPresetsModal, setShowPresetsModal] = useState(false);
   
-  // Prompt version toggle (v1 = current, v2 = experimental, v3 = lean/direct)
-  const [promptVersion, setPromptVersion] = useState<'v1' | 'v2' | 'v3'>('v1');
-  const [compareMode, setCompareMode] = useState(false);
+  // Variations mode - generate 3 variations instead of 1
+  const [variationsMode, setVariationsMode] = useState(true); // ON by default
   const [comparing, setComparing] = useState(false);
   const [savingComparison, setSavingComparison] = useState<string | null>(null);
+  const [savedVersions, setSavedVersions] = useState<Set<string>>(new Set()); // Track saved variations
   const [comparisonResults, setComparisonResults] = useState<{
     v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
     v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
@@ -637,8 +634,8 @@ export function Studio({ brand }: { brand: Brand }) {
         })),
       ];
 
-      // Use selected prompt version (v1 or v2)
-      const endpoint = promptVersion === 'v3' ? 'generate-image-v3' : promptVersion === 'v2' ? 'generate-image-v2' : 'generate-image';
+      // Use V1 endpoint for single generation
+      const endpoint = 'generate-image';
 
       const authHeaders = await getAuthHeaders();
       const response = await fetch(
@@ -699,14 +696,34 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  // Comparison mode: generate with both v1 and v2 to compare outputs
+  // Comparison mode: generate with v1, v2, and v3 to compare outputs
   const handleCompare = async () => {
     if (!prompt.trim() || comparing) return;
 
     setComparing(true);
     setComparisonResults(null);
-    
+
     try {
+      const authHeaders = await getAuthHeaders();
+
+      // Step 1: Create a session that deducts credits once upfront
+      // This prevents race conditions with parallel requests
+      const sessionResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-variations-session`,
+        {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ creditCost: 2, maxGenerations: 3 }),
+        }
+      );
+
+      if (!sessionResponse.ok) {
+        const sessionError = await sessionResponse.json();
+        throw new Error(sessionError.error || 'Failed to start variations session');
+      }
+
+      const { sessionId } = await sessionResponse.json();
+
       // Combine references and styles
       const allReferences = [
         ...selectedReferences.map(r => ({
@@ -738,27 +755,25 @@ export function Studio({ brand }: { brand: Brand }) {
           role: 'must_include',
         })),
         references: allReferences,
-        // Note: No imageId means no DB save, just generate and return
+        sessionId, // All requests use the same session (credits already deducted)
       };
 
-      // Generate with all 3 versions in parallel
-      // V1 will deduct credit, V2 and V3 skip credits
-      const authHeaders = await getAuthHeaders();
+      // Step 2: Generate with 3 versions in parallel using the session
       const [v1Response, v2Response, v3Response] = await Promise.all([
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify(requestBody), // V1 deducts 1 credit
+          body: JSON.stringify(requestBody),
         }),
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V2 skips credit
+          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V2 uses skipCredits (no session support yet)
         }),
         fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
           method: 'POST',
           headers: authHeaders,
-          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V3 skips credit
+          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V3 uses skipCredits (no session support yet)
         }),
       ]);
 
@@ -768,6 +783,9 @@ export function Studio({ brand }: { brand: Brand }) {
         v3Response.json(),
       ]);
 
+      // Reset saved versions when new variations are generated
+      setSavedVersions(new Set());
+
       setComparisonResults({
         v1: v1Response.ok ? {
           image_base64: v1Data.image_base64,
@@ -776,7 +794,7 @@ export function Studio({ brand }: { brand: Brand }) {
         v2: v2Response.ok ? {
           image_base64: v2Data.image_base64,
           design_type: v2Data.design_type,
-          gpt_prompt_info: v2Data.gpt_prompt_info,
+          gpt_prompt_info: v2Data.gpt_prompt_info || v2Data.gpt_concept,
         } : null,
         v3: v3Response.ok ? {
           image_base64: v3Data.image_base64,
@@ -795,8 +813,8 @@ export function Studio({ brand }: { brand: Brand }) {
 
   // Save a comparison result image to the database and storage
   const handleSaveComparisonImage = async (version: 'v1' | 'v2' | 'v3') => {
-    if (!comparisonResults || savingComparison) return;
-    
+    if (!comparisonResults || savingComparison || savedVersions.has(version)) return;
+
     const result = comparisonResults[version];
     if (!result || !result.image_base64) {
       toast.warning('No Image', `No image available for ${version.toUpperCase()}`);
@@ -841,7 +859,7 @@ export function Studio({ brand }: { brand: Brand }) {
       }
 
       const fileName = `${brand.id}/${imageRecord.id}-${Date.now()}.png`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('brand-images')
         .upload(fileName, bytes, {
@@ -875,15 +893,8 @@ export function Studio({ brand }: { brand: Brand }) {
       // Reload images to show the new one
       await loadImages();
 
-      // Close modal and reset comparison mode
-      setShowComparisonModal(false);
-      setCompareMode(false);
-      setPrompt('');
-      localStorage.removeItem(STORAGE_KEY);
-      setSelectedAssets([]);
-      setSelectedReferences([]);
-      setSelectedStyles([]);
-      setSelectedPlatform(null);
+      // Mark this version as saved (don't close modal - let user save multiple)
+      setSavedVersions(prev => new Set(prev).add(version));
 
     } catch (error) {
       console.error('Failed to save comparison image:', error);
@@ -1390,71 +1401,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   ref={inputContainerRef}
                   className="max-w-3xl mx-auto overflow-visible"
                 >
-                  {/* Prompt Version Toggle */}
-                  {!editingImage && (
-                    <div className="mb-2 flex items-center justify-center gap-3">
-                      <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-neutral-200 p-0.5">
-                        <button
-                          onClick={() => setPromptVersion('v1')}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                            promptVersion === 'v1'
-                              ? 'bg-neutral-900 text-white shadow-sm'
-                              : 'text-neutral-500 hover:text-neutral-700'
-                          }`}
-                        >
-                          V1
-                        </button>
-                        <button
-                          onClick={() => setPromptVersion('v2')}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                            promptVersion === 'v2'
-                              ? 'bg-emerald-500 text-white shadow-sm'
-                              : 'text-neutral-500 hover:text-neutral-700'
-                          }`}
-                        >
-                          <FlaskConical className="w-3 h-3" />
-                          V2
-                        </button>
-                        <button
-                          onClick={() => setPromptVersion('v3')}
-                          className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                            promptVersion === 'v3'
-                              ? 'bg-amber-500 text-white shadow-sm'
-                              : 'text-neutral-500 hover:text-neutral-700'
-                          }`}
-                        >
-                          <Zap className="w-3 h-3" />
-                          V3
-                        </button>
-                      </div>
-                      
-                      {promptVersion === 'v2' && (
-                        <span className="text-xs text-emerald-600">
-                          Design-type aware
-                        </span>
-                      )}
-                      {promptVersion === 'v3' && (
-                        <span className="text-xs text-amber-600">
-                          Lean & direct
-                        </span>
-                      )}
-                      
-                      {/* Compare Mode Toggle */}
-                      <button
-                        onClick={() => setCompareMode(!compareMode)}
-                        className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
-                          compareMode 
-                            ? 'bg-amber-100 text-amber-700 border border-amber-300' 
-                            : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
-                        }`}
-                      >
-                        <Columns className="w-3 h-3" />
-                        <span className="hidden sm:inline">Compare</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Main Input */}
+                    {/* Main Input */}
                   <div 
                     className={`bg-white rounded-xl sm:rounded-2xl border transition-all duration-300 overflow-visible ${
                       inputFocused
@@ -1478,7 +1425,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                               e.preventDefault();
-                              editingImage ? handleEdit() : handleGenerate();
+                              editingImage ? handleEdit() : (variationsMode ? handleCompare() : handleGenerate());
                             }
                           }}
                           placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
@@ -1491,12 +1438,12 @@ export function Studio({ brand }: { brand: Brand }) {
                         />
 
                         {/* Submit Button - Always visible on right when there's text */}
-                        {prompt.trim() && !compareMode && (
+                        {prompt.trim() && (
                           <Button
                             size="sm"
-                            onClick={editingImage ? handleEdit : handleGenerate}
-                            disabled={(generating || editing) || !prompt.trim()}
-                            loading={generating || editing}
+                            onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
+                            disabled={(generating || editing || comparing) || !prompt.trim()}
+                            loading={generating || editing || comparing}
                           >
                             <span className="sm:hidden">
                               {editingImage ? 'Apply' : 'Go'}
@@ -1505,25 +1452,6 @@ export function Studio({ brand }: { brand: Brand }) {
                               {editingImage ? 'Apply' : 'Create'}
                             </span>
                           </Button>
-                        )}
-                        
-                        {/* Compare Button - Shows when compare mode is enabled */}
-                        {prompt.trim() && compareMode && !editingImage && (
-                          <button
-                            onClick={handleCompare}
-                            disabled={comparing || !prompt.trim()}
-                            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 bg-gradient-to-r from-amber-500 to-orange-500"
-                          >
-                            {comparing ? (
-                              <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                            ) : (
-                              <Columns className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            )}
-                            <span className="sm:hidden">Compare</span>
-                            <span className="hidden sm:inline">
-                              {comparing ? 'Comparing...' : 'Compare All Versions'}
-                            </span>
-                          </button>
                         )}
                       </div>
 
@@ -1759,9 +1687,31 @@ export function Studio({ brand }: { brand: Brand }) {
                         </div>
                       )}
 
+                      {/* Variations Toggle - Above style selection */}
+                      {(inputFocused || prompt.trim()) && !editingImage && (
+                        <div className="pt-3 pb-1" onMouseDown={(e) => { e.preventDefault(); }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVariationsMode(!variationsMode);
+                              inputRef.current?.focus();
+                            }}
+                            className="flex items-center gap-3 w-full group"
+                          >
+                            {/* Toggle Switch */}
+                            <div className={`relative w-11 h-6 rounded-full transition-colors ${variationsMode ? 'bg-violet-500' : 'bg-neutral-200'}`}>
+                              <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${variationsMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                            </div>
+                            <span className={`text-sm font-medium transition-colors ${variationsMode ? 'text-violet-700' : 'text-neutral-600'}`}>
+                              Generate 3 variations for 2 credits
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
                       {/* Style Thumbnails - Attached to input box */}
                       {(inputFocused || prompt.trim()) && !editingImage && availableStyles.length > 0 && (
-                        <div 
+                        <div
                           className="pt-2 group/thumbnails relative"
                           onMouseDown={(e) => {
                             // Prevent blur on textarea when clicking thumbnails
@@ -1769,7 +1719,6 @@ export function Studio({ brand }: { brand: Brand }) {
                           }}
                         >
                           <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5" />
                             <span>Quick Style Selection</span>
                             {selectedStyles.length > 0 && (
                               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
@@ -1777,7 +1726,7 @@ export function Studio({ brand }: { brand: Brand }) {
                               </span>
                             )}
                           </div>
-                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide relative">
+                          <div className="flex gap-2 overflow-hidden relative">
                             {availableStyles.map((style) => {
                               const isSelected = selectedStyles.some(s => s.id === style.id);
                               return (
@@ -2015,83 +1964,6 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
           )}
 
-          {/* Smart Presets Link - Only show when not editing and images exist */}
-          {!editingImage && images.length > 0 && smartPresets.length > 0 && (
-            <div className="mb-2 flex items-center justify-center">
-              <button
-                onClick={() => setShowPresetsModal(true)}
-                className="text-xs text-neutral-500 hover:text-neutral-700 transition-colors flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Browse smart presets</span>
-              </button>
-            </div>
-          )}
-
-          {/* Prompt Version Toggle */}
-          {!editingImage && (
-            <div className="mb-2 flex items-center justify-center gap-3">
-              <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm rounded-lg border border-neutral-200 p-0.5">
-                <button
-                  onClick={() => setPromptVersion('v1')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
-                    promptVersion === 'v1'
-                      ? 'bg-neutral-900 text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-700'
-                  }`}
-                >
-                  V1
-                </button>
-                <button
-                  onClick={() => setPromptVersion('v2')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                    promptVersion === 'v2'
-                      ? 'bg-emerald-500 text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-700'
-                  }`}
-                >
-                  <FlaskConical className="w-3 h-3" />
-                  V2
-                </button>
-                <button
-                  onClick={() => setPromptVersion('v3')}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all flex items-center gap-1 ${
-                    promptVersion === 'v3'
-                      ? 'bg-amber-500 text-white shadow-sm'
-                      : 'text-neutral-500 hover:text-neutral-700'
-                  }`}
-                >
-                  <Zap className="w-3 h-3" />
-                  V3
-                </button>
-              </div>
-              
-              {promptVersion === 'v2' && (
-                <span className="text-xs text-emerald-600">
-                  Design-type aware
-                </span>
-              )}
-              {promptVersion === 'v3' && (
-                <span className="text-xs text-amber-600">
-                  Lean & direct
-                </span>
-              )}
-              
-              {/* Compare Mode Toggle */}
-              <button
-                onClick={() => setCompareMode(!compareMode)}
-                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-all ${
-                  compareMode 
-                    ? 'bg-amber-100 text-amber-700 border border-amber-300' 
-                    : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                <Columns className="w-3 h-3" />
-                <span className="hidden sm:inline">Compare</span>
-              </button>
-            </div>
-          )}
-
           {/* Main Input */}
           <div 
             className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 overflow-visible ${
@@ -2116,7 +1988,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      editingImage ? handleEdit() : handleGenerate();
+                      editingImage ? handleEdit() : (variationsMode ? handleCompare() : handleGenerate());
                     }
                   }}
                   placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
@@ -2129,12 +2001,12 @@ export function Studio({ brand }: { brand: Brand }) {
                 />
 
                 {/* Submit Button - Always visible on right when there's text */}
-                {prompt.trim() && !compareMode && (
+                {prompt.trim() && (
                   <Button
                     size="sm"
-                    onClick={editingImage ? handleEdit : handleGenerate}
-                    disabled={(generating || editing) || !prompt.trim()}
-                    loading={generating || editing}
+                    onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
+                    disabled={(generating || editing || comparing) || !prompt.trim()}
+                    loading={generating || editing || comparing}
                   >
                     <span className="sm:hidden">
                       {editingImage ? 'Apply' : 'Go'}
@@ -2143,25 +2015,6 @@ export function Studio({ brand }: { brand: Brand }) {
                       {editingImage ? 'Apply' : 'Create'}
                     </span>
                   </Button>
-                )}
-
-                {/* Compare Button - Shows when compare mode is enabled */}
-                {prompt.trim() && compareMode && !editingImage && (
-                  <button
-                    onClick={handleCompare}
-                    disabled={comparing || !prompt.trim()}
-                    className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-white text-xs sm:text-sm font-medium transition-all hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed shrink-0 bg-gradient-to-r from-amber-500 to-orange-500"
-                  >
-                    {comparing ? (
-                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
-                    ) : (
-                      <Columns className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                    )}
-                    <span className="sm:hidden">Compare</span>
-                    <span className="hidden sm:inline">
-                      {comparing ? 'Comparing...' : 'Compare All Versions'}
-                    </span>
-                  </button>
                 )}
               </div>
 
@@ -2410,10 +2263,32 @@ export function Studio({ brand }: { brand: Brand }) {
 
               {/* Actions - Show on right side when no text (original behavior) */}
               {/* Removed: Auto, Media, and Enhance buttons now only show when user types something */}
-              
+
+              {/* Variations Toggle - Above style selection */}
+              {(inputFocused || prompt.trim()) && !editingImage && images.length > 0 && (
+                <div className="pt-3 pb-1" onMouseDown={(e) => { e.preventDefault(); }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVariationsMode(!variationsMode);
+                      inputRef.current?.focus();
+                    }}
+                    className="flex items-center gap-3 w-full group"
+                  >
+                    {/* Toggle Switch */}
+                    <div className={`relative w-11 h-6 rounded-full transition-colors ${variationsMode ? 'bg-violet-500' : 'bg-neutral-200'}`}>
+                      <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${variationsMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </div>
+                    <span className={`text-sm font-medium transition-colors ${variationsMode ? 'text-violet-700' : 'text-neutral-600'}`}>
+                      Generate 3 variations for 2 credits
+                    </span>
+                  </button>
+                </div>
+              )}
+
               {/* Style Thumbnails - Attached to input box */}
               {(inputFocused || prompt.trim()) && !editingImage && availableStyles.length > 0 && images.length > 0 && (
-                <div 
+                <div
                   className="pt-2 group/thumbnails relative"
                   onMouseDown={(e) => {
                     // Prevent blur on textarea when clicking thumbnails
@@ -2421,7 +2296,6 @@ export function Studio({ brand }: { brand: Brand }) {
                   }}
                 >
                   <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
                     <span>Quick Style Selection</span>
                     {selectedStyles.length > 0 && (
                       <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
@@ -2429,7 +2303,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide relative">
+                  <div className="flex gap-2 overflow-hidden relative">
                     {availableStyles.map((style) => {
                       const isSelected = selectedStyles.some(s => s.id === style.id);
                       return (
@@ -2997,6 +2871,7 @@ export function Studio({ brand }: { brand: Brand }) {
       )}
 
       {/* Comparison Modal */}
+      {/* 3 Variations Modal */}
       {showComparisonModal && comparisonResults && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
@@ -3005,18 +2880,17 @@ export function Studio({ brand }: { brand: Brand }) {
           <div className="absolute inset-0 bg-black/60" />
 
           <div
-            className="relative bg-white rounded-xl shadow-lg w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col"
+            className="relative bg-white rounded-xl shadow-lg w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-neutral-100">
               <div>
-                <h3 className="text-lg sm:text-xl font-bold text-neutral-900 flex items-center gap-2">
-                  <Columns className="w-5 h-5" />
-                  Side-by-Side Comparison
+                <h3 className="text-lg sm:text-xl font-bold text-neutral-900">
+                  3 Variations
                 </h3>
-                <p className="text-sm text-neutral-600 mt-1">
-                  Prompt: "{prompt.substring(0, 60)}{prompt.length > 60 ? '...' : ''}"
+                <p className="text-sm text-neutral-500 mt-1">
+                  {prompt.substring(0, 80)}{prompt.length > 80 ? '...' : ''}
                 </p>
               </div>
               <button
@@ -3027,189 +2901,179 @@ export function Studio({ brand }: { brand: Brand }) {
               </button>
             </div>
 
-            {/* Comparison Content */}
+            {/* Variations Grid */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
-                {/* V1 Result */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 bg-neutral-900 text-white text-xs font-medium rounded-md">
-                      V1
-                    </span>
-                    <span className="text-xs text-neutral-500">GPT + Complex</span>
-                  </div>
-                  
-                  {comparisonResults.v1 ? (
-                    <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200">
-                        <img 
-                          src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
-                          alt="V1 Result"
-                          className="w-full h-auto"
-                        />
+              <div className="grid grid-cols-3 gap-4">
+                {/* Variation 1 */}
+                {comparisonResults.v1 ? (
+                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                    <img
+                      src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
+                      alt="Variation 1"
+                      className="w-full h-auto"
+                    />
+                    {/* Saved badge */}
+                    {savedVersions.has('v1') && (
+                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Saved
                       </div>
-                      
-                      {comparisonResults.v1.gpt_prompt_info && (
-                        <details className="bg-neutral-50 rounded-lg border border-neutral-200">
-                          <summary className="px-3 py-2 text-xs font-medium text-neutral-600 cursor-pointer hover:bg-neutral-100">
-                            View Prompt
-                          </summary>
-                          <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
-                              {comparisonResults.v1.gpt_prompt_info.full_prompt}
-                            </pre>
+                    )}
+                    {/* Hover overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <div className="flex items-center justify-between">
+                          <button
+                            onClick={() => {
+                              // TODO: Edit functionality
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${comparisonResults.v1?.image_base64}`;
+                                link.download = `variation-1-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleSaveComparisonImage('v1')}
+                              disabled={!!savingComparison || savedVersions.has('v1')}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                              title="Save to gallery"
+                            >
+                              {savingComparison === 'v1' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                            </button>
                           </div>
-                        </details>
-                      )}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                    Failed
+                  </div>
+                )}
 
-                {/* V2 Result */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 bg-emerald-500 text-white text-xs font-medium rounded-md flex items-center gap-1">
-                      <FlaskConical className="w-3 h-3" />
-                      V2
-                    </span>
-                    <span className="text-xs text-neutral-500">Design-type aware</span>
-                  </div>
-                  
-                  {comparisonResults.v2 ? (
-                    <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-emerald-200">
-                        <img 
-                          src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
-                          alt="V2 Result"
-                          className="w-full h-auto"
-                        />
+                {/* Variation 2 */}
+                {comparisonResults.v2 ? (
+                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                    <img
+                      src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
+                      alt="Variation 2"
+                      className="w-full h-auto"
+                    />
+                    {savedVersions.has('v2') && (
+                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Saved
                       </div>
-                      
-                      {comparisonResults.v2.gpt_prompt_info && (
-                        <details className="bg-emerald-50 rounded-lg border border-emerald-200">
-                          <summary className="px-3 py-2 text-xs font-medium text-emerald-700 cursor-pointer hover:bg-emerald-100">
-                            View Prompt
-                          </summary>
-                          <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
-                              {comparisonResults.v2.gpt_prompt_info.full_prompt}
-                            </pre>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <div className="flex items-center justify-between">
+                          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors">
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${comparisonResults.v2?.image_base64}`;
+                                link.download = `variation-2-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleSaveComparisonImage('v2')}
+                              disabled={!!savingComparison || savedVersions.has('v2')}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                              title="Save to gallery"
+                            >
+                              {savingComparison === 'v2' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                            </button>
                           </div>
-                        </details>
-                      )}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                    Failed
+                  </div>
+                )}
 
-                {/* V3 Result */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 bg-amber-500 text-white text-xs font-medium rounded-md flex items-center gap-1">
-                      <Zap className="w-3 h-3" />
-                      V3
-                    </span>
-                    <span className="text-xs text-neutral-500">Lean & Direct</span>
-                  </div>
-                  
-                  {comparisonResults.v3 ? (
-                    <div className="space-y-3">
-                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-amber-200">
-                        <img 
-                          src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
-                          alt="V3 Result"
-                          className="w-full h-auto"
-                        />
+                {/* Variation 3 */}
+                {comparisonResults.v3 ? (
+                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                    <img
+                      src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
+                      alt="Variation 3"
+                      className="w-full h-auto"
+                    />
+                    {savedVersions.has('v3') && (
+                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Saved
                       </div>
-                      
-                      {comparisonResults.v3.prompt_used && (
-                        <details className="bg-amber-50 rounded-lg border border-amber-200">
-                          <summary className="px-3 py-2 text-xs font-medium text-amber-700 cursor-pointer hover:bg-amber-100">
-                            View Prompt
-                          </summary>
-                          <div className="px-3 pb-3">
-                            <pre className="text-[10px] text-neutral-600 whitespace-pre-wrap max-h-48 overflow-y-auto bg-white p-2 rounded border">
-                              {comparisonResults.v3.prompt_used}
-                            </pre>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <div className="flex items-center justify-between">
+                          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors">
+                            <Edit3 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${comparisonResults.v3?.image_base64}`;
+                                link.download = `variation-3-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleSaveComparisonImage('v3')}
+                              disabled={!!savingComparison || savedVersions.has('v3')}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                              title="Save to gallery"
+                            >
+                              {savingComparison === 'v3' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                            </button>
                           </div>
-                        </details>
-                      )}
+                        </div>
+                      </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                    Failed
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between p-4 sm:p-6">
-              <p className="text-xs text-neutral-500">
-                Comparison uses 1 credit. Select a version to save it to your gallery.
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setShowComparisonModal(false);
-                    setCompareMode(false);
-                  }}
-                  className="px-3 py-2 text-sm font-medium text-neutral-600 hover:text-neutral-900 transition-colors"
-                  disabled={!!savingComparison}
-                >
-                  Close
-                </button>
-                <button
-                  onClick={() => handleSaveComparisonImage('v1')}
-                  disabled={!comparisonResults?.v1 || !!savingComparison}
-                  className="px-3 py-2 text-sm font-medium text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {savingComparison === 'v1' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Use V1'
-                  )}
-                </button>
-                <button
-                  onClick={() => handleSaveComparisonImage('v2')}
-                  disabled={!comparisonResults?.v2 || !!savingComparison}
-                  className="px-3 py-2 text-sm font-medium text-white bg-emerald-500 hover:bg-emerald-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {savingComparison === 'v2' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Use V2'
-                  )}
-                </button>
-                <button
-                  onClick={() => handleSaveComparisonImage('v3')}
-                  disabled={!comparisonResults?.v3 || !!savingComparison}
-                  className="px-3 py-2 text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                  {savingComparison === 'v3' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Use V3'
-                  )}
-                </button>
-              </div>
+            <div className="flex items-center justify-end p-4 sm:p-6 border-t border-neutral-100">
+              <button
+                onClick={() => setShowComparisonModal(false)}
+                className="px-4 py-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

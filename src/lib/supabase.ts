@@ -114,6 +114,38 @@ export function generateSlug(domain: string): string {
   return `${clean}-${suffix}`;
 }
 
+// =============================================================================
+// PRODUCT TYPE - Scraped e-commerce products for ad generation
+// =============================================================================
+
+export type Product = {
+  id: string;
+  brand_id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  short_description?: string;
+  price?: number;
+  currency?: string;
+  sale_price?: number;
+  images: Array<{ url: string; alt?: string; is_primary: boolean }>;
+  category?: string;
+  tags?: string[];
+  key_features?: string[];        // GPT-enriched
+  value_proposition?: string;     // GPT-enriched
+  ad_angles?: Array<{             // GPT-suggested ad approaches
+    angle: string;
+    headline_idea: string;
+  }>;
+  source_url: string;
+  status: 'scraping' | 'scraped' | 'enriched' | 'error';
+  created_at: string;
+  updated_at: string;
+};
+
+// TODO: Add ad_personality to Brand.styleguide (Phase 2)
+// =============================================================================
+
 export type Brand = {
   id: string;
   user_id: string;
@@ -229,6 +261,17 @@ export type Brand = {
       surface?: string;
       text_primary?: string;
       text_on_primary?: string;
+    };
+    // Ad Personality - Observable traits for ad generation
+    // Extracted from website during brand setup by analyze-ad-personality function
+    ad_personality?: {
+      visual_approach?: 'photography' | 'illustration' | '3D' | 'clean_UI' | 'abstract' | 'mixed';
+      human_presence?: 'prominent' | 'subtle' | 'none';
+      color_treatment?: 'bold_saturated' | 'muted_pastel' | 'monochrome' | 'gradient_heavy';
+      composition?: 'centered' | 'asymmetric' | 'editorial' | 'grid' | 'chaotic';
+      copy_style?: 'punchy_minimal' | 'data_driven' | 'storytelling' | 'conversational';
+      tone?: 'serious' | 'playful' | 'provocative' | 'inspirational';
+      imagery_subjects?: string[];  // e.g., ['products', 'people', 'lifestyle', 'UI_screenshots']
     };
   };
   status: 'draft' | 'extracting' | 'ready' | 'error';

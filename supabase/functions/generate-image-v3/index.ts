@@ -91,7 +91,12 @@ function getBestLogoUrl(brand: Brand): string | null {
   // Try all_logos for raster logos
   if (brand.all_logos?.length) {
     const rasterLogos = brand.all_logos
-      .filter(logo => logo.url && isLikelyRaster(logo.url))
+      .filter(logo => {
+        if (!logo.url || !isLikelyRaster(logo.url)) return false;
+        // Exclude og-image - these are social preview images, not logos
+        if (logo.type === 'og-image') return false;
+        return true;
+      })
       .sort((a, b) => {
         const getPriority = (url: string): number => {
           const lower = url.toLowerCase();
@@ -114,13 +119,8 @@ function getBestLogoUrl(brand: Brand): string | null {
     return brand.logos.icon;
   }
 
-  // Last resort: use primary even if SVG (better than nothing)
-  if (brand.logos?.primary) {
-    console.log(`[V3] Using primary logo as fallback (may be SVG): ${brand.logos.primary}`);
-    return brand.logos.primary;
-  }
-
-  console.warn(`[V3] No logo found for brand. Primary: ${brand.logos?.primary || 'none'}, Icon: ${brand.logos?.icon || 'none'}, All logos: ${brand.all_logos?.length || 0}`);
+  // No valid raster logo found - return null (don't fallback to SVG, Gemini can't render it)
+  console.warn(`[V3] No raster logo found for brand. Primary: ${brand.logos?.primary || 'none'} (SVG?), Icon: ${brand.logos?.icon || 'none'}, All logos: ${brand.all_logos?.length || 0}`);
   return null;
 }
 
