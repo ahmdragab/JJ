@@ -1320,24 +1320,6 @@ export function Studio({ brand }: { brand: Brand }) {
     });
   };
 
-  // Calculate dimensions from aspect ratio (fallback for old images)
-  const calculateDimensions = (aspectRatio: string | undefined): { width: number; height: number } | null => {
-    if (!aspectRatio || aspectRatio === 'auto') return null;
-    const resolutionMap: Record<string, { width: number; height: number }> = {
-      '1:1': { width: 2048, height: 2048 },
-      '2:3': { width: 1696, height: 2528 },
-      '3:2': { width: 2528, height: 1696 },
-      '3:4': { width: 1792, height: 2400 },
-      '4:3': { width: 2400, height: 1792 },
-      '4:5': { width: 1856, height: 2304 },
-      '5:4': { width: 2304, height: 1856 },
-      '9:16': { width: 1536, height: 2752 },
-      '16:9': { width: 2752, height: 1536 },
-      '21:9': { width: 3168, height: 1344 },
-    };
-    return resolutionMap[aspectRatio] || null;
-  };
-
   // Get all versions (history + current)
   const getAllVersions = (img: GeneratedImage | null): Array<{ image_url: string; edit_prompt?: string; timestamp: string }> => {
     if (!img) return [];
@@ -2749,8 +2731,6 @@ export function Studio({ brand }: { brand: Brand }) {
                   const metadata = selectedImage.metadata || {};
                   const aspectRatio = metadata.aspect_ratio as string | undefined;
                   const resolution = (metadata.resolution as string) || '2K';
-                  const dims = (metadata.dimensions as { width: number; height: number } | undefined)
-                    || calculateDimensions(aspectRatio);
 
                   return (
                     <div className="mb-5">
@@ -2768,11 +2748,6 @@ export function Studio({ brand }: { brand: Brand }) {
                           PNG
                         </span>
                       </div>
-                      {dims && (
-                        <div className="text-xs text-neutral-400 mt-1.5">
-                          {dims.width} × {dims.height} px
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
