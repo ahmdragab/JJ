@@ -193,22 +193,10 @@ export function ProductPicker({
         {/* Search & Add Bar */}
         <div className="flex-shrink-0 p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            {/* Search */}
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products..."
-                className="input pl-10 py-2.5 text-sm"
-              />
-            </div>
-
-            {/* Add Product Button / Form */}
             {showAddForm ? (
-              <div className="flex gap-2 shrink-0">
-                <div className="relative flex-1 sm:w-64">
+              /* Add Product Form - Expands to full width */
+              <div className="flex gap-2 flex-1 animate-in fade-in slide-in-from-right-2 duration-200">
+                <div className="relative flex-1">
                   <Link className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                   <input
                     ref={inputRef}
@@ -217,7 +205,7 @@ export function ProductPicker({
                     value={productUrl}
                     onChange={(e) => setProductUrl(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleScrapeProduct()}
-                    className="input pl-10 py-2.5 text-sm"
+                    className="input pl-10 py-2.5 text-sm w-full"
                     disabled={scraping}
                     autoFocus
                   />
@@ -239,21 +227,34 @@ export function ProductPicker({
                     setShowAddForm(false);
                     setProductUrl('');
                   }}
-                  className="w-10 h-10 rounded-xl hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors"
+                  className="w-10 h-10 rounded-xl hover:bg-neutral-100 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors shrink-0"
                   disabled={scraping}
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             ) : (
-              <Button
-                onClick={() => setShowAddForm(true)}
-                size="md"
-                className="shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="ml-1.5">Add Product</span>
-              </Button>
+              /* Search + Add Button */
+              <>
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search products..."
+                    className="input pl-10 py-2.5 text-sm"
+                  />
+                </div>
+                <Button
+                  onClick={() => setShowAddForm(true)}
+                  size="md"
+                  className="shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="ml-1.5">Add Product</span>
+                </Button>
+              </>
             )}
           </div>
           {scraping && (
