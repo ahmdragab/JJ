@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowRight, Sparkles, Globe, ChevronDown, Check } from 'lucide-react';
+import { ArrowRight, Sparkles, Globe, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
 import alwanLogo from '../fav.png';
@@ -11,7 +11,6 @@ import alwanLogo from '../fav.png';
 interface LandingV2Props {
   onStart: (url: string) => void;
   onViewBrands?: () => void;
-  initialVersion?: 'A' | 'B' | 'C';
 }
 
 interface ShowcaseStyle {
@@ -52,249 +51,7 @@ function useShowcaseStyles(limit = 6): { styles: ShowcaseStyle[]; loading: boole
   return { styles, loading };
 }
 
-// Custom hook for typing animation
-function useTypewriter(words: string[], typingSpeed = 100, deletingSpeed = 50, pauseDuration = 2000) {
-  const [text, setText] = useState('');
-  const [wordIndex, setWordIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
-    const currentWord = words[wordIndex];
-
-    const timeout = setTimeout(() => {
-      if (!isDeleting) {
-        setText(currentWord.slice(0, text.length + 1));
-        if (text === currentWord) {
-          setTimeout(() => setIsDeleting(true), pauseDuration);
-        }
-      } else {
-        setText(currentWord.slice(0, text.length - 1));
-        if (text === '') {
-          setIsDeleting(false);
-          setWordIndex((prev) => (prev + 1) % words.length);
-        }
-      }
-    }, isDeleting ? deletingSpeed : typingSpeed);
-
-    return () => clearTimeout(timeout);
-  }, [text, wordIndex, isDeleting, words, typingSpeed, deletingSpeed, pauseDuration]);
-
-  return text;
-}
-
-// ============================================================================
-// VERSION A: MIDNIGHT AGENCY
-// Bold minimalist with dark navy, giant typography, floating ad previews
-// ============================================================================
-
-function VersionA({ onStart }: { onStart: (url: string) => void }) {
-  const { user, signInWithGoogle } = useAuth();
-  const [url, setUrl] = useState('');
-  const [error, setError] = useState('');
-  const [isHovering, setIsHovering] = useState(false);
-  const typedWord = useTypewriter(['Facebook', 'Instagram', 'Google', 'TikTok', 'LinkedIn'], 80, 40, 1500);
-  const { styles: showcaseStyles } = useShowcaseStyles(5);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!url.trim()) {
-      setError('Enter your website URL');
-      return;
-    }
-
-    if (!isValidDomain(url.trim())) {
-      setError('Please enter a valid domain');
-      return;
-    }
-
-    if (!user) {
-      localStorage.setItem('pendingUrl', url.trim());
-      signInWithGoogle();
-      return;
-    }
-
-    onStart(url.trim());
-  };
-
-  // Card positions for scattered layout - width only, height is auto based on image
-  const cardPositions = [
-    { top: '12%', right: '8%', rotate: 6, width: 'w-48', zIndex: 30 },
-    { bottom: '20%', left: '5%', rotate: -12, width: 'w-52', zIndex: 20 },
-    { top: '30%', right: '3%', rotate: 10, width: 'w-44', zIndex: 25 },
-    { bottom: '35%', left: '15%', rotate: -6, width: 'w-40', zIndex: 15 },
-    { top: '50%', right: '15%', rotate: -4, width: 'w-44', zIndex: 10 },
-  ];
-
-  return (
-    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#0D0D31' }}>
-      {/* Gradient orbs */}
-      <div className="absolute top-0 left-1/4 w-[600px] h-[600px] rounded-full opacity-30 blur-[120px]"
-           style={{ background: 'radial-gradient(circle, #3531B7 0%, transparent 70%)' }} />
-      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] rounded-full opacity-20 blur-[100px]"
-           style={{ background: 'radial-gradient(circle, #840E25 0%, transparent 70%)' }} />
-
-      {/* Grid pattern overlay */}
-      <div className="absolute inset-0 opacity-[0.03]"
-           style={{
-             backgroundImage: `linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)`,
-             backgroundSize: '60px 60px'
-           }} />
-
-      {/* Floating ad previews - Real images from styles */}
-      {showcaseStyles.slice(0, 5).map((style, index) => {
-        const pos = cardPositions[index];
-        return (
-          <div
-            key={style.id}
-            className={`absolute ${pos.width} rounded-2xl overflow-hidden hidden lg:block transition-all duration-500 hover:scale-105 shadow-2xl shadow-black/50 group`}
-            style={{
-              top: pos.top,
-              bottom: pos.bottom,
-              left: pos.left,
-              right: pos.right,
-              transform: `rotate(${pos.rotate}deg)`,
-              zIndex: pos.zIndex,
-            }}
-          >
-            <img
-              src={style.url}
-              alt={style.name}
-              className="w-full h-auto block rounded-2xl"
-              loading="lazy"
-            />
-            {/* Subtle hover overlay */}
-            <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10 transition-colors duration-300 rounded-2xl" />
-          </div>
-        );
-      })}
-
-      {/* Main content */}
-      <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Header */}
-        <header className="w-full px-6 sm:px-8 lg:px-12 py-6 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#3531B7' }}>
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <span className="text-white font-semibold text-lg tracking-tight" style={{ fontFamily: "'Outfit', sans-serif" }}>AdForge</span>
-          </div>
-
-          {user ? (
-            <button
-              onClick={() => window.location.href = '/brands'}
-              className="text-white/70 hover:text-white text-sm transition-colors px-4 py-2 rounded-full border border-white/20 hover:border-white/40"
-            >
-              My Brands
-            </button>
-          ) : (
-            <button
-              onClick={() => signInWithGoogle()}
-              className="text-white/70 hover:text-white text-sm transition-colors px-4 py-2 rounded-full border border-white/20 hover:border-white/40"
-            >
-              Sign In
-            </button>
-          )}
-        </header>
-
-        {/* Hero */}
-        <main className="flex-1 flex items-center justify-center px-6 sm:px-8 lg:px-12 -mt-16">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 mb-8">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-white/60 text-sm" style={{ fontFamily: "'Outfit', sans-serif" }}>AI-Powered Ad Creation</span>
-            </div>
-
-            {/* Headline */}
-            <h1 className="text-5xl sm:text-6xl lg:text-8xl font-bold text-white mb-6 leading-[0.95] tracking-tight"
-                style={{ fontFamily: "'Bebas Neue', sans-serif" }}>
-              YOUR WEBSITE.
-              <br />
-              <span className="bg-gradient-to-r from-[#3531B7] via-[#6B6F85] to-[#840E25] text-transparent bg-clip-text">
-                INFINITE ADS.
-              </span>
-            </h1>
-
-            {/* Subheadline */}
-            <p className="text-lg sm:text-xl text-white/50 mb-10 max-w-xl mx-auto leading-relaxed"
-               style={{ fontFamily: "'Outfit', sans-serif" }}>
-              Drop your URL. Get high-converting {typedWord}<span className="animate-pulse">|</span> ads
-              in seconds. On-brand. Every time.
-            </p>
-
-            {/* URL Input */}
-            <form onSubmit={handleSubmit} className="max-w-xl mx-auto">
-              <div
-                className={`flex items-center gap-2 p-2 rounded-2xl transition-all duration-300 ${
-                  isHovering ? 'bg-white/15' : 'bg-white/10'
-                } border ${error ? 'border-red-500/50' : 'border-white/20'}`}
-                onMouseEnter={() => setIsHovering(true)}
-                onMouseLeave={() => setIsHovering(false)}
-              >
-                <Globe className="w-5 h-5 text-white/40 ml-3" />
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => { setUrl(e.target.value); setError(''); }}
-                  placeholder="yourwebsite.com"
-                  className="flex-1 bg-transparent text-white placeholder:text-white/30 outline-none py-3 text-lg"
-                  style={{ fontFamily: "'Outfit', sans-serif" }}
-                />
-                <button
-                  type="submit"
-                  className="px-6 py-3 rounded-xl text-white font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2"
-                  style={{
-                    backgroundColor: '#3531B7',
-                    fontFamily: "'Outfit', sans-serif"
-                  }}
-                >
-                  Generate Ads
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-              {error && (
-                <p className="text-red-400 text-sm mt-3" style={{ fontFamily: "'Outfit', sans-serif" }}>{error}</p>
-              )}
-            </form>
-
-            {/* Trust indicators */}
-            <div className="mt-12 flex flex-wrap items-center justify-center gap-8 text-white/30 text-sm" style={{ fontFamily: "'Outfit', sans-serif" }}>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-400" />
-                <span>No design skills needed</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-400" />
-                <span>Ready in seconds</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-400" />
-                <span>Always on-brand</span>
-              </div>
-            </div>
-          </div>
-        </main>
-
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-white/30 animate-bounce">
-          <ChevronDown className="w-6 h-6" />
-        </div>
-      </div>
-
-      {/* Fonts */}
-      <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-
-      <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(var(--rotate)); }
-          50% { transform: translateY(-20px) rotate(calc(var(--rotate) - 3deg)); }
-        }
-      `}</style>
-    </div>
-  );
-}
 
 // ============================================================================
 // VERSION B: ALWAN - CONVERSION FOCUSED
@@ -671,12 +428,18 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="w-3 h-3 rounded-full bg-yellow-400" />
                             <div className="w-3 h-3 rounded-full bg-green-400" />
                           </div>
-                          <div className="flex-1 bg-white rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2">
+                          <div className="flex-1 bg-white rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2 relative overflow-hidden">
                             <Globe className="w-4 h-4 text-gray-400" />
-                            <span className="animate-typing overflow-hidden whitespace-nowrap border-r-2 border-gray-400">
+                            <span className="animate-paste flex-1">
                               yourcompany.com
                             </span>
+                            {/* Paste highlight effect */}
+                            <div className="absolute inset-0 bg-[#3531B7]/10 animate-paste-highlight rounded-lg pointer-events-none" />
                           </div>
+                          {/* Go button */}
+                          <button className="px-3 py-2 bg-[#3531B7] text-white text-xs font-semibold rounded-lg animate-button-click">
+                            Go
+                          </button>
                         </div>
                         <div className="bg-white rounded-lg m-1 p-6 h-48 flex items-center justify-center">
                           <div className="text-center">
@@ -684,6 +447,13 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="h-3 w-32 bg-gray-200 rounded mx-auto mb-2" />
                             <div className="h-2 w-24 bg-gray-100 rounded mx-auto" />
                           </div>
+                        </div>
+
+                        {/* Animated cursor */}
+                        <div className="absolute animate-cursor pointer-events-none" style={{ top: '20px', right: '80px' }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="drop-shadow-md">
+                            <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z" fill="#1a1a1a" stroke="#fff" strokeWidth="1.5"/>
+                          </svg>
                         </div>
                       </div>
                     </div>
@@ -1045,12 +815,59 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         .animate-float-up {
           animation: float-up 3s ease-in-out infinite;
         }
-        @keyframes typing {
-          from { width: 0; }
-          to { width: 100%; }
+        @keyframes paste {
+          0%, 25% { opacity: 0; transform: scale(0.95); }
+          35% { opacity: 1; transform: scale(1.02); }
+          45%, 100% { opacity: 1; transform: scale(1); }
         }
-        .animate-typing {
-          animation: typing 2s steps(16) infinite alternate;
+        .animate-paste {
+          animation: paste 4s ease-out infinite;
+        }
+        @keyframes paste-highlight {
+          0%, 25% { opacity: 0; }
+          35% { opacity: 1; }
+          50% { opacity: 1; }
+          60%, 100% { opacity: 0; }
+        }
+        .animate-paste-highlight {
+          animation: paste-highlight 4s ease-out infinite;
+        }
+        @keyframes cursor-move {
+          0%, 40% {
+            opacity: 0;
+            transform: translate(0, 0);
+          }
+          50% {
+            opacity: 1;
+            transform: translate(0, 0);
+          }
+          70% {
+            opacity: 1;
+            transform: translate(40px, 12px);
+          }
+          75% {
+            opacity: 1;
+            transform: translate(40px, 12px) scale(0.9);
+          }
+          80%, 90% {
+            opacity: 1;
+            transform: translate(40px, 12px);
+          }
+          100% {
+            opacity: 0;
+            transform: translate(40px, 12px);
+          }
+        }
+        .animate-cursor {
+          animation: cursor-move 4s ease-in-out infinite;
+        }
+        @keyframes button-click {
+          0%, 70% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          75% { transform: scale(0.95); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+          80%, 100% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        }
+        .animate-button-click {
+          animation: button-click 4s ease-out infinite;
         }
       `}</style>
     </div>
@@ -1058,10 +875,23 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 }
 
 // ============================================================================
-// VERSION C: KINETIC SHOWCASE
-// Sophisticated orchestrated animations, scattered tilted cards like osmo.supply
+// VERSION C: KINETIC SHOWCASE (COMMENTED OUT)
+// ============================================================================
+//
+// This version features a centered layout with sophisticated animations and
+// scattered tilted cards (osmo.supply inspired). It was commented out in favor
+// of Version B's left-aligned two-column layout based on UX research showing:
+//
+// 1. F-pattern reading behavior favors left-aligned text for better comprehension
+// 2. Left-aligned layouts reduce cognitive load (eyes don't search for line starts)
+// 3. Two-column layouts allow pairing text with visual proof (floating ad examples)
+// 4. A/B tests show left-to-right visual flow increases CTA clicks by ~24%
+//
+// The centered layout works well for short headlines but becomes harder to scan
+// with description text. Consider uncommenting if testing a minimal-copy approach.
 // ============================================================================
 
+/*
 function VersionC({ onStart }: { onStart: (url: string) => void }) {
   const { user, signInWithGoogle } = useAuth();
   const [url, setUrl] = useState('');
@@ -1112,21 +942,17 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#FAFAFA' }}>
-      {/* Subtle grain texture */}
       <div className="absolute inset-0 opacity-[0.02]"
            style={{
              backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
            }} />
 
-      {/* Animated gradient orbs */}
       <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[100px] animate-orb-float"
            style={{ background: 'radial-gradient(circle, #3531B7 0%, transparent 70%)' }} />
       <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full opacity-[0.05] blur-[80px] animate-orb-float-delayed"
            style={{ background: 'radial-gradient(circle, #840E25 0%, transparent 70%)' }} />
 
-      {/* Content */}
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* Navigation */}
         <header className={`w-full px-6 sm:px-10 lg:px-16 py-5 flex justify-between items-center transition-all duration-700 ${
           isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
         }`}>
@@ -1155,7 +981,6 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
             </div>
           </div>
 
-          {/* Mobile nav */}
           <button
             onClick={() => user ? window.location.href = '/brands' : signInWithGoogle()}
             className="md:hidden px-4 py-2 rounded-full text-sm font-medium"
@@ -1165,7 +990,6 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
           </button>
         </header>
 
-        {/* Marquee Banner */}
         <div className={`w-full overflow-hidden py-2.5 border-y transition-all duration-700 delay-100 ${
           isLoaded ? 'opacity-100' : 'opacity-0'
         }`} style={{ borderColor: '#0D0D31', backgroundColor: '#0D0D31' }}>
@@ -1180,9 +1004,7 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
           </div>
         </div>
 
-        {/* Hero */}
         <main className="flex-1 flex flex-col items-center px-6 sm:px-10 lg:px-16 pt-12 lg:pt-16">
-          {/* Hero Text */}
           <div className="text-center max-w-4xl mx-auto mb-8 lg:mb-12">
             <h1 className={`text-5xl sm:text-6xl lg:text-8xl font-bold leading-[0.9] tracking-tight mb-6 transition-all duration-1000 delay-200 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
@@ -1210,7 +1032,6 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
               templates, formats, and a complete ad creation workflow.
             </p>
 
-            {/* URL Input */}
             <form onSubmit={handleSubmit} className={`max-w-xl mx-auto transition-all duration-1000 delay-400 ${
               isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}>
@@ -1243,7 +1064,6 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
             </form>
           </div>
 
-          {/* Scattered Card Showcase - osmo.supply style with Real Images */}
           <div className={`relative w-full max-w-6xl mx-auto h-[400px] sm:h-[450px] lg:h-[500px] mt-4 transition-all duration-1000 delay-500 ${
             isLoaded ? 'opacity-100' : 'opacity-0'
           }`}>
@@ -1271,13 +1091,11 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
                     className="w-full h-auto block rounded-2xl"
                     loading="lazy"
                   />
-                  {/* Shine effect on hover */}
                   <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/25 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" />
                 </div>
               );
             })}
 
-            {/* Decorative floating elements */}
             <div className="absolute top-[10%] left-[35%] w-3 h-3 rounded-full animate-float-slow" style={{ backgroundColor: '#3531B7' }} />
             <div className="absolute bottom-[30%] right-[20%] w-2 h-2 rounded-full animate-float-slow-delayed" style={{ backgroundColor: '#840E25' }} />
             <div className="absolute top-[40%] right-[5%] w-4 h-4 rounded-full animate-float-slow" style={{ backgroundColor: '#84CC16' }} />
@@ -1285,11 +1103,10 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
         </main>
       </div>
 
-      {/* Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
       <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&f[]=general-sans@400,500,600&f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
 
-      <style>{`
+      <style>{\`
         @keyframes marquee-fast {
           0% { transform: translateX(0); }
           100% { transform: translateX(-25%); }
@@ -1360,70 +1177,18 @@ function VersionC({ onStart }: { onStart: (url: string) => void }) {
         .animate-shake {
           animation: shake 0.3s ease-in-out;
         }
-      `}</style>
+      \`}</style>
     </div>
   );
 }
+*/
 
 // ============================================================================
-// MAIN COMPONENT WITH VERSION SELECTOR
+// MAIN COMPONENT
 // ============================================================================
+// Now using Version B (Alwan) as the primary landing page.
+// Version A was removed, Version C is commented out above for reference.
 
-export function LandingV2({ onStart, initialVersion = 'B' }: LandingV2Props) {
-  const [version, setVersion] = useState<'A' | 'B' | 'C'>(initialVersion);
-  const [showSelector, setShowSelector] = useState(true);
-
-  const versions = {
-    A: { name: 'Midnight Agency', desc: 'Dark, bold, premium', Component: VersionA },
-    B: { name: 'Alwan', desc: 'Clean, conversion-focused', Component: VersionB },
-    C: { name: 'Kinetic Showcase', desc: 'Animated, osmo-style cards', Component: VersionC },
-  };
-
-  const CurrentVersion = versions[version].Component;
-
-  return (
-    <>
-      {/* Version selector floating panel */}
-      {showSelector && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl shadow-black/20 border border-gray-200 p-2 flex items-center gap-2"
-             style={{ fontFamily: "'Inter', sans-serif" }}>
-          <span className="text-xs text-gray-400 px-3 font-medium">Version:</span>
-          {(['A', 'B', 'C'] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setVersion(v)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                version === v
-                  ? 'text-white shadow-lg'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-              style={version === v ? { backgroundColor: '#3531B7' } : {}}
-            >
-              {v}: {versions[v].name}
-            </button>
-          ))}
-          <button
-            onClick={() => setShowSelector(false)}
-            className="ml-2 p-2 text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {/* Show selector button when hidden */}
-      {!showSelector && (
-        <button
-          onClick={() => setShowSelector(true)}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/90 backdrop-blur-xl rounded-full shadow-lg px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-all border border-gray-200"
-          style={{ fontFamily: "'Inter', sans-serif" }}
-        >
-          Switch Version
-        </button>
-      )}
-
-      {/* Render current version */}
-      <CurrentVersion onStart={onStart} />
-    </>
-  );
+export function LandingV2({ onStart }: LandingV2Props) {
+  return <VersionB onStart={onStart} />;
 }

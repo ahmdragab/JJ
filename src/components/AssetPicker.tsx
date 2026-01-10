@@ -240,7 +240,21 @@ export function AssetPicker({
       <div
         className="relative bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col modal-content-enter"
         onClick={(e) => e.stopPropagation()}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
+        {/* Drop Overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-50 bg-brand-primary/10 border-2 border-dashed border-brand-primary rounded-xl flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <Plus className="w-12 h-12 text-brand-primary mx-auto mb-2" />
+              <p className="text-brand-primary font-medium">Drop files to upload</p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
           <div className="flex-1 min-w-0">

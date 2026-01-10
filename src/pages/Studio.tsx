@@ -637,6 +637,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedReferences([]);
       setSelectedStyles([]);
       setSelectedPlatform(null);
+      setSelectedProduct(null);
 
       // Combine references and styles
       const allReferences = [
@@ -845,6 +846,16 @@ export function Studio({ brand }: { brand: Brand }) {
       });
       setShowComparisonModal(true);
 
+      // Clear selections after successful comparison
+      setPrompt('');
+      localStorage.removeItem(STORAGE_KEY);
+      setInputFocused(false);
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
+      setSelectedPlatform(null);
+      setSelectedProduct(null);
+
     } catch (error) {
       console.error('Comparison failed:', error);
       toast.error('Comparison Failed', error instanceof Error ? error.message : 'Failed to compare versions');
@@ -1045,6 +1056,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedReferences([]);
       setSelectedStyles([]);
       setSelectedPlatform(null);
+      setSelectedProduct(null);
       await loadImages();
       
     } catch (error) {
@@ -1186,7 +1198,14 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Update the gallery in the background
       loadImages().catch(console.error);
-      
+
+      // Clear selections after successful edit
+      setSelectedAssets([]);
+      setSelectedReferences([]);
+      setSelectedStyles([]);
+      setSelectedPlatform(null);
+      setSelectedProduct(null);
+
     } catch (error) {
       console.error('Failed to edit:', error);
       // Revert to original image on error
@@ -1196,6 +1215,7 @@ export function Studio({ brand }: { brand: Brand }) {
       setSelectedReferences([]);
       setSelectedStyles([]);
       setSelectedPlatform(null);
+      setSelectedProduct(null);
     } finally {
       setModalEditing(false);
     }
@@ -1496,8 +1516,8 @@ export function Studio({ brand }: { brand: Brand }) {
                           onChange={(e) => setPrompt(e.target.value)}
                           onFocus={() => setInputFocused(true)}
                           onBlur={() => {
-                            // Only blur if there's no text and there are images, otherwise keep it focused
-                            if (!prompt.trim() && images.length > 0) {
+                            // Only blur if there's no text, no product, no styles, and there are images
+                            if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0 && images.length > 0) {
                               setInputFocused(false);
                             }
                           }}
@@ -1889,10 +1909,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           
                           {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
                           <div className="absolute left-0 right-0 top-8 bottom-0 bg-neutral-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
-                            <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
-                              <Sparkles className="w-4 h-4" />
-                              <span>Click to browse all styles</span>
-                            </div>
+                            <span className="text-white text-sm font-medium drop-shadow-lg">Click to browse all styles</span>
                           </div>
                         </div>
                       )}
@@ -2085,8 +2102,8 @@ export function Studio({ brand }: { brand: Brand }) {
                   onChange={(e) => setPrompt(e.target.value)}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => {
-                    // Only blur if there's no text, otherwise keep it focused
-                    if (!prompt.trim()) {
+                    // Only blur if there's no text, no product, no styles
+                    if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0) {
                       setInputFocused(false);
                     }
                   }}
@@ -2484,10 +2501,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
                   {/* Hover Overlay - Shows on hover to indicate clicking opens modal */}
                   <div className="absolute left-0 right-0 top-8 bottom-0 bg-neutral-900/80 backdrop-blur-md rounded-lg opacity-0 group-hover/thumbnails:opacity-100 transition-opacity duration-200 flex items-center justify-center pointer-events-none z-30">
-                    <div className="flex items-center gap-2 text-white text-sm font-medium drop-shadow-lg">
-                      <Sparkles className="w-4 h-4" />
-                      <span>Click to browse all styles</span>
-                    </div>
+                    <span className="text-white text-sm font-medium drop-shadow-lg">Click to browse all styles</span>
                   </div>
                 </div>
               )}

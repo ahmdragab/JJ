@@ -5,8 +5,7 @@ import {
   CreditCard,
   FolderOpen,
   LogOut,
-  Settings,
-  Sparkles
+  Settings
 } from 'lucide-react';
 import favIcon from '../fav.png';
 import { useAuth } from '../contexts/AuthContext';
@@ -264,8 +263,7 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                 onClick={() => navigate(`/brands/${activeBrand.slug}/studio`)}
                 className="shadow-sm hover:shadow-md"
               >
-                <Sparkles className="w-4 h-4" />
-                <span className="hidden sm:inline ml-1.5">Studio</span>
+                Studio
               </Button>
             )}
 

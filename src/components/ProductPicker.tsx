@@ -100,7 +100,6 @@ export function ProductPicker({
       onSelect(newProduct);
       setProductUrl('');
       setShowAddForm(false);
-      toast.success(`Added "${newProduct.name}"`);
     } catch (error) {
       console.error('Scrape error:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to scrape product');

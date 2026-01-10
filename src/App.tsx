@@ -17,6 +17,8 @@ const Studio = lazy(() => import('./pages/Studio').then(m => ({ default: m.Studi
 const StylesAdmin = lazy(() => import('./pages/StylesAdmin').then(m => ({ default: m.StylesAdmin })));
 const AdminImages = lazy(() => import('./pages/AdminImages').then(m => ({ default: m.AdminImages })));
 const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
+const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
+const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
 
 // Loading fallback component
 function PageLoader() {
@@ -543,6 +545,28 @@ function AppRoutes() {
             <Navbar />
             <div className="pt-16">
               <Pricing />
+            </div>
+          </>
+        }
+      />
+      <Route
+        path="/privacy"
+        element={
+          <>
+            <Navbar />
+            <div className="pt-16">
+              <Privacy />
+            </div>
+          </>
+        }
+      />
+      <Route
+        path="/terms"
+        element={
+          <>
+            <Navbar />
+            <div className="pt-16">
+              <Terms />
             </div>
           </>
         }
