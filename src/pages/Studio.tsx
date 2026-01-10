@@ -27,9 +27,10 @@ import {
   Package,
   Copy
 } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, getAuthHeaders } from '../lib/supabase';
+import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, Product, getAuthHeaders } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { AssetPicker } from '../components/AssetPicker';
+import { ProductPicker } from '../components/ProductPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
 import { StylesPicker } from '../components/StylesPicker';
 import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
@@ -168,6 +169,10 @@ export function Studio({ brand }: { brand: Brand }) {
   const [, setShowMediaPopover] = useState(false);
   const [showReferenceUpload, setShowReferenceUpload] = useState(false);
   const [showStylesPicker, setShowStylesPicker] = useState(false);
+
+  // Product selection state
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Available styles for thumbnail selection
   const [availableStyles, setAvailableStyles] = useState<Style[]>([]);
@@ -524,6 +529,7 @@ export function Studio({ brand }: { brand: Brand }) {
             brandId: brand.id,
             imageId: imageRecord.id,
             aspectRatio: preset.aspectRatio === 'auto' ? undefined : preset.aspectRatio,
+            productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -648,6 +654,7 @@ export function Studio({ brand }: { brand: Brand }) {
             brandId: brand.id,
             imageId: imageRecord.id,
             aspectRatio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
+            productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -747,6 +754,7 @@ export function Studio({ brand }: { brand: Brand }) {
         prompt,
         brandId: brand.id,
         aspectRatio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
+        productId: selectedProduct?.id,
         assets: selectedAssets.map(a => ({
           id: a.id,
           url: a.url,
@@ -936,6 +944,7 @@ export function Studio({ brand }: { brand: Brand }) {
             imageId: editingImage.id,
             editMode: true,
             previousImageUrl: editingImage.image_url,
+            productId: selectedProduct?.id,
             conversation: [...(fullImage.conversation || []), userMessage].slice(-5),
             assets: selectedAssets.map(a => ({
               id: a.id,
@@ -1041,6 +1050,7 @@ export function Studio({ brand }: { brand: Brand }) {
             brandId: brand.id,
             imageId: imageId,
             previousImageUrl: selectedImage.image_url,
+            productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -1682,6 +1692,32 @@ export function Studio({ brand }: { brand: Brand }) {
                             )}
                           </button>
 
+                          {/* Product Button - Opens product picker */}
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                            }}
+                            onClick={() => {
+                              setShowProductPicker(true);
+                              inputRef.current?.focus();
+                            }}
+                            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium transition-all rounded-lg border relative ${
+                              selectedProduct
+                                ? 'text-violet-700 bg-violet-50 border-violet-200 hover:border-violet-300'
+                                : 'text-neutral-700 hover:text-neutral-900 hover:bg-neutral-50 border-neutral-200 hover:border-neutral-300'
+                            }`}
+                            title={selectedProduct ? `Product: ${selectedProduct.name}` : "Select product"}
+                          >
+                            <Package className="w-4 h-4 sm:w-4 sm:h-4" />
+                            <span>{selectedProduct ? selectedProduct.name.slice(0, 15) + (selectedProduct.name.length > 15 ? '...' : '') : 'Product'}</span>
+                            {selectedProduct && (
+                              <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold bg-violet-500 text-white">
+                                <Check className="w-3 h-3" />
+                              </span>
+                            )}
+                          </button>
+
                           {/* Spacer to push submit button to right if needed, or keep it here */}
                           <div className="flex-1" />
                         </div>
@@ -2245,6 +2281,32 @@ export function Studio({ brand }: { brand: Brand }) {
                     )}
                   </button>
 
+                  {/* Product Button - Opens product picker */}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                    }}
+                    onClick={() => {
+                      setShowProductPicker(true);
+                      inputRef.current?.focus();
+                    }}
+                    className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium transition-all rounded-lg border relative ${
+                      selectedProduct
+                        ? 'text-violet-700 bg-violet-50 border-violet-200 hover:border-violet-300'
+                        : 'text-neutral-700 hover:text-neutral-900 hover:bg-neutral-50 border-neutral-200 hover:border-neutral-300'
+                    }`}
+                    title={selectedProduct ? `Product: ${selectedProduct.name}` : "Select product"}
+                  >
+                    <Package className="w-4 h-4 sm:w-4 sm:h-4" />
+                    <span>{selectedProduct ? selectedProduct.name.slice(0, 15) + (selectedProduct.name.length > 15 ? '...' : '') : 'Product'}</span>
+                    {selectedProduct && (
+                      <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full text-xs flex items-center justify-center font-semibold bg-violet-500 text-white">
+                        <Check className="w-3 h-3" />
+                      </span>
+                    )}
+                  </button>
+
                   {/* Enhance Prompt Button (placeholder) - Commented out */}
                   {false && !editingImage && (
                     <button
@@ -2627,6 +2689,24 @@ export function Studio({ brand }: { brand: Brand }) {
                     </button>
 
                     <button
+                      onClick={() => setShowProductPicker(true)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors rounded-lg relative ${
+                        selectedProduct
+                          ? 'text-violet-600 bg-violet-50 hover:bg-violet-100'
+                          : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
+                      }`}
+                      title={selectedProduct ? `Product: ${selectedProduct.name}` : "Select product"}
+                      disabled={modalEditing}
+                    >
+                      <Package className="w-4 h-4" />
+                      {selectedProduct && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-medium bg-violet-500 text-white">
+                          <Check className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </button>
+
+                    <button
                       onClick={() => {
                         setShowModalEditPrompt(false);
                         setModalEditPrompt('');
@@ -2772,6 +2852,15 @@ export function Studio({ brand }: { brand: Brand }) {
         filterType="asset"
         title="Select Assets"
         maxSelection={Math.min(MAX_HIGH_FIDELITY, MAX_TOTAL_IMAGES - autoIncludedImages - currentReferences)}
+      />
+
+      {/* Product Picker */}
+      <ProductPicker
+        brandId={brand.id}
+        isOpen={showProductPicker}
+        onClose={() => setShowProductPicker(false)}
+        onSelect={(product) => setSelectedProduct(product)}
+        selectedProduct={selectedProduct}
       />
 
       {/* Reference Upload */}

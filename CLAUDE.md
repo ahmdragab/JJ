@@ -94,3 +94,7 @@ Supabase PostgreSQL with RLS (Row-Level Security) enforced via `user_id` filteri
 - `generated_images` - Prompt, edit history, metadata
 - `styles` - Admin-managed design styles
 - `user_credits` - Credit balance and usage tracking
+
+## Git Conventions
+
+- **Never mention "Claude Code", "Claude", or AI assistance in commit messages** - Keep commit messages focused on what changed, not how it was built
