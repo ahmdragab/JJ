@@ -4,6 +4,7 @@ import { Brand, supabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import { Button } from './ui';
 import { Card } from './ui';
+import { convertSvgToPng, isSvgFile } from '../lib/imageUtils';
 
 type ConfirmationStep = 'logos' | 'colors';
 
@@ -32,7 +33,7 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'primary' | 'icon') => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
     const SUPPORTED_TYPES = [
@@ -43,10 +44,11 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
       'image/heic',
       'image/heif',
       'image/gif',
+      'image/svg+xml',
     ];
 
-    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
-      toast.error('Unsupported Format', 'Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only.');
+    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase()) && !isSvgFile(file)) {
+      toast.error('Unsupported Format', 'Please upload: PNG, JPEG, WEBP, HEIC, HEIF, GIF, or SVG only.');
       return;
     }
 
@@ -58,6 +60,11 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
     setUploadingLogo(type);
 
     try {
+      // Convert SVG to PNG (Gemini API doesn't support SVG)
+      if (isSvgFile(file)) {
+        file = await convertSvgToPng(file, { maxWidth: 1024, maxHeight: 1024 });
+      }
+
       const fileExt = file.name.split('.').pop();
       const fileName = `${brand.id}/${type}-${Date.now()}.${fileExt}`;
 

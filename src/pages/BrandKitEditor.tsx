@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Check, Pencil, RefreshCw, Upload, X, Trash2, Plus, 
 import { Brand, BrandAsset, supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { Button, Select } from '../components/ui';
+import { convertSvgToPng, isSvgFile } from '../lib/imageUtils';
 
 type BrandSection = 'colors' | 'fonts' | 'logos' | 'voice';
 
@@ -142,11 +143,11 @@ export function BrandKitEditor({
 
   // Handle asset upload
   const handleAssetUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
     // Validate file type - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
-    // SVG is NOT supported by Gemini API
+    // SVG is converted to PNG automatically
     const SUPPORTED_TYPES = [
       'image/png',
       'image/jpeg',
@@ -155,10 +156,11 @@ export function BrandKitEditor({
       'image/heic',
       'image/heif',
       'image/gif',
+      'image/svg+xml',
     ];
-    
-    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
-      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only. File: ${file.name}`);
+
+    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase()) && !isSvgFile(file)) {
+      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, GIF, or SVG only. File: ${file.name}`);
       return;
     }
 
@@ -171,6 +173,11 @@ export function BrandKitEditor({
     setUploadingAsset(true);
 
     try {
+      // Convert SVG to PNG (Gemini API doesn't support SVG)
+      if (isSvgFile(file)) {
+        file = await convertSvgToPng(file, { maxWidth: 2048, maxHeight: 2048 });
+      }
+
       // Generate unique filename
       const fileExt = file.name.split('.').pop();
       const fileName = `${brand.id}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -363,11 +370,11 @@ export function BrandKitEditor({
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'primary' | 'icon') => {
-    const file = e.target.files?.[0];
+    let file = e.target.files?.[0];
     if (!file) return;
 
     // Validate file type - Gemini API supports: PNG, JPEG, WEBP, HEIC, HEIF, GIF
-    // SVG is NOT supported by Gemini API
+    // SVG is converted to PNG automatically
     const SUPPORTED_TYPES = [
       'image/png',
       'image/jpeg',
@@ -376,10 +383,11 @@ export function BrandKitEditor({
       'image/heic',
       'image/heif',
       'image/gif',
+      'image/svg+xml',
     ];
-    
-    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase())) {
-      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, or GIF only. File: ${file.name}`);
+
+    if (!SUPPORTED_TYPES.includes(file.type.toLowerCase()) && !isSvgFile(file)) {
+      toast.error('Unsupported Format', `Please upload: PNG, JPEG, WEBP, HEIC, HEIF, GIF, or SVG only. File: ${file.name}`);
       return;
     }
 
@@ -392,6 +400,11 @@ export function BrandKitEditor({
     setUploadingLogo(type);
 
     try {
+      // Convert SVG to PNG (Gemini API doesn't support SVG)
+      if (isSvgFile(file)) {
+        file = await convertSvgToPng(file, { maxWidth: 1024, maxHeight: 1024 });
+      }
+
       // Generate unique filename
       const fileExt = file.name.split('.').pop();
       const fileName = `${brand.id}/${type}-${Date.now()}.${fileExt}`;
@@ -1451,11 +1464,11 @@ export function BrandKitEditor({
         {localBrand.screenshot && (
           <section className="mt-16">
             <h2 className="text-xs uppercase tracking-[0.2em] text-neutral-400 mb-6">Website Screenshot</h2>
-            <div className="rounded-2xl overflow-hidden shadow-lg border border-neutral-200">
+            <div className="rounded-2xl overflow-hidden shadow-lg border border-neutral-200 max-h-[500px]">
               <img
                 src={localBrand.screenshot}
                 alt="Website screenshot"
-                className="w-full h-auto"
+                className="w-full h-auto object-cover object-top"
               />
             </div>
           </section>
