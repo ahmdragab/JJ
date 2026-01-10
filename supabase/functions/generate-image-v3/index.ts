@@ -686,6 +686,22 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
         prompt_version: 'v3',
         aspect_ratio: validatedAspectRatio,
         simple_prompt: corePrompt,
+        // Debug info for troubleshooting
+        debug: {
+          brand_logos: brand?.logos || null,
+          brand_all_logos_count: brand?.all_logos?.length || 0,
+          logo_url_used: logoData ? getBestLogoUrl(brand!) : null,
+          logo_fetched: !!logoData,
+          logo_size_kb: logoData ? Math.round(logoData.data.length / 1024) : null,
+          logo_mime: logoData?.mimeType || null,
+          assets_count: allAssets.length,
+          assets_attached: attachedAssetNames,
+          references_count: (references as AssetInput[]).length,
+          product_id: productId || null,
+          product_name: product?.name || null,
+          product_images_count: product?.images?.length || 0,
+          include_logo_reference: includeLogoReference,
+        },
       };
 
       await supabase.from('images').update(updateData).eq('id', imageId);
@@ -697,6 +713,19 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
       duration_ms: Math.round(duration),
     });
 
+    // Build debug info for response
+    const debugInfo = {
+      brand_logos: brand?.logos || null,
+      brand_all_logos_count: brand?.all_logos?.length || 0,
+      logo_url_used: logoData ? getBestLogoUrl(brand!) : null,
+      logo_fetched: !!logoData,
+      logo_size_kb: logoData ? Math.round(logoData.data.length / 1024) : null,
+      assets_count: allAssets.length,
+      assets_attached: attachedAssetNames,
+      references_count: (references as AssetInput[]).length,
+      product_name: product?.name || null,
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -706,6 +735,7 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
         mime_type: "image/png",
         text_response: textResponse,
         prompt_used: corePrompt,
+        debug: debugInfo,
       }),
       {
         status: 200,

@@ -396,7 +396,7 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               url: targetUrl,
-              formats: ['branding', 'screenshot', 'markdown'],
+              formats: ['branding', 'screenshot@fullPage', 'markdown'],
               // Additional options for better extraction
               waitFor: 5000, // Wait longer for JS to load
               timeout: 60000, // Increased timeout for slow websites

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { X, Search, Loader2, Package, Check, Plus, Link, ExternalLink, Trash2 } from 'lucide-react';
 import { Product, supabase, getAuthHeaders } from '../lib/supabase';
 import { useToast } from './Toast';
+import { Button } from './ui';
 
 interface ProductPickerProps {
   brandId: string;
@@ -168,11 +169,11 @@ export function ProductPicker({
 
       {/* Modal Content */}
       <div
-        className="relative bg-white rounded-xl shadow-lg w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col modal-content-enter"
+        className="relative bg-white rounded-xl shadow-lg w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
+        <div className="flex-shrink-0 flex items-start sm:items-center justify-between p-4 sm:p-6 gap-3">
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-xl font-semibold text-neutral-800 mb-1 font-heading">Products</h2>
             <p className="text-xs sm:text-sm text-neutral-500">
@@ -191,7 +192,7 @@ export function ProductPicker({
         </div>
 
         {/* Search & Add Bar */}
-        <div className="p-3 sm:p-4">
+        <div className="flex-shrink-0 p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
             {/* Search */}
             <div className="flex-1 relative">
@@ -222,17 +223,18 @@ export function ProductPicker({
                     autoFocus
                   />
                 </div>
-                <button
+                <Button
                   onClick={handleScrapeProduct}
                   disabled={scraping || !productUrl.trim()}
-                  className="btn-primary px-4 py-2.5 rounded-xl shrink-0 disabled:opacity-50"
+                  size="md"
+                  className="shrink-0"
                 >
                   {scraping ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <Plus className="w-4 h-4" />
                   )}
-                </button>
+                </Button>
                 <button
                   onClick={() => {
                     setShowAddForm(false);
@@ -245,13 +247,14 @@ export function ProductPicker({
                 </button>
               </div>
             ) : (
-              <button
+              <Button
                 onClick={() => setShowAddForm(true)}
-                className="btn-primary px-4 py-2.5 rounded-xl shrink-0"
+                size="md"
+                className="shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 <span className="ml-1.5">Add Product</span>
-              </button>
+              </Button>
             )}
           </div>
           {scraping && (
@@ -262,7 +265,7 @@ export function ProductPicker({
         </div>
 
         {/* Products Grid */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 no-scrollbar">
+        <div className="overflow-y-auto p-3 sm:p-4 md:p-6 no-scrollbar max-h-[calc(95vh-280px)] sm:max-h-[calc(90vh-260px)]">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
@@ -274,13 +277,14 @@ export function ProductPicker({
                 {searchQuery ? 'No products match your search' : 'No products yet'}
               </p>
               {!searchQuery && (
-                <button
+                <Button
                   onClick={() => setShowAddForm(true)}
-                  className="btn-secondary px-4 py-2.5 rounded-xl"
+                  variant="secondary"
+                  size="md"
                 >
                   <Plus className="w-4 h-4" />
                   <span className="ml-1.5">Add Your First Product</span>
-                </button>
+                </Button>
               )}
             </div>
           ) : (
@@ -295,9 +299,9 @@ export function ProductPicker({
                     key={product.id}
                     onClick={() => onSelect(isSelected ? null : product)}
                     className={`
-                      relative group cursor-pointer rounded-xl overflow-hidden border-2 transition-all
+                      relative group cursor-pointer rounded-xl overflow-hidden border transition-all
                       ${isSelected
-                        ? 'border-brand-primary ring-2 ring-brand-primary/20'
+                        ? 'border-brand-primary ring-1 ring-brand-primary/20'
                         : 'border-neutral-200 hover:border-neutral-300'
                       }
                     `}
@@ -382,11 +386,11 @@ export function ProductPicker({
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-5 border-t border-neutral-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          <div className="text-sm text-neutral-500">
+        <div className="flex-shrink-0 p-4 sm:p-5 border-t border-neutral-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="text-sm text-neutral-500 min-w-0 flex-1">
             {selectedProduct ? (
-              <span className="flex items-center gap-2">
-                <Check className="w-4 h-4 text-green-500" />
+              <span className="flex items-center gap-2 min-w-0">
+                <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
                 <span className="truncate">
                   Selected: <strong className="text-neutral-700">{selectedProduct.name}</strong>
                 </span>
@@ -396,19 +400,22 @@ export function ProductPicker({
             )}
           </div>
           <div className="flex gap-3 shrink-0">
-            <button
+            <Button
               onClick={onClose}
-              className="btn-secondary px-4 py-2.5 rounded-xl flex-1 sm:flex-none"
+              variant="ghost"
+              size="md"
+              className="flex-1 sm:flex-none border border-neutral-200"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={onClose}
               disabled={!selectedProduct}
-              className="btn-primary px-4 py-2.5 rounded-xl flex-1 sm:flex-none disabled:opacity-50"
+              size="md"
+              className="flex-1 sm:flex-none"
             >
               Confirm Selection
-            </button>
+            </Button>
           </div>
         </div>
       </div>

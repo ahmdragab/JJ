@@ -175,7 +175,7 @@ function BrandRoutes() {
     // Save to database in the background
     // Note: Don't save styleguide here - it's managed by edge functions (analyze-brand-style)
     // Saving stale styleguide would overwrite ai_extracted_colors
-    await supabase
+    const { error: updateError } = await supabase
       .from('brands')
       .update({
         colors: updates.colors || brand.colors,
@@ -187,6 +187,13 @@ function BrandRoutes() {
         updated_at: new Date().toISOString(),
       })
       .eq('id', brand.id);
+
+    if (updateError) {
+      console.error('[Brand Update] Failed to save brand updates:', updateError);
+      console.error('[Brand Update] Attempted to save:', { logos: updates.logos, colors: updates.colors });
+    } else {
+      console.log('[Brand Update] Successfully saved:', { logos: updates.logos ? 'updated' : 'unchanged' });
+    }
 
     // Silently refresh in the background without showing loading state
     const { data } = await supabase

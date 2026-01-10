@@ -20,7 +20,7 @@ const corsHeaders = {
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const GEMINI_MODEL = "gemini-3-pro-image-preview";
-const GPT_MODEL = "gpt-4o";  // Reliable, widely available
+const GPT_MODEL = "gpt-5.2-chat-latest";  // GPT-5.2 for creative concept generation
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -61,6 +61,14 @@ interface AssetInput {
 interface CreativeConcept {
   creative_brief: string;  // The full, detailed creative concept
   aspect_ratio: string;
+}
+
+interface ProductContext {
+  name: string;
+  short_description?: string;
+  description?: string;
+  key_features?: string[];
+  value_proposition?: string;
 }
 
 // ============================================================================
@@ -222,7 +230,8 @@ async function uploadToStorage(
 
 async function generateCreativeConcept(
   userPrompt: string,
-  brand: Brand | null
+  brand: Brand | null,
+  product: ProductContext | null
 ): Promise<CreativeConcept> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY not set");
@@ -262,25 +271,53 @@ Rules:
 - Be CREATIVE: Surprise me. No generic stock-photo-style concepts.
 - Match the brand's industry and personality`;
 
-  let userMessage = `Request: ${userPrompt}\n\n`;
+  let userMessage = '';
 
+  // BRAND IDENTITY FIRST - GPT must understand what this brand does before getting creative
   if (brand) {
-    userMessage += `Brand: ${brand.name}\n`;
-    if (brand.slogan) userMessage += `Slogan: "${brand.slogan}"\n`;
-    if (brand.domain) userMessage += `Website: ${brand.domain}\n`;
-    if (brand.styleguide?.summary) userMessage += `What they do: ${brand.styleguide.summary}\n`;
+    userMessage += `================================================================================
+BRAND IDENTITY (YOUR AD MUST BE RELEVANT TO THIS)
+================================================================================
+Brand: ${brand.name}
+`;
+    if (brand.styleguide?.summary) {
+      userMessage += `WHAT THEY DO: ${brand.styleguide.summary}
 
-    // Include brand colors so GPT can reference them in the concept
+⚠️ CRITICAL: Your ad concept MUST be about THIS business. Do NOT create generic concepts or wordplay that ignores what this brand actually does.
+`;
+    }
+    if (brand.slogan) userMessage += `Slogan: "${brand.slogan}"\n`;
+
     const colors: string[] = [];
     if (brand.colors.primary) colors.push(`Primary: ${brand.colors.primary}`);
     if (brand.colors.secondary) colors.push(`Secondary: ${brand.colors.secondary}`);
     if (brand.colors.background) colors.push(`Background: ${brand.colors.background}`);
     if (colors.length > 0) {
-      userMessage += `\nBrand Colors (USE THESE in your concept):\n${colors.join('\n')}\n`;
+      userMessage += `\nBrand Colors:\n${colors.join('\n')}\n`;
     }
   }
 
-  userMessage += `\nGenerate a creative ad concept. Reference the brand colors by their hex values in your COLOR USAGE section. Output only valid JSON.`;
+  // Add product context if this ad is for a specific product
+  if (product) {
+    userMessage += `\n================================================================================
+PRODUCT TO FEATURE
+================================================================================
+This ad is for selling a specific product. The ad concept MUST showcase this product:
+
+PRODUCT NAME: ${product.name}
+${product.short_description ? `DESCRIPTION: ${product.short_description}` : product.description ? `DESCRIPTION: ${product.description.slice(0, 300)}` : ''}
+${product.key_features && product.key_features.length > 0 ? `KEY FEATURES:\n${product.key_features.map(f => `- ${f}`).join('\n')}` : ''}
+${product.value_proposition ? `VALUE PROPOSITION: ${product.value_proposition}` : ''}
+`;
+  }
+
+  // User request comes AFTER brand identity
+  userMessage += `\n================================================================================
+USER REQUEST
+================================================================================
+${userPrompt}
+
+Generate a creative ad concept that is SPECIFICALLY RELEVANT to this brand's business. Reference the brand colors by their hex values. Output only valid JSON.`;
 
   console.log(`[V2-GPT] Generating creative concept...`);
 
@@ -296,8 +333,7 @@ Rules:
         { role: "system", content: systemPrompt },
         { role: "user", content: userMessage }
       ],
-      temperature: 0.8,
-      max_tokens: 1000,
+      max_completion_tokens: 2000,
       response_format: { type: "json_object" }
     }),
   });
@@ -417,6 +453,7 @@ Deno.serve(async (req: Request) => {
     let product: {
       id: string;
       name: string;
+      short_description?: string;
       description?: string;
       images?: Array<{ url: string; is_primary?: boolean }>;
       key_features?: string[];
@@ -520,7 +557,7 @@ Deno.serve(async (req: Request) => {
     // STEP 1: GPT generates the creative concept
     // ========================================================================
 
-    const concept = await generateCreativeConcept(prompt, brand);
+    const concept = await generateCreativeConcept(prompt, brand, product);
 
     // Use user-specified aspect ratio if provided, otherwise use GPT's suggestion
     const finalAspectRatio = userAspectRatio || concept.aspect_ratio || '1:1';
@@ -748,6 +785,22 @@ The following image is the EXACT brand logo. You MUST:
         aspect_ratio: finalAspectRatio,
         gpt_concept: concept,
         gemini_prompt: geminiPrompt,
+        // Debug info for troubleshooting
+        debug: {
+          brand_logos: brand?.logos || null,
+          brand_all_logos_count: brand?.all_logos?.length || 0,
+          logo_url_used: logoData ? getBestLogoUrl(brand!) : null,
+          logo_fetched: !!logoData,
+          logo_size_kb: logoData ? Math.round(logoData.data.length / 1024) : null,
+          logo_mime: logoData?.mimeType || null,
+          assets_count: allAssets.length,
+          assets_attached: attachedAssetNames,
+          references_count: (references as AssetInput[]).length,
+          product_id: productId || null,
+          product_name: product?.name || null,
+          product_images_count: product?.images?.length || 0,
+          include_logo_reference: includeLogoReference,
+        },
       };
 
       await supabase.from('images').update(updateData).eq('id', imageId);
@@ -759,6 +812,19 @@ The following image is the EXACT brand logo. You MUST:
       duration_ms: Math.round(duration),
     });
 
+    // Build debug info for response
+    const debugInfo = {
+      brand_logos: brand?.logos || null,
+      brand_all_logos_count: brand?.all_logos?.length || 0,
+      logo_url_used: logoData ? getBestLogoUrl(brand!) : null,
+      logo_fetched: !!logoData,
+      logo_size_kb: logoData ? Math.round(logoData.data.length / 1024) : null,
+      assets_count: allAssets.length,
+      assets_attached: attachedAssetNames,
+      references_count: (references as AssetInput[]).length,
+      product_name: product?.name || null,
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -769,6 +835,7 @@ The following image is the EXACT brand logo. You MUST:
         text_response: textResponse,
         gpt_concept: concept,
         gemini_prompt: geminiPrompt,
+        debug: debugInfo,
       }),
       {
         status: 200,

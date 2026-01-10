@@ -25,7 +25,8 @@ import {
   Share2,
   Play,
   Package,
-  Copy
+  Copy,
+  Bug
 } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, Product, getAuthHeaders } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -38,6 +39,7 @@ import { logger } from '../lib/logger';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { Button } from '../components/ui';
+import { isAdminUser } from '../lib/admin';
 
 type AspectRatio = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9' | 'auto';
 
@@ -102,6 +104,7 @@ const PLATFORM_GROUPS = [
 
 export function Studio({ brand }: { brand: Brand }) {
   const { user } = useAuth();
+  const isAdmin = isAdminUser(user?.id);
   const toast = useToast();
   const [images, setImages] = useState<GeneratedImage[]>([]);
   
@@ -142,6 +145,7 @@ export function Studio({ brand }: { brand: Brand }) {
   const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
   const [editing, setEditing] = useState(false);
   const [currentVersionIndex, setCurrentVersionIndex] = useState(0);
+  const [editSourceVersionIndex, setEditSourceVersionIndex] = useState<number | null>(null); // Which version to edit FROM (null = current/latest)
   const [modalEditPrompt, setModalEditPrompt] = useState('');
   const [modalEditing, setModalEditing] = useState(false);
   const [showModalEditPrompt, setShowModalEditPrompt] = useState(false);
@@ -188,10 +192,23 @@ export function Studio({ brand }: { brand: Brand }) {
   const [comparing, setComparing] = useState(false);
   const [savingComparison, setSavingComparison] = useState<string | null>(null);
   const [savedVersions, setSavedVersions] = useState<Set<string>>(new Set()); // Track saved variations
+  // Debug info type for generation diagnostics
+  type GenerationDebugInfo = {
+    brand_logos?: { primary?: string; icon?: string } | null;
+    brand_all_logos_count?: number;
+    logo_url_used?: string | null;
+    logo_fetched?: boolean;
+    logo_size_kb?: number | null;
+    assets_count?: number;
+    assets_attached?: string[];
+    references_count?: number;
+    product_name?: string | null;
+  };
+
   const [comparisonResults, setComparisonResults] = useState<{
-    v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
-    v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo } | null;
-    v3: { image_base64: string; prompt_used?: string } | null;
+    v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null;
+    v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null;
+    v3: { image_base64: string; prompt_used?: string; debug?: GenerationDebugInfo } | null;
   } | null>(null);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   
@@ -791,6 +808,20 @@ export function Studio({ brand }: { brand: Brand }) {
         v3Response.json(),
       ]);
 
+      // Log debug info for each version to help diagnose logo/asset issues
+      console.group('[Generation Debug Info]');
+      console.log('Brand ID:', brand.id);
+      if (v1Data.debug) {
+        console.log('V1 Debug:', JSON.stringify(v1Data.debug, null, 2));
+      }
+      if (v2Data.debug) {
+        console.log('V2 Debug:', JSON.stringify(v2Data.debug, null, 2));
+      }
+      if (v3Data.debug) {
+        console.log('V3 Debug:', JSON.stringify(v3Data.debug, null, 2));
+      }
+      console.groupEnd();
+
       // Reset saved versions when new variations are generated
       setSavedVersions(new Set());
 
@@ -798,15 +829,18 @@ export function Studio({ brand }: { brand: Brand }) {
         v1: v1Response.ok ? {
           image_base64: v1Data.image_base64,
           gpt_prompt_info: v1Data.gpt_prompt_info,
+          debug: v1Data.debug,
         } : null,
         v2: v2Response.ok ? {
           image_base64: v2Data.image_base64,
           design_type: v2Data.design_type,
           gpt_prompt_info: v2Data.gpt_prompt_info || v2Data.gpt_concept,
+          debug: v2Data.debug,
         } : null,
         v3: v3Response.ok ? {
           image_base64: v3Data.image_base64,
           prompt_used: v3Data.prompt_used,
+          debug: v3Data.debug,
         } : null,
       });
       setShowComparisonModal(true);
@@ -912,6 +946,38 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
+  // Edit a comparison result - save first if needed, then open edit modal
+  const handleEditComparisonImage = async (version: 'v1' | 'v2' | 'v3') => {
+    if (!comparisonResults) return;
+
+    const result = comparisonResults[version];
+    if (!result || !result.image_base64) {
+      toast.warning('No Image', `No image available for ${version.toUpperCase()}`);
+      return;
+    }
+
+    // Save first if not already saved
+    if (!savedVersions.has(version)) {
+      await handleSaveComparisonImage(version);
+    }
+
+    // Find the saved image
+    const { data: images } = await supabase
+      .from('images')
+      .select('*')
+      .eq('brand_id', brand.id)
+      .eq('metadata->>prompt_version', version)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (images && images.length > 0) {
+      setSelectedImage(images[0] as GeneratedImage);
+      setShowComparisonModal(false);
+    } else {
+      toast.error('Error', 'Could not find saved image for editing');
+    }
+  };
+
   const handleEdit = async () => {
     if (!prompt.trim() || !editingImage || editing) return;
     
@@ -925,16 +991,11 @@ export function Studio({ brand }: { brand: Brand }) {
     }
 
     setEditing(true);
-    const userMessage: ConversationMessage = {
-      role: 'user',
-      content: prompt,
-      timestamp: new Date().toISOString(),
-    };
 
     try {
       const authHeaders = await getAuthHeaders();
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
           headers: authHeaders,
@@ -942,10 +1003,8 @@ export function Studio({ brand }: { brand: Brand }) {
             prompt,
             brandId: brand.id,
             imageId: editingImage.id,
-            editMode: true,
             previousImageUrl: editingImage.image_url,
             productId: selectedProduct?.id,
-            conversation: [...(fullImage.conversation || []), userMessage].slice(-5),
             assets: selectedAssets.map(a => ({
               id: a.id,
               url: a.url,
@@ -996,12 +1055,13 @@ export function Studio({ brand }: { brand: Brand }) {
   };
 
   const handleModalEdit = async () => {
-    console.log('handleModalEdit called', { 
-      hasPrompt: !!modalEditPrompt.trim(), 
-      hasImage: !!selectedImage, 
-      isEditing: modalEditing 
+    console.log('handleModalEdit called', {
+      hasPrompt: !!modalEditPrompt.trim(),
+      hasImage: !!selectedImage,
+      isEditing: modalEditing,
+      editSourceVersionIndex,
     });
-    
+
     if (!modalEditPrompt.trim() || !selectedImage || modalEditing) {
       console.log('Early return from handleModalEdit');
       return;
@@ -1012,6 +1072,12 @@ export function Studio({ brand }: { brand: Brand }) {
       return;
     }
 
+    // Determine which version to edit from
+    const versions = getAllVersions(selectedImage);
+    const sourceVersionIdx = editSourceVersionIndex ?? (versions.length - 1);
+    const sourceVersion = versions[sourceVersionIdx];
+    const previousImageUrl = sourceVersion?.image_url || selectedImage.image_url;
+
     const userMessage: ConversationMessage = {
       role: 'user',
       content: modalEditPrompt,
@@ -1021,11 +1087,11 @@ export function Studio({ brand }: { brand: Brand }) {
     const editPromptText = modalEditPrompt;
     const imageId = selectedImage.id;
     const originalImage = selectedImage;
-    
+
     // Set editing state and clear input immediately
     setModalEditing(true);
     setModalEditPrompt('');
-    
+
     // Optimistically update the UI to show loading
     const updatedConversation = [...(selectedImage.conversation || []), userMessage];
     setSelectedImage({
@@ -1036,8 +1102,8 @@ export function Studio({ brand }: { brand: Brand }) {
     });
 
     try {
-      console.log('Making API call...');
-      
+      console.log('Making API call...', { previousImageUrl, sourceVersionIdx });
+
       // Make the API call - this blocks until the image is generated
       const authHeaders = await getAuthHeaders();
       const response = await fetch(
@@ -1049,7 +1115,7 @@ export function Studio({ brand }: { brand: Brand }) {
             prompt: editPromptText,
             brandId: brand.id,
             imageId: imageId,
-            previousImageUrl: selectedImage.image_url,
+            previousImageUrl: previousImageUrl,
             productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
@@ -1112,11 +1178,12 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Update the modal with the new image
       setSelectedImage(updatedImage);
-      
-      // Show the latest version
+
+      // Show the latest version and reset edit source
       const versions = getAllVersions(updatedImage);
       setCurrentVersionIndex(Math.max(0, versions.length - 1));
-      
+      setEditSourceVersionIndex(null); // Reset to edit from latest
+
       // Update the gallery in the background
       loadImages().catch(console.error);
       
@@ -1287,9 +1354,10 @@ export function Studio({ brand }: { brand: Brand }) {
     if (selectedImage) {
       const versions = getAllVersions(selectedImage);
       setCurrentVersionIndex(Math.max(0, versions.length - 1)); // Start at latest version
+      setEditSourceVersionIndex(null); // Reset edit source to latest
       setShowModalEditPrompt(false);
       setModalEditPrompt('');
-      
+
       // Load GPT prompt info from metadata if available
       const metadata = selectedImage.metadata || {};
       const promptInfo = metadata.gpt_prompt_info as { system_prompt: string; user_message: string; full_prompt: string } | undefined;
@@ -1302,6 +1370,7 @@ export function Studio({ brand }: { brand: Brand }) {
       }
     } else {
       setCurrentVersionIndex(0);
+      setEditSourceVersionIndex(null);
       setShowModalEditPrompt(false);
       setModalEditPrompt('');
       setGptPromptInfo(null);
@@ -2548,16 +2617,18 @@ export function Studio({ brand }: { brand: Brand }) {
                   )}
                 </div>
 
-                {/* Version Navigation */}
+                {/* Version History with Thumbnails */}
                 {(() => {
                   const versions = getAllVersions(selectedImage);
                   const canNavigateLeft = currentVersionIndex > 0;
                   const canNavigateRight = currentVersionIndex < versions.length - 1;
                   const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1] || null;
+                  const effectiveEditSourceIndex = editSourceVersionIndex ?? (versions.length - 1);
 
                   return versions.length > 1 ? (
                     <div className="mb-5">
-                      <div className="flex items-center justify-between mb-2">
+                      {/* Version header with navigation */}
+                      <div className="flex items-center justify-between mb-3">
                         <span className="text-xs text-neutral-500">Version {currentVersionIndex + 1} of {versions.length}</span>
                         <div className="flex items-center gap-1">
                           <button
@@ -2584,6 +2655,68 @@ export function Studio({ brand }: { brand: Brand }) {
                           </button>
                         </div>
                       </div>
+
+                      {/* Version Thumbnail Strip */}
+                      <div className="mb-3">
+                        <p className="text-[11px] text-neutral-400 mb-2">Click to view, double-click to edit from version</p>
+                        <div className="flex gap-2 overflow-x-auto pb-2">
+                          {versions.map((version, idx) => {
+                            const isViewing = idx === currentVersionIndex;
+                            const isEditSource = idx === effectiveEditSourceIndex;
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => setCurrentVersionIndex(idx)}
+                                onDoubleClick={() => {
+                                  setEditSourceVersionIndex(idx);
+                                  setShowModalEditPrompt(true);
+                                }}
+                                className={`relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
+                                  isViewing
+                                    ? 'border-neutral-900 ring-2 ring-neutral-900/20'
+                                    : 'border-neutral-200 hover:border-neutral-300'
+                                }`}
+                                title={`Version ${idx + 1}${version.edit_prompt ? `: ${version.edit_prompt}` : ''}`}
+                              >
+                                <img
+                                  src={version.image_url}
+                                  alt={`Version ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                                {/* Version number badge */}
+                                <span className={`absolute bottom-0.5 right-0.5 text-[9px] font-medium px-1 rounded ${
+                                  isViewing
+                                    ? 'bg-neutral-900 text-white'
+                                    : 'bg-black/50 text-white'
+                                }`}>
+                                  {idx + 1}
+                                </span>
+                                {/* Edit source indicator - only show if NOT the latest version */}
+                                {isEditSource && idx < versions.length - 1 && (
+                                  <span className="absolute top-0.5 left-0.5 text-[8px] font-medium px-1 rounded bg-violet-500 text-white">
+                                    Edit
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Edit from this version button (when viewing a different version than edit source) */}
+                      {currentVersionIndex !== effectiveEditSourceIndex && (
+                        <button
+                          onClick={() => {
+                            setEditSourceVersionIndex(currentVersionIndex);
+                            setShowModalEditPrompt(true);
+                          }}
+                          className="w-full mb-3 px-3 py-2 text-xs font-medium text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors"
+                        >
+                          Edit from this version (v{currentVersionIndex + 1})
+                        </button>
+                      )}
+
+                      {/* Current version edit prompt */}
                       {currentVersion?.edit_prompt && (
                         <p className="text-xs text-neutral-500 italic">
                           "{currentVersion.edit_prompt}"
@@ -2647,6 +2780,36 @@ export function Studio({ brand }: { brand: Brand }) {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="bg-white rounded-xl border border-neutral-200 shadow-lg p-4">
+                {/* Edit source indicator */}
+                {(() => {
+                  const versions = getAllVersions(selectedImage);
+                  const effectiveIdx = editSourceVersionIndex ?? (versions.length - 1);
+                  const isEditingPreviousVersion = effectiveIdx < versions.length - 1;
+                  const sourceVersion = versions[effectiveIdx];
+
+                  return isEditingPreviousVersion ? (
+                    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-neutral-100">
+                      <img
+                        src={sourceVersion?.image_url}
+                        alt={`Editing from version ${effectiveIdx + 1}`}
+                        className="w-10 h-10 rounded-md object-cover border border-violet-200"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-violet-600">Editing from Version {effectiveIdx + 1}</p>
+                        {sourceVersion?.edit_prompt && (
+                          <p className="text-[11px] text-neutral-500 truncate">{sourceVersion.edit_prompt}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => setEditSourceVersionIndex(null)}
+                        className="text-xs text-neutral-400 hover:text-neutral-600 px-2 py-1 rounded hover:bg-neutral-100"
+                        title="Reset to latest version"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  ) : null;
+                })()}
                 <div className="flex items-center gap-3">
                   <input
                     ref={modalEditInputRef}
@@ -2994,164 +3157,240 @@ export function Studio({ brand }: { brand: Brand }) {
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
               <div className="grid grid-cols-3 gap-4">
                 {/* Variation 1 */}
-                {comparisonResults.v1 ? (
-                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
-                    <img
-                      src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
-                      alt="Variation 1"
-                      className="w-full h-auto"
-                    />
-                    {/* Saved badge */}
-                    {savedVersions.has('v1') && (
-                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Saved
-                      </div>
-                    )}
-                    {/* Hover overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute bottom-0 left-0 right-0 p-3">
-                        <div className="flex items-center justify-between">
-                          <button
-                            onClick={() => {
-                              // TODO: Edit functionality
-                            }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  {comparisonResults.v1 ? (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                      <img
+                        src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
+                        alt="Variation 1"
+                        className="w-full h-auto"
+                      />
+                      {/* Saved badge */}
+                      {savedVersions.has('v1') && (
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Saved
+                        </div>
+                      )}
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <div className="flex items-center justify-between">
                             <button
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = `data:image/png;base64,${comparisonResults.v1?.image_base64}`;
-                                link.download = `variation-1-${Date.now()}.png`;
-                                link.click();
-                              }}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                              title="Download"
+                              onClick={() => handleEditComparisonImage('v1')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
                             >
-                              <Download className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <button
-                              onClick={() => handleSaveComparisonImage('v1')}
-                              disabled={!!savingComparison || savedVersions.has('v1')}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                              title="Save to gallery"
-                            >
-                              {savingComparison === 'v1' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `data:image/png;base64,${comparisonResults.v1?.image_base64}`;
+                                  link.download = `variation-1-${Date.now()}.png`;
+                                  link.click();
+                                }}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                title="Download"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleSaveComparisonImage('v1')}
+                                disabled={!!savingComparison || savedVersions.has('v1')}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                                title="Save to gallery"
+                              >
+                                {savingComparison === 'v1' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                    Failed
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                  {/* Admin Debug Panel */}
+                  {isAdmin && comparisonResults.v1?.debug && (
+                    <details className="mt-2 text-[10px]">
+                      <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
+                        <Bug className="w-3 h-3" /> Debug
+                      </summary>
+                      <div className="mt-1 p-2 bg-neutral-50 rounded-lg border border-neutral-100 font-mono space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-neutral-500">Logo:</span>
+                          <span className={comparisonResults.v1.debug.logo_fetched ? 'text-green-600' : 'text-red-500'}>
+                            {comparisonResults.v1.debug.logo_fetched ? 'Yes' : 'No'} ({comparisonResults.v1.debug.logo_size_kb || 0}KB)
+                          </span>
+                        </div>
+                        <div className="text-neutral-500 truncate" title={comparisonResults.v1.debug.logo_url_used || ''}>
+                          URL: {comparisonResults.v1.debug.logo_url_used || 'None'}
+                        </div>
+                        <div className="text-neutral-500">
+                          Assets: {comparisonResults.v1.debug.assets_attached?.join(', ') || 'None'}
+                        </div>
+                      </div>
+                    </details>
+                  )}
+                </div>
 
                 {/* Variation 2 */}
-                {comparisonResults.v2 ? (
-                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
-                    <img
-                      src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
-                      alt="Variation 2"
-                      className="w-full h-auto"
-                    />
-                    {savedVersions.has('v2') && (
-                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Saved
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute bottom-0 left-0 right-0 p-3">
-                        <div className="flex items-center justify-between">
-                          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors">
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  {comparisonResults.v2 ? (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                      <img
+                        src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
+                        alt="Variation 2"
+                        className="w-full h-auto"
+                      />
+                      {savedVersions.has('v2') && (
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Saved
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <div className="flex items-center justify-between">
                             <button
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = `data:image/png;base64,${comparisonResults.v2?.image_base64}`;
-                                link.download = `variation-2-${Date.now()}.png`;
-                                link.click();
-                              }}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                              title="Download"
+                              onClick={() => handleEditComparisonImage('v2')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
                             >
-                              <Download className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <button
-                              onClick={() => handleSaveComparisonImage('v2')}
-                              disabled={!!savingComparison || savedVersions.has('v2')}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                              title="Save to gallery"
-                            >
-                              {savingComparison === 'v2' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `data:image/png;base64,${comparisonResults.v2?.image_base64}`;
+                                  link.download = `variation-2-${Date.now()}.png`;
+                                  link.click();
+                                }}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                title="Download"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleSaveComparisonImage('v2')}
+                                disabled={!!savingComparison || savedVersions.has('v2')}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                                title="Save to gallery"
+                              >
+                                {savingComparison === 'v2' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                    Failed
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                  {/* Admin Debug Panel */}
+                  {isAdmin && comparisonResults.v2?.debug && (
+                    <details className="mt-2 text-[10px]">
+                      <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
+                        <Bug className="w-3 h-3" /> Debug
+                      </summary>
+                      <div className="mt-1 p-2 bg-neutral-50 rounded-lg border border-neutral-100 font-mono space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-neutral-500">Logo:</span>
+                          <span className={comparisonResults.v2.debug.logo_fetched ? 'text-green-600' : 'text-red-500'}>
+                            {comparisonResults.v2.debug.logo_fetched ? 'Yes' : 'No'} ({comparisonResults.v2.debug.logo_size_kb || 0}KB)
+                          </span>
+                        </div>
+                        <div className="text-neutral-500 truncate" title={comparisonResults.v2.debug.logo_url_used || ''}>
+                          URL: {comparisonResults.v2.debug.logo_url_used || 'None'}
+                        </div>
+                        <div className="text-neutral-500">
+                          Assets: {comparisonResults.v2.debug.assets_attached?.join(', ') || 'None'}
+                        </div>
+                      </div>
+                    </details>
+                  )}
+                </div>
 
                 {/* Variation 3 */}
-                {comparisonResults.v3 ? (
-                  <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
-                    <img
-                      src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
-                      alt="Variation 3"
-                      className="w-full h-auto"
-                    />
-                    {savedVersions.has('v3') && (
-                      <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3" /> Saved
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="absolute bottom-0 left-0 right-0 p-3">
-                        <div className="flex items-center justify-between">
-                          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors">
-                            <Edit3 className="w-3.5 h-3.5" /> Edit
-                          </button>
-                          <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  {comparisonResults.v3 ? (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                      <img
+                        src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
+                        alt="Variation 3"
+                        className="w-full h-auto"
+                      />
+                      {savedVersions.has('v3') && (
+                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Saved
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <div className="flex items-center justify-between">
                             <button
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = `data:image/png;base64,${comparisonResults.v3?.image_base64}`;
-                                link.download = `variation-3-${Date.now()}.png`;
-                                link.click();
-                              }}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                              title="Download"
+                              onClick={() => handleEditComparisonImage('v3')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
                             >
-                              <Download className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <button
-                              onClick={() => handleSaveComparisonImage('v3')}
-                              disabled={!!savingComparison || savedVersions.has('v3')}
-                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                              title="Save to gallery"
-                            >
-                              {savingComparison === 'v3' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const link = document.createElement('a');
+                                  link.href = `data:image/png;base64,${comparisonResults.v3?.image_base64}`;
+                                  link.download = `variation-3-${Date.now()}.png`;
+                                  link.click();
+                                }}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                title="Download"
+                              >
+                                <Download className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleSaveComparisonImage('v3')}
+                                disabled={!!savingComparison || savedVersions.has('v3')}
+                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
+                                title="Save to gallery"
+                              >
+                                {savingComparison === 'v3' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                    Failed
-                  </div>
-                )}
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                      Failed
+                    </div>
+                  )}
+                  {/* Admin Debug Panel */}
+                  {isAdmin && comparisonResults.v3?.debug && (
+                    <details className="mt-2 text-[10px]">
+                      <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
+                        <Bug className="w-3 h-3" /> Debug
+                      </summary>
+                      <div className="mt-1 p-2 bg-neutral-50 rounded-lg border border-neutral-100 font-mono space-y-0.5">
+                        <div className="flex justify-between">
+                          <span className="text-neutral-500">Logo:</span>
+                          <span className={comparisonResults.v3.debug.logo_fetched ? 'text-green-600' : 'text-red-500'}>
+                            {comparisonResults.v3.debug.logo_fetched ? 'Yes' : 'No'} ({comparisonResults.v3.debug.logo_size_kb || 0}KB)
+                          </span>
+                        </div>
+                        <div className="text-neutral-500 truncate" title={comparisonResults.v3.debug.logo_url_used || ''}>
+                          URL: {comparisonResults.v3.debug.logo_url_used || 'None'}
+                        </div>
+                        <div className="text-neutral-500">
+                          Assets: {comparisonResults.v3.debug.assets_attached?.join(', ') || 'None'}
+                        </div>
+                      </div>
+                    </details>
+                  )}
+                </div>
               </div>
             </div>
 

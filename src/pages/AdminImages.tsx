@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCw, ShieldCheck, Image as ImageIcon, History, Clock3, Search, Filter } from 'lucide-react';
+import { Loader2, RefreshCw, ShieldCheck, Image as ImageIcon, History, Clock3, Search, Filter, Bug } from 'lucide-react';
 import { supabase, GeneratedImage } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminUser } from '../lib/admin';
@@ -13,6 +13,25 @@ type BrandListItem = {
   name: string;
   slug: string;
   domain: string;
+  latest_image_at?: string | null;
+  image_count?: number;
+};
+
+// Debug info from generation functions
+type GenerationDebugInfo = {
+  brand_logos?: { primary?: string; icon?: string } | null;
+  brand_all_logos_count?: number;
+  logo_url_used?: string | null;
+  logo_fetched?: boolean;
+  logo_size_kb?: number | null;
+  logo_mime?: string | null;
+  assets_count?: number;
+  assets_attached?: string[];
+  references_count?: number;
+  product_id?: string | null;
+  product_name?: string | null;
+  product_images_count?: number;
+  include_logo_reference?: boolean;
 };
 
 export function AdminImages() {
@@ -33,23 +52,26 @@ export function AdminImages() {
   useEffect(() => {
     if (canView) {
       loadBrands();
+      // Load all images by default (no brand selected)
+      loadImages(null, statusFilter, searchPrompt);
     }
   }, [canView]);
 
   useEffect(() => {
-    if (selectedBrandId) {
+    // Load images whenever selection, filter, or search changes
+    if (canView) {
       loadImages(selectedBrandId, statusFilter, searchPrompt);
     }
-  }, [selectedBrandId, statusFilter, searchPrompt]);
+  }, [selectedBrandId, statusFilter, searchPrompt, canView]);
 
   const loadBrands = async () => {
     setLoadingBrands(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
+    // Fetch brands
+    const { data: brandsData, error: fetchError } = await supabase
       .from('brands')
-      .select('id, name, slug, domain')
-      .order('name', { ascending: true });
+      .select('id, name, slug, domain');
 
     if (fetchError) {
       setError('Failed to load brands');
@@ -57,22 +79,60 @@ export function AdminImages() {
       return;
     }
 
-    setBrands(data || []);
-    if (!selectedBrandId && data && data.length > 0) {
-      setSelectedBrandId(data[0].id);
+    // Fetch latest image per brand to sort by recency
+    const { data: latestImages } = await supabase
+      .from('images')
+      .select('brand_id, created_at')
+      .order('created_at', { ascending: false });
+
+    // Build a map of brand_id -> latest_image_at and image_count
+    const brandImageMap: Record<string, { latest: string; count: number }> = {};
+    if (latestImages) {
+      for (const img of latestImages) {
+        if (!brandImageMap[img.brand_id]) {
+          brandImageMap[img.brand_id] = { latest: img.created_at, count: 1 };
+        } else {
+          brandImageMap[img.brand_id].count++;
+        }
+      }
     }
+
+    // Enrich brands with image info and sort by latest image
+    const enrichedBrands = (brandsData || []).map(brand => ({
+      ...brand,
+      latest_image_at: brandImageMap[brand.id]?.latest || null,
+      image_count: brandImageMap[brand.id]?.count || 0,
+    }));
+
+    // Sort: brands with images first (by recency), then brands without images (alphabetically)
+    enrichedBrands.sort((a, b) => {
+      if (a.latest_image_at && b.latest_image_at) {
+        return new Date(b.latest_image_at).getTime() - new Date(a.latest_image_at).getTime();
+      }
+      if (a.latest_image_at && !b.latest_image_at) return -1;
+      if (!a.latest_image_at && b.latest_image_at) return 1;
+      return (a.name || a.domain).localeCompare(b.name || b.domain);
+    });
+
+    setBrands(enrichedBrands);
+    // Don't auto-select a brand - show all images by default
     setLoadingBrands(false);
   };
 
-  const loadImages = async (brandId: string, status: StatusFilter, promptQuery: string) => {
+  const loadImages = async (brandId: string | null, status: StatusFilter, promptQuery: string) => {
     setLoadingImages(true);
     setError(null);
 
     let query = supabase
       .from('images')
       .select('*')
-      .eq('brand_id', brandId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(100); // Limit for performance when showing all
+
+    // Filter by brand if one is selected
+    if (brandId) {
+      query = query.eq('brand_id', brandId);
+    }
 
     if (status !== 'all') {
       query = query.eq('status', status);
@@ -133,7 +193,10 @@ export function AdminImages() {
           </div>
           <Button
             variant="secondary"
-            onClick={() => selectedBrandId && loadImages(selectedBrandId, statusFilter, searchPrompt)}
+            onClick={() => {
+              loadBrands();
+              loadImages(selectedBrandId, statusFilter, searchPrompt);
+            }}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -153,6 +216,23 @@ export function AdminImages() {
               <div className="text-sm text-neutral-500">No brands available.</div>
             ) : (
               <div className="space-y-2 max-h-[70vh] overflow-auto pr-1">
+                {/* All Images option */}
+                <button
+                  onClick={() => setSelectedBrandId(null)}
+                  className={`w-full text-left px-3 py-2 rounded-xl border transition-colors ${
+                    selectedBrandId === null
+                      ? 'border-neutral-800 bg-neutral-800 text-white'
+                      : 'border-neutral-200 hover:border-neutral-300 bg-white text-neutral-700'
+                  }`}
+                >
+                  <div className="text-sm font-semibold">All Images</div>
+                  <div className={selectedBrandId === null ? 'text-neutral-300' : 'text-neutral-500'}>
+                    Recent from all brands
+                  </div>
+                </button>
+
+                <div className="border-t border-neutral-100 my-2" />
+
                 {brands.map((brand) => (
                   <button
                     key={brand.id}
@@ -163,8 +243,17 @@ export function AdminImages() {
                         : 'border-neutral-200 hover:border-neutral-300 bg-white text-neutral-700'
                     }`}
                   >
-                    <div className="text-sm font-semibold">{brand.name || brand.domain}</div>
-                    <div className={selectedBrandId === brand.id ? 'text-neutral-300' : 'text-neutral-500'}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold">{brand.name || brand.domain}</div>
+                      {brand.image_count ? (
+                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                          selectedBrandId === brand.id ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-100 text-neutral-500'
+                        }`}>
+                          {brand.image_count}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className={selectedBrandId === brand.id ? 'text-neutral-300 text-xs' : 'text-neutral-500 text-xs'}>
                       {brand.domain}
                     </div>
                   </button>
@@ -177,10 +266,11 @@ export function AdminImages() {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
               <div>
                 <p className="text-xs uppercase tracking-wide text-neutral-500 font-semibold">
-                  {selectedBrand ? selectedBrand.name : 'Select a brand'}
+                  {selectedBrand ? selectedBrand.name : 'All Images'}
                 </p>
                 <div className="text-neutral-700 text-sm">
                   {images.length} {images.length === 1 ? 'image' : 'images'}
+                  {!selectedBrandId && images.length === 100 && ' (showing latest 100)'}
                 </div>
               </div>
 
@@ -227,7 +317,11 @@ export function AdminImages() {
                   <ImageIcon className="w-8 h-8 text-neutral-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-neutral-800">No images yet</h3>
-                <p className="text-neutral-600 text-sm mt-1">Generate an image for this brand to see it here.</p>
+                <p className="text-neutral-600 text-sm mt-1">
+                  {selectedBrandId
+                    ? 'Generate an image for this brand to see it here.'
+                    : 'No images have been generated yet.'}
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -322,6 +416,75 @@ export function AdminImages() {
                           )}
                         </div>
                       ) : null}
+
+                      {/* Debug Info Section */}
+                      {(image.metadata as { debug?: GenerationDebugInfo })?.debug && (
+                        <details className="border-t border-neutral-100 pt-3">
+                          <summary className="flex items-center gap-2 text-xs text-neutral-500 hover:text-neutral-700 cursor-pointer">
+                            <Bug className="w-3.5 h-3.5" />
+                            Generation Debug
+                          </summary>
+                          <div className="mt-2 p-2 bg-neutral-50 rounded-lg border border-neutral-100 space-y-1.5">
+                            {(() => {
+                              const debug = (image.metadata as { debug?: GenerationDebugInfo }).debug;
+                              if (!debug) return null;
+                              return (
+                                <>
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-neutral-500">Logo fetched:</span>
+                                    <span className={debug.logo_fetched ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+                                      {debug.logo_fetched ? 'Yes' : 'No'}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-neutral-500">Logo size:</span>
+                                    <span className="text-neutral-700">
+                                      {debug.logo_size_kb ? `${debug.logo_size_kb} KB` : 'N/A'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px]">
+                                    <span className="text-neutral-500">Logo URL:</span>
+                                    <div className="text-neutral-600 font-mono text-[10px] truncate mt-0.5" title={debug.logo_url_used || ''}>
+                                      {debug.logo_url_used || 'None'}
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-neutral-500">Assets:</span>
+                                    <span className="text-neutral-700">
+                                      {debug.assets_attached?.length || 0}
+                                    </span>
+                                  </div>
+                                  {debug.assets_attached && debug.assets_attached.length > 0 && (
+                                    <div className="text-[10px] text-neutral-500 pl-2">
+                                      {debug.assets_attached.join(', ')}
+                                    </div>
+                                  )}
+                                  <div className="flex justify-between text-[11px]">
+                                    <span className="text-neutral-500">References:</span>
+                                    <span className="text-neutral-700">{debug.references_count || 0}</span>
+                                  </div>
+                                  {debug.product_name && (
+                                    <div className="flex justify-between text-[11px]">
+                                      <span className="text-neutral-500">Product:</span>
+                                      <span className="text-neutral-700">{debug.product_name}</span>
+                                    </div>
+                                  )}
+                                  {debug.brand_logos && (
+                                    <details className="mt-1">
+                                      <summary className="text-[10px] text-neutral-400 cursor-pointer hover:text-neutral-600">
+                                        Raw brand logos
+                                      </summary>
+                                      <pre className="mt-1 text-[9px] font-mono bg-neutral-100 p-1.5 rounded overflow-auto max-h-20">
+                                        {JSON.stringify(debug.brand_logos, null, 2)}
+                                      </pre>
+                                    </details>
+                                  )}
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   </div>
                 ))}

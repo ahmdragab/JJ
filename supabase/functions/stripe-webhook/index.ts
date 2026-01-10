@@ -89,15 +89,26 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Idempotency check: Check if this event has already been processed
-    const { data: existingEvent } = await supabase
+    // Idempotency check: Use upsert with onConflict to atomically check and insert
+    // This prevents race conditions when multiple identical webhooks arrive simultaneously
+    const { data: insertResult, error: insertError } = await supabase
       .from("stripe_events")
-      .select("id")
-      .eq("event_id", event.id)
+      .upsert({
+        event_id: event.id,
+        event_type: event.type,
+        processed_at: new Date().toISOString(),
+      }, {
+        onConflict: "event_id",
+        ignoreDuplicates: false,  // Return existing row if duplicate
+      })
+      .select("processed_at")
       .single();
 
-    if (existingEvent) {
-      logger.info(`Event already processed, skipping: ${event.id}`, {
+    // Check if this was an existing event (processed_at significantly before now)
+    // or if there was a unique constraint error (race condition case)
+    if (insertError) {
+      // Unique constraint violation - another request is processing this event
+      logger.info(`Event already being processed, skipping: ${event.id}`, {
         request_id: requestId,
         event_id: event.id,
       });
@@ -107,14 +118,22 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Store the event ID to prevent duplicate processing
-    await supabase
-      .from("stripe_events")
-      .insert({
-        event_id: event.id,
-        event_type: event.type,
-        processed_at: new Date().toISOString(),
-      });
+    // Check if this was already processed (upsert returns existing row)
+    if (insertResult) {
+      const existingTimestamp = new Date(insertResult.processed_at).getTime();
+      const now = Date.now();
+      // If processed more than 5 seconds ago, it's a duplicate
+      if (now - existingTimestamp > 5000) {
+        logger.info(`Event already processed, skipping: ${event.id}`, {
+          request_id: requestId,
+          event_id: event.id,
+        });
+        return new Response(
+          JSON.stringify({ received: true, message: "Event already processed" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Handle different event types
     switch (event.type) {
@@ -373,29 +392,23 @@ async function handleInvoicePaymentSucceeded(
 }
 
 // Handle payment intent succeeded (one-time purchase)
+// NOTE: Credit packages are handled via checkout.session.completed, not here.
+// This handler is kept for potential future use cases (direct payment intents).
 async function handlePaymentIntentSucceeded(
   paymentIntent: any,
-  supabase: ReturnType<typeof createClient>,
+  _supabase: ReturnType<typeof createClient>,
   logger: ReturnType<typeof createLogger>
 ) {
-  const metadata = paymentIntent.metadata || {};
-  const packageId = metadata.package_id;
-  const userId = metadata.user_id;
+  // Credit packages purchased through Stripe Checkout are processed in
+  // checkout.session.completed handler. We intentionally do NOT process
+  // credit packages here to avoid double-crediting users.
+  //
+  // If we need to handle direct PaymentIntent flows in the future (not via Checkout),
+  // we should add a separate deduplication mechanism using session/payment intent IDs.
 
-  if (!packageId || !userId) {
-    logger.warn("Missing metadata for credit package purchase", {
-      package_id: packageId,
-      user_id: userId,
-    });
-    return;
-  }
-
-  await handleCreditPackagePurchase(
-    { metadata, amount_total: paymentIntent.amount },
-    userId,
-    supabase,
-    logger
-  );
+  logger.info("Payment intent succeeded (no action needed - handled by checkout.session.completed)", {
+    payment_intent_id: paymentIntent.id,
+  });
 }
 
 // Handle credit package purchase

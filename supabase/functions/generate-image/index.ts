@@ -59,7 +59,7 @@ function getCors(request: Request): Record<string, string> {
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_MODEL = "gemini-3-pro-image-preview";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const GPT_MODEL = "gpt-4o-mini"; // Fast, cost-efficient model for prompt optimization (gpt-4o-mini or gpt-4-turbo)
+const GPT_MODEL = "gpt-5.2-chat-latest";  // GPT-5.2 for creative concept generation
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -1958,9 +1958,25 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
         newMetadata.aspect_ratio = aspectRatioToUse;
       }
       
-      if (Object.keys(newMetadata).length > Object.keys(existingMetadata).length || aspectRatioToUse) {
-        updateData.metadata = newMetadata;
-      }
+      // Add debug info for troubleshooting
+      newMetadata.prompt_version = 'v1';
+      newMetadata.debug = {
+        brand_logos: brand?.logos || null,
+        brand_all_logos_count: brand?.all_logos?.length || 0,
+        logo_url_used: brand ? getBestLogoUrl(brand) : null,
+        logo_fetched: logoAttached,
+        logo_size_kb: logoDataToAttach ? Math.round(logoDataToAttach.data.length / 1024) : null,
+        logo_mime: logoDataToAttach?.mimeType || null,
+        assets_count: allAssets.length,
+        assets_attached: attachedAssetNames,
+        references_count: (references as AssetInput[]).length,
+        product_id: productId || null,
+        product_name: product?.name || null,
+        product_images_count: product?.images?.length || 0,
+        include_logo_reference: includeLogoReference,
+      };
+
+      updateData.metadata = newMetadata;
 
       await supabase
         .from('images')
@@ -1974,14 +1990,29 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
       duration_ms: Math.round(duration),
     });
 
+    // Build debug info for response
+    const debugInfo = {
+      brand_logos: brand?.logos || null,
+      brand_all_logos_count: brand?.all_logos?.length || 0,
+      logo_url_used: brand ? getBestLogoUrl(brand) : null,
+      logo_fetched: logoAttached,
+      logo_size_kb: logoDataToAttach ? Math.round(logoDataToAttach.data.length / 1024) : null,
+      assets_count: allAssets.length,
+      assets_attached: attachedAssetNames,
+      references_count: (references as AssetInput[]).length,
+      product_name: product?.name || null,
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
+        version: 'v1',
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
         text_response: textResponse,
         gpt_prompt_info: gptPromptInfo, // Include GPT prompt for display
+        debug: debugInfo,
       }),
       {
         status: 200,

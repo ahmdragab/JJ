@@ -10,7 +10,7 @@ const corsHeaders = {
 };
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-const GPT_MODEL = "gpt-4o"; // Vision-capable model
+const GPT_MODEL = "gpt-5.2-chat-latest";  // GPT-5.2 for style analysis
 
 // Available tags structure
 const AVAILABLE_TAGS = {
@@ -125,7 +125,7 @@ Return a JSON object with:
           }
         ],
         response_format: { type: "json_object" },
-        max_tokens: 500,
+        max_completion_tokens: 1000,
       }),
     });
 
