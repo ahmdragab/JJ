@@ -2625,7 +2625,7 @@ export function Studio({ brand }: { brand: Brand }) {
                 </div>
 
                 {/* Meta */}
-                <div className="flex items-center gap-3 text-xs text-neutral-400 mb-4">
+                <div className="flex items-center gap-3 text-xs text-neutral-400 mb-5">
                   <span className="tabular-nums">{formatDate(selectedImage.created_at)}</span>
                   {selectedImage.edit_count > 0 && (
                     <>
@@ -2634,39 +2634,6 @@ export function Studio({ brand }: { brand: Brand }) {
                     </>
                   )}
                 </div>
-
-                {/* Image Info */}
-                {(() => {
-                  const metadata = selectedImage.metadata || {};
-                  const aspectRatio = metadata.aspect_ratio as string | undefined;
-                  const resolution = (metadata.resolution as string) || '2K';
-                  const dims = (metadata.dimensions as { width: number; height: number } | undefined)
-                    || calculateDimensions(aspectRatio);
-
-                  return (
-                    <div className="mb-5">
-                      <div className="text-xs font-medium text-neutral-500 mb-2">Image Info</div>
-                      <div className="flex gap-2 flex-wrap">
-                        {aspectRatio && (
-                          <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
-                            {aspectRatio}
-                          </span>
-                        )}
-                        <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
-                          {resolution}
-                        </span>
-                        <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
-                          PNG
-                        </span>
-                      </div>
-                      {dims && (
-                        <div className="text-xs text-neutral-400 mt-1.5">
-                          {dims.width} × {dims.height} px
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
 
                 {/* Version History with Thumbnails */}
                 {(() => {
@@ -2775,6 +2742,39 @@ export function Studio({ brand }: { brand: Brand }) {
                       )}
                     </div>
                   ) : null;
+                })()}
+
+                {/* Image Info */}
+                {(() => {
+                  const metadata = selectedImage.metadata || {};
+                  const aspectRatio = metadata.aspect_ratio as string | undefined;
+                  const resolution = (metadata.resolution as string) || '2K';
+                  const dims = (metadata.dimensions as { width: number; height: number } | undefined)
+                    || calculateDimensions(aspectRatio);
+
+                  return (
+                    <div className="mb-5">
+                      <div className="text-xs font-medium text-neutral-500 mb-2">Image Info</div>
+                      <div className="flex gap-2 flex-wrap">
+                        {aspectRatio && (
+                          <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
+                            {aspectRatio}
+                          </span>
+                        )}
+                        <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
+                          {resolution}
+                        </span>
+                        <span className="px-2 py-1 bg-neutral-100 rounded text-xs font-medium text-neutral-600">
+                          PNG
+                        </span>
+                      </div>
+                      {dims && (
+                        <div className="text-xs text-neutral-400 mt-1.5">
+                          {dims.width} × {dims.height} px
+                        </div>
+                      )}
+                    </div>
+                  );
                 })()}
 
                 {/* Debug: GPT Prompt (dev only) */}
