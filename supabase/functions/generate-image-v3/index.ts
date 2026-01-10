@@ -27,6 +27,8 @@ interface Brand {
     icon?: string;
   };
   all_logos?: Array<{ url: string; type?: string; mode?: string }>;
+  backdrops?: Array<{ url: string }>;
+  screenshot?: string | null;
   colors: {
     primary?: string;
     secondary?: string;
@@ -35,6 +37,15 @@ interface Brand {
   styleguide?: {
     summary?: string;
   };
+}
+
+interface AssetInput {
+  id: string;
+  url: string;
+  name: string;
+  category?: string;
+  role: 'must_include' | 'style_reference';
+  style_description?: string;
 }
 
 // ============================================================================
@@ -270,12 +281,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { 
-      prompt, 
-      brandId, 
+    const {
+      prompt,
+      brandId,
       imageId,
       aspectRatio,
       skipCredits = false,
+      assets = [],           // High-fidelity assets to include
+      references = [],       // Style references
+      productId,             // Optional: Product to feature
+      includeLogoReference = true,
+      sessionId,             // Optional: session ID from start-variations-session
     } = requestBody;
 
     if (!prompt) {
@@ -315,44 +331,112 @@ Deno.serve(async (req: Request) => {
         .select("user_id")
         .eq("id", imageId)
         .single();
-      
+
       if (imageData) userId = imageData.user_id;
     }
 
-    // Credit deduction
-    if (userId && !skipCredits) {
-      const { data: creditsData, error: creditsError } = await supabase
-        .from("user_credits")
-        .select("credits")
-        .eq("user_id", userId)
+    // Fetch product data if productId is provided
+    let product: {
+      id: string;
+      name: string;
+      description?: string;
+      images?: Array<{ url: string; is_primary?: boolean }>;
+      key_features?: string[];
+      value_proposition?: string;
+    } | null = null;
+
+    if (productId && brandId) {
+      const { data: productData, error: productError } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", productId)
+        .eq("brand_id", brandId)
         .single();
 
-      const currentCredits = creditsData?.credits ?? 0;
-      
-      if (creditsError || currentCredits < 1) {
-        return new Response(
-          JSON.stringify({ error: "Insufficient credits.", credits: currentCredits }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+      if (productError) {
+        console.warn("[V3] Product fetch warning:", productError);
+      } else if (productData) {
+        product = productData;
+        console.log(`[V3] Product loaded: ${product.name}`);
       }
-
-      const { error: deductError } = await supabase
-        .from("user_credits")
-        .update({ credits: currentCredits - 1, updated_at: new Date().toISOString() })
-        .eq("user_id", userId)
-        .eq("credits", currentCredits);
-
-      if (deductError) {
-        return new Response(
-          JSON.stringify({ error: "Failed to process credits.", credits: currentCredits }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[V3] Credit deducted for user ${userId}`);
     }
 
-    console.log(`[V3] Prompt: "${prompt.substring(0, 100)}..."`);
+    // Credit handling: Either validate session or deduct credits
+    if (userId && !skipCredits) {
+      if (sessionId) {
+        // Session-based generation: Validate session instead of deducting credits
+        const { data: session, error: sessionError } = await supabase
+          .from("generation_sessions")
+          .select("*")
+          .eq("id", sessionId)
+          .eq("user_id", userId)
+          .single();
+
+        if (sessionError || !session) {
+          console.warn("[V3] Invalid session:", { sessionId, userId, error: sessionError });
+          return new Response(
+            JSON.stringify({ error: "Invalid or expired session" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (new Date(session.expires_at) < new Date()) {
+          return new Response(
+            JSON.stringify({ error: "Session has expired" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        if (session.generations_used >= session.max_generations) {
+          return new Response(
+            JSON.stringify({ error: "Session has reached maximum generations" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        // Increment generations_used atomically
+        await supabase
+          .from("generation_sessions")
+          .update({ generations_used: session.generations_used + 1 })
+          .eq("id", sessionId)
+          .eq("generations_used", session.generations_used);
+
+        console.log(`[V3] Session ${sessionId} used: ${session.generations_used + 1}/${session.max_generations}`);
+      } else {
+        // Standard credit deduction
+        const { data: creditsData, error: creditsError } = await supabase
+          .from("user_credits")
+          .select("credits")
+          .eq("user_id", userId)
+          .single();
+
+        const currentCredits = creditsData?.credits ?? 0;
+
+        if (creditsError || currentCredits < 1) {
+          return new Response(
+            JSON.stringify({ error: "Insufficient credits.", credits: currentCredits }),
+            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: deductError } = await supabase
+          .from("user_credits")
+          .update({ credits: currentCredits - 1, updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("credits", currentCredits);
+
+        if (deductError) {
+          return new Response(
+            JSON.stringify({ error: "Failed to process credits.", credits: currentCredits }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        console.log(`[V3] Credit deducted for user ${userId}`);
+      }
+    }
+
+    console.log(`[V3] Prompt: "${prompt.substring(0, 100)}...", assets: ${assets.length}, refs: ${references.length}`);
 
     // ========================================================================
     // BUILD SIMPLE, DIRECT PROMPT FOR GEMINI
@@ -399,7 +483,7 @@ Generate a high-quality, professional marketing image that would perform well as
 
     // Fetch logo FIRST - it's critical and should be prioritized
     let logoData: { mimeType: string; data: string } | null = null;
-    if (brand) {
+    if (brand && includeLogoReference) {
       const bestLogoUrl = getBestLogoUrl(brand);
       if (bestLogoUrl) {
         console.log(`[V3] Fetching logo from: ${bestLogoUrl}`);
@@ -419,7 +503,7 @@ Generate a high-quality, professional marketing image that would perform well as
       parts.push({
         text: `🚨 CRITICAL: BRAND LOGO REQUIRED 🚨
 
-The following image is the EXACT brand logo for ${brand?.name || 'this brand'}. 
+The following image is the EXACT brand logo for ${brand?.name || 'this brand'}.
 
 MANDATORY REQUIREMENTS:
 1. You MUST include this EXACT logo in the generated image
@@ -438,6 +522,68 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
         },
       });
       console.log(`[V3] Logo attached at position ${parts.length - 1} (early in conversation)`);
+    }
+
+    // Auto-inject product images as high-fidelity assets
+    const productAssets: AssetInput[] = [];
+    if (product?.images && product.images.length > 0) {
+      const productImagesToInclude = product.images.slice(0, 3);
+      for (let i = 0; i < productImagesToInclude.length; i++) {
+        const img = productImagesToInclude[i];
+        productAssets.push({
+          id: `product-image-${i}`,
+          url: img.url,
+          name: i === 0 ? `${product.name} (Primary)` : `${product.name} (Image ${i + 1})`,
+          category: 'product',
+          role: 'must_include',
+        });
+      }
+      console.log(`[V3] Auto-injected ${productAssets.length} product image(s)`);
+    }
+
+    // Combine user assets with product assets
+    const allAssets = [...productAssets, ...(assets as AssetInput[])];
+
+    // Add high-fidelity assets (must appear in output)
+    const attachedAssetNames: string[] = [];
+    for (const asset of allAssets) {
+      const assetData = await fetchImageAsBase64(asset.url);
+      if (assetData) {
+        attachedAssetNames.push(asset.name);
+        parts.push({
+          text: `HIGH-FIDELITY ASSET TO INCLUDE - "${asset.name}" (${asset.category || 'general'}):\n\nThis is a REQUIRED element that MUST appear accurately in the final generated image. Include this prominently in the design with high fidelity and accuracy. This is not optional - the attached image below must be reproduced in the output.`,
+        });
+        parts.push({
+          inline_data: {
+            mime_type: assetData.mimeType,
+            data: assetData.data,
+          },
+        });
+      }
+    }
+
+    // Add user-selected references (style references)
+    for (const ref of (references as AssetInput[])) {
+      const refData = await fetchImageAsBase64(ref.url);
+      if (refData) {
+        const styleDesc = ref.style_description ? ` Style: ${ref.style_description}.` : '';
+        parts.push({
+          text: `REFERENCE AD DESIGN - "${ref.name}".${styleDesc} This is a reference ad design. Create something similar to the concept of this ad in a way that fits the brand. Adapt the concept and style, but do not copy text or logos.`,
+        });
+        parts.push({
+          inline_data: {
+            mime_type: refData.mimeType,
+            data: refData.data,
+          },
+        });
+      }
+    }
+
+    // Add explicit instruction for attached assets
+    if (attachedAssetNames.length > 0) {
+      parts.push({
+        text: `\n\nCRITICAL REQUIREMENT: The ${attachedAssetNames.length} asset(s) attached above (${attachedAssetNames.join(', ')}) MUST be included in the final design. These are high-fidelity assets that must appear accurately in the output.`,
+      });
     }
 
     // Add the core prompt
