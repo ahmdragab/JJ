@@ -988,13 +988,23 @@ Deno.serve(async (req: Request) => {
 
     const { data: currentImage } = await supabase
       .from('images')
-      .select('conversation, edit_count, image_url, version_history')
+      .select('conversation, edit_count, image_url, version_history, metadata')
       .eq('id', imageId)
       .single();
 
     const updateData: Record<string, unknown> = {
       status: 'ready',
       updated_at: new Date().toISOString(),
+    };
+
+    // Update metadata with resolution info
+    const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
+    updateData.metadata = {
+      ...existingMetadata,
+      aspect_ratio: validatedAspectRatio || existingMetadata.aspect_ratio,
+      resolution: finalResolution,
+      dimensions: resolutionDims,
+      mime_type: 'image/png',
     };
 
     if (imageUrl) {
@@ -1037,6 +1047,9 @@ Deno.serve(async (req: Request) => {
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
+        aspect_ratio: validatedAspectRatio || 'auto',
+        resolution: finalResolution,
+        dimensions: resolutionDims,
         text_response: textResponse,
       }),
       {

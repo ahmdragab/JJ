@@ -72,6 +72,37 @@ interface ProductContext {
 }
 
 // ============================================================================
+// RESOLUTION MAPPING
+// ============================================================================
+
+type ResolutionLevel = '1K' | '2K' | '4K';
+type AspectRatioValue = '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9';
+
+interface Resolution {
+  width: number;
+  height: number;
+}
+
+const RESOLUTION_MAP: Record<AspectRatioValue, Record<ResolutionLevel, Resolution>> = {
+  '1:1': { '1K': { width: 1024, height: 1024 }, '2K': { width: 2048, height: 2048 }, '4K': { width: 4096, height: 4096 } },
+  '2:3': { '1K': { width: 848, height: 1264 }, '2K': { width: 1696, height: 2528 }, '4K': { width: 3392, height: 5056 } },
+  '3:2': { '1K': { width: 1264, height: 848 }, '2K': { width: 2528, height: 1696 }, '4K': { width: 5056, height: 3392 } },
+  '3:4': { '1K': { width: 896, height: 1200 }, '2K': { width: 1792, height: 2400 }, '4K': { width: 3584, height: 4800 } },
+  '4:3': { '1K': { width: 1200, height: 896 }, '2K': { width: 2400, height: 1792 }, '4K': { width: 4800, height: 3584 } },
+  '4:5': { '1K': { width: 928, height: 1152 }, '2K': { width: 1856, height: 2304 }, '4K': { width: 3712, height: 4608 } },
+  '5:4': { '1K': { width: 1152, height: 928 }, '2K': { width: 2304, height: 1856 }, '4K': { width: 4608, height: 3712 } },
+  '9:16': { '1K': { width: 768, height: 1376 }, '2K': { width: 1536, height: 2752 }, '4K': { width: 3072, height: 5504 } },
+  '16:9': { '1K': { width: 1376, height: 768 }, '2K': { width: 2752, height: 1536 }, '4K': { width: 5504, height: 3072 } },
+  '21:9': { '1K': { width: 1584, height: 672 }, '2K': { width: 3168, height: 1344 }, '4K': { width: 6336, height: 2688 } },
+};
+
+function getResolution(aspectRatio: string, resolutionLevel: ResolutionLevel = '2K'): Resolution | null {
+  if (!aspectRatio || aspectRatio === 'auto') return null;
+  const ratioMap = RESOLUTION_MAP[aspectRatio as AspectRatioValue];
+  return ratioMap ? ratioMap[resolutionLevel] : null;
+}
+
+// ============================================================================
 // IMAGE HANDLING
 // ============================================================================
 
@@ -779,10 +810,14 @@ The following image is the EXACT brand logo. You MUST:
         .single();
 
       const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
+      const resolutionDims = getResolution(finalAspectRatio, '2K');
       updateData.metadata = {
         ...existingMetadata,
         prompt_version: 'v2-creative',
         aspect_ratio: finalAspectRatio,
+        resolution: '2K',
+        dimensions: resolutionDims,
+        mime_type: 'image/png',
         gpt_concept: concept,
         gemini_prompt: geminiPrompt,
         // Debug info for troubleshooting
@@ -812,6 +847,9 @@ The following image is the EXACT brand logo. You MUST:
       duration_ms: Math.round(duration),
     });
 
+    // Calculate dimensions for response
+    const responseDims = getResolution(finalAspectRatio, '2K');
+
     // Build debug info for response
     const debugInfo = {
       brand_logos: brand?.logos || null,
@@ -832,6 +870,9 @@ The following image is the EXACT brand logo. You MUST:
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
+        aspect_ratio: finalAspectRatio,
+        resolution: '2K',
+        dimensions: responseDims,
         text_response: textResponse,
         gpt_concept: concept,
         gemini_prompt: geminiPrompt,

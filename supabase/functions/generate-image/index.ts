@@ -1957,7 +1957,12 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
       if (aspectRatioToUse) {
         newMetadata.aspect_ratio = aspectRatioToUse;
       }
-      
+
+      // Store resolution and dimensions for display
+      newMetadata.resolution = finalResolution;
+      newMetadata.dimensions = resolutionDims;
+      newMetadata.mime_type = 'image/png';
+
       // Add debug info for troubleshooting
       newMetadata.prompt_version = 'v1';
       newMetadata.debug = {
@@ -2010,6 +2015,9 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
+        aspect_ratio: aspectRatioToUse,
+        resolution: finalResolution,
+        dimensions: resolutionDims,
         text_response: textResponse,
         gpt_prompt_info: gptPromptInfo, // Include GPT prompt for display
         debug: debugInfo,
