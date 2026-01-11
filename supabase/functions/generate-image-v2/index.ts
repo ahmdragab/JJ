@@ -143,14 +143,24 @@ function getBestLogoUrl(brand: Brand): string | null {
         return true;
       })
       .sort((a, b) => {
-        const getPriority = (url: string): number => {
+        // First priority: type (logo > favicon > other)
+        const getTypePriority = (type?: string): number => {
+          if (type === 'logo') return 0;
+          if (type === 'favicon' || type === 'icon') return 2;
+          return 1; // Other types (like wordmark) in the middle
+        };
+        const typeDiff = getTypePriority(a.type) - getTypePriority(b.type);
+        if (typeDiff !== 0) return typeDiff;
+
+        // Second priority: format (PNG > JPG > WEBP > other)
+        const getFormatPriority = (url: string): number => {
           const lower = url.toLowerCase();
           if (lower.includes('.png') || lower.includes('converted')) return 0;
           if (lower.includes('.jpg') || lower.includes('.jpeg')) return 1;
           if (lower.includes('.webp')) return 2;
           return 3;
         };
-        return getPriority(a.url) - getPriority(b.url);
+        return getFormatPriority(a.url) - getFormatPriority(b.url);
       });
     if (rasterLogos.length > 0) {
       console.log(`[V2] Using logo from all_logos: ${rasterLogos[0].url.substring(0, 50)}...`);

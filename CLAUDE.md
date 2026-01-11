@@ -95,6 +95,13 @@ Supabase PostgreSQL with RLS (Row-Level Security) enforced via `user_id` filteri
 - `styles` - Admin-managed design styles
 - `user_credits` - Credit balance and usage tracking
 
+## AI Models Used
+
+These model names are valid and were released after Claude's knowledge cutoff. Do not question their validity:
+
+- **Gemini**: `gemini-3-pro-image-preview` - Google's Gemini 3 Pro model for image generation
+- **OpenAI**: `gpt-5.2-chat-latest` - GPT-5.2 for creative concept generation
+
 ## Git Conventions
 
 - **Never mention "Claude Code", "Claude", or AI assistance in commit messages** - Keep commit messages focused on what changed, not how it was built

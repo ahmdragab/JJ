@@ -55,6 +55,25 @@ interface GPTEnrichment {
   suggested_category?: string;
 }
 
+type PageType = "product" | "service" | "feature" | "other";
+
+interface GPTPageExtraction {
+  name: string;
+  description: string;
+  short_description: string;
+  type: PageType;
+  images: string[];
+  key_features: string[];
+  value_proposition: string;
+  ad_angles: Array<{
+    angle: string;
+    headline_idea: string;
+  }>;
+  category?: string;
+  price?: number;
+  currency?: string;
+}
+
 interface ProductImage {
   url: string;
   alt?: string;
@@ -267,6 +286,126 @@ Be specific to THIS product. Make the ad angles compelling and varied.`;
 }
 
 // =============================================================================
+// GPT FALLBACK EXTRACTION (for non-standard pages)
+// =============================================================================
+
+async function extractPageWithGPT(
+  markdown: string,
+  pageUrl: string
+): Promise<GPTPageExtraction | null> {
+  if (!OPENAI_API_KEY) {
+    console.error("[GPT Fallback] No OpenAI API key available");
+    return null;
+  }
+
+  const prompt = `You are analyzing a webpage to extract information for advertising purposes.
+
+PAGE URL: ${pageUrl}
+
+PAGE CONTENT:
+${markdown.slice(0, 6000)}
+
+Analyze this page and determine what it's about. It could be:
+- A PRODUCT page (physical or digital product for sale)
+- A SERVICE page (professional service offering)
+- A FEATURE page (feature or module of a software/platform)
+- OTHER (landing page, about page, etc.)
+
+Extract the following information and return as JSON:
+
+{
+  "name": "The main title/name of the product, service, or feature",
+  "description": "Full description of what this is (2-3 sentences)",
+  "short_description": "Punchy 1-sentence description (max 150 chars)",
+  "type": "product" | "service" | "feature" | "other",
+  "images": ["array of image URLs found on the page"],
+  "key_features": ["Feature 1", "Feature 2", "Feature 3"],
+  "value_proposition": "One compelling sentence about the main benefit",
+  "ad_angles": [
+    {"angle": "Problem-Solution", "headline_idea": "Example headline"},
+    {"angle": "Benefit-Focused", "headline_idea": "Example headline"},
+    {"angle": "Social Proof/Trust", "headline_idea": "Example headline"}
+  ],
+  "category": "Category or industry this belongs to",
+  "price": null or number if pricing is mentioned,
+  "currency": "USD" or relevant currency if price exists
+}
+
+Important:
+- Extract the MAIN subject of the page, not secondary elements
+- For images, only include relevant product/service images (not icons, logos, or decorative images)
+- Make ad_angles specific to THIS offering, not generic
+- If it's a service, focus on outcomes and benefits
+- If it's a feature, focus on capabilities and use cases`;
+
+  try {
+    console.log("[GPT Fallback] Extracting page content with GPT...");
+
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert at analyzing web pages and extracting structured information for marketing purposes. Return only valid JSON."
+          },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.5,
+        max_tokens: 1500,
+        response_format: { type: "json_object" },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[GPT Fallback] API Error:", errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.error("[GPT Fallback] No content in response");
+      return null;
+    }
+
+    const parsed = JSON.parse(content);
+
+    // Validate required fields
+    if (!parsed.name) {
+      console.error("[GPT Fallback] No name extracted");
+      return null;
+    }
+
+    console.log("[GPT Fallback] Successfully extracted:", parsed.name, "| Type:", parsed.type);
+
+    return {
+      name: parsed.name,
+      description: parsed.description || "",
+      short_description: parsed.short_description || "",
+      type: ["product", "service", "feature", "other"].includes(parsed.type) ? parsed.type : "other",
+      images: Array.isArray(parsed.images) ? parsed.images.filter((img: string) => img?.startsWith("http")) : [],
+      key_features: Array.isArray(parsed.key_features) ? parsed.key_features : [],
+      value_proposition: parsed.value_proposition || "",
+      ad_angles: Array.isArray(parsed.ad_angles) ? parsed.ad_angles : [],
+      category: parsed.category || null,
+      price: typeof parsed.price === "number" ? parsed.price : null,
+      currency: parsed.currency || "USD",
+    };
+  } catch (error) {
+    console.error("[GPT Fallback] Extraction failed:", error);
+    return null;
+  }
+}
+
+// =============================================================================
 // IMAGE PROCESSING
 // =============================================================================
 
@@ -430,51 +569,114 @@ Deno.serve(async (req: Request) => {
     console.log("[Scrape] Starting Firecrawl extraction...");
     const { product: scrapedProduct, markdown } = await scrapeProductWithFirecrawl(productUrl);
 
-    if (!scrapedProduct.name) {
-      return new Response(
-        JSON.stringify({
-          error: "Could not extract product name from the page. Please check the URL is a product page.",
-          code: "EXTRACTION_FAILED"
-        }),
-        { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Variables to hold final extracted data
+    let finalName: string;
+    let finalDescription: string | null;
+    let finalShortDescription: string | null;
+    let finalPrice: number | null;
+    let finalCurrency: string;
+    let finalSalePrice: number | null = null;
+    let finalCategory: string | null;
+    let finalKeyFeatures: string[];
+    let finalValueProposition: string | null;
+    let finalAdAngles: Array<{ angle: string; headline_idea: string }>;
+    let finalImages: string[];
+    let finalType: PageType = "product";
+    let extractionMethod: "firecrawl" | "gpt_fallback";
+
+    if (scrapedProduct.name) {
+      // Firecrawl extraction successful - use existing flow
+      console.log("[Scrape] Firecrawl extraction successful:", scrapedProduct.name);
+      extractionMethod = "firecrawl";
+
+      // Step 2: Enrich with GPT
+      console.log("[Enrich] Starting GPT enrichment...");
+      const enrichment = await enrichProductWithGPT(scrapedProduct, markdown);
+
+      finalName = scrapedProduct.name;
+      finalDescription = scrapedProduct.description || null;
+      finalShortDescription = enrichment.short_description || null;
+      finalPrice = scrapedProduct.price || null;
+      finalCurrency = scrapedProduct.currency || "USD";
+      finalSalePrice = scrapedProduct.sale_price || null;
+      finalCategory = scrapedProduct.category || enrichment.suggested_category || null;
+      finalKeyFeatures = enrichment.key_features;
+      finalValueProposition = enrichment.value_proposition || null;
+      finalAdAngles = enrichment.ad_angles;
+      finalImages = scrapedProduct.images || [];
+      finalType = "product"; // Firecrawl schema is product-focused
+    } else {
+      // Firecrawl couldn't extract product data - use GPT fallback
+      console.log("[Scrape] Firecrawl extraction incomplete, using GPT fallback...");
+
+      if (!markdown) {
+        return new Response(
+          JSON.stringify({
+            error: "Could not scrape page content. Please check the URL is accessible.",
+            code: "SCRAPE_FAILED"
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const gptExtraction = await extractPageWithGPT(markdown, productUrl);
+
+      if (!gptExtraction) {
+        return new Response(
+          JSON.stringify({
+            error: "Could not extract information from the page. The page may not contain recognizable product, service, or feature content.",
+            code: "EXTRACTION_FAILED"
+          }),
+          { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      extractionMethod = "gpt_fallback";
+      finalName = gptExtraction.name;
+      finalDescription = gptExtraction.description || null;
+      finalShortDescription = gptExtraction.short_description || null;
+      finalPrice = gptExtraction.price || null;
+      finalCurrency = gptExtraction.currency || "USD";
+      finalCategory = gptExtraction.category || null;
+      finalKeyFeatures = gptExtraction.key_features;
+      finalValueProposition = gptExtraction.value_proposition || null;
+      finalAdAngles = gptExtraction.ad_angles;
+      finalImages = gptExtraction.images;
+      finalType = gptExtraction.type;
     }
 
-    console.log("[Scrape] Product found:", scrapedProduct.name);
-
-    // Step 2: Enrich with GPT
-    console.log("[Enrich] Starting GPT enrichment...");
-    const enrichment = await enrichProductWithGPT(scrapedProduct, markdown);
+    console.log(`[Scrape] Final extraction (${extractionMethod}):`, finalName, "| Type:", finalType);
 
     // Step 3: Process images
-    console.log("[Images] Processing product images...");
+    console.log("[Images] Processing images...");
     const images = await downloadAndStoreImages(
-      scrapedProduct.images || [],
+      finalImages,
       brandId,
       productId,
       supabase
     );
 
     // Step 4: Insert into database
-    console.log("[DB] Inserting product...");
+    console.log("[DB] Inserting record...");
     const productRecord = {
       id: productId,
       brand_id: brandId,
       user_id: userId,
-      name: scrapedProduct.name,
-      description: scrapedProduct.description || null,
-      short_description: enrichment.short_description || null,
-      price: scrapedProduct.price || null,
-      currency: scrapedProduct.currency || "USD",
-      sale_price: scrapedProduct.sale_price || null,
+      name: finalName,
+      description: finalDescription,
+      short_description: finalShortDescription,
+      price: finalPrice,
+      currency: finalCurrency,
+      sale_price: finalSalePrice,
       images: images,
-      category: scrapedProduct.category || enrichment.suggested_category || null,
+      category: finalCategory,
       tags: [],
-      key_features: enrichment.key_features,
-      value_proposition: enrichment.value_proposition || null,
-      ad_angles: enrichment.ad_angles,
+      key_features: finalKeyFeatures,
+      value_proposition: finalValueProposition,
+      ad_angles: finalAdAngles,
       source_url: productUrl,
-      status: enrichment.key_features.length > 0 ? "enriched" : "scraped",
+      type: finalType,
+      status: finalKeyFeatures.length > 0 ? "enriched" : "scraped",
     };
 
     const { data: insertedProduct, error: insertError } = await supabase
@@ -491,8 +693,10 @@ Deno.serve(async (req: Request) => {
     logger.info("Product scraped successfully", {
       productId: insertedProduct.id,
       name: insertedProduct.name,
+      type: finalType,
       status: insertedProduct.status,
       imageCount: images.length,
+      extractionMethod,
     });
 
     return new Response(

@@ -12,6 +12,43 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
 /**
+ * Check if a URL points to an animated or unsupported image format
+ * GIFs are considered animated by default since we can't easily check animation in Edge Functions
+ * These formats cause issues with Gemini image generation
+ */
+async function isAnimatedOrUnsupportedFormat(url: string): Promise<{ unsupported: boolean; reason?: string }> {
+  try {
+    const lowerUrl = url.toLowerCase();
+
+    // Check URL extension for GIF (treat all GIFs as potentially animated)
+    if (lowerUrl.includes(".gif")) {
+      console.log("[Format] Detected GIF from URL extension - treating as animated");
+      return { unsupported: true, reason: "GIF format (potentially animated)" };
+    }
+
+    // Try HEAD request to check content-type
+    const headResponse = await fetch(url, { method: "HEAD" });
+    const contentType = headResponse.headers.get("content-type") || "";
+
+    // Check for GIF content-type
+    if (contentType.includes("image/gif")) {
+      console.log(`[Format] Detected GIF from content-type: ${contentType}`);
+      return { unsupported: true, reason: "GIF format (potentially animated)" };
+    }
+
+    // WebP can be animated but we can't easily detect it without downloading
+    // For now, we'll allow WebP since most are static
+    // If issues persist, we could add WebP detection here
+
+    return { unsupported: false };
+  } catch (error) {
+    console.error("[Format] Error checking URL format:", error);
+    // On error, allow the logo through - better to try than skip
+    return { unsupported: false };
+  }
+}
+
+/**
  * Check if a URL returns SVG content
  */
 async function isSvgUrl(url: string): Promise<boolean> {
@@ -131,41 +168,56 @@ async function convertSvgToPng(
 
 /**
  * Process logos - convert SVGs to PNGs using ConvertAPI
+ * Also detects and skips animated/unsupported formats (like GIFs)
  */
 async function processLogos(
   logos: { primary?: string; secondary?: string; icon?: string },
   brandId: string
 ): Promise<{ primary?: string; secondary?: string; icon?: string }> {
   const processedLogos = { ...logos };
-  
+
   // Process primary logo
   if (logos.primary) {
-    const isSvg = await isSvgUrl(logos.primary);
-    if (isSvg) {
-      console.log("[SVG] Primary logo is SVG, converting via ConvertAPI...");
-      const pngUrl = await convertSvgToPng(logos.primary, brandId, "primary");
-      if (pngUrl) {
-        processedLogos.primary = pngUrl;
-      } else {
-        console.warn("[SVG] Failed to convert primary logo, keeping original SVG");
-      }
+    // First check if it's an animated/unsupported format
+    const formatCheck = await isAnimatedOrUnsupportedFormat(logos.primary);
+    if (formatCheck.unsupported) {
+      console.warn(`[Format] Primary logo is unsupported: ${formatCheck.reason}. Skipping logo.`);
+      processedLogos.primary = undefined;
     } else {
-      console.log("[SVG] Primary logo is already raster format");
+      const isSvg = await isSvgUrl(logos.primary);
+      if (isSvg) {
+        console.log("[SVG] Primary logo is SVG, converting via ConvertAPI...");
+        const pngUrl = await convertSvgToPng(logos.primary, brandId, "primary");
+        if (pngUrl) {
+          processedLogos.primary = pngUrl;
+        } else {
+          console.warn("[SVG] Failed to convert primary logo, keeping original SVG");
+        }
+      } else {
+        console.log("[SVG] Primary logo is already raster format");
+      }
     }
   }
-  
+
   // Process icon if different from primary
   if (logos.icon && logos.icon !== logos.primary) {
-    const isSvg = await isSvgUrl(logos.icon);
-    if (isSvg) {
-      console.log("[SVG] Icon is SVG, converting via ConvertAPI...");
-      const pngUrl = await convertSvgToPng(logos.icon, brandId, "icon");
-      if (pngUrl) {
-        processedLogos.icon = pngUrl;
+    // First check if it's an animated/unsupported format
+    const formatCheck = await isAnimatedOrUnsupportedFormat(logos.icon);
+    if (formatCheck.unsupported) {
+      console.warn(`[Format] Icon is unsupported: ${formatCheck.reason}. Skipping icon.`);
+      processedLogos.icon = undefined;
+    } else {
+      const isSvg = await isSvgUrl(logos.icon);
+      if (isSvg) {
+        console.log("[SVG] Icon is SVG, converting via ConvertAPI...");
+        const pngUrl = await convertSvgToPng(logos.icon, brandId, "icon");
+        if (pngUrl) {
+          processedLogos.icon = pngUrl;
+        }
       }
     }
   }
-  
+
   return processedLogos;
 }
 
@@ -225,7 +277,7 @@ interface BrandDevResponse {
   error?: string;
 }
 
-function mapBrandDevToOurFormat(brandDevData: BrandDevResponse): {
+function mapBrandDevToOurFormat(brandDevData: BrandDevResponse, domain: string): {
   name: string;
   slogan?: string;
   logos: { primary?: string; secondary?: string; icon?: string };
@@ -250,8 +302,8 @@ function mapBrandDevToOurFormat(brandDevData: BrandDevResponse): {
 } {
   const brand = brandDevData.brand || {};
 
-  // Extract brand name
-  const brandName = brand.title || brand.name || "";
+  // Extract brand name - prefer brand.name (cleaner), fallback to cleaned title
+  const brandName = brand.name || cleanBrandName(brand.title || '', domain);
 
   // Extract logos - handle both array and object formats
   let logos = { primary: undefined as string | undefined, secondary: undefined as string | undefined, icon: undefined as string | undefined };
@@ -433,6 +485,28 @@ function extractKeywords(description: string): string[] {
   return [...new Set(words)].slice(0, 5);
 }
 
+function capitalizeFirstLetter(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function cleanBrandName(rawTitle: string, domain: string): string {
+  if (!rawTitle) return capitalizeFirstLetter(domain.split('.')[0]);
+
+  // Common title separators: | - – — : · //
+  const separators = /\s*[|–—\-:·\/\/]+\s*/;
+  const segments = rawTitle.split(separators);
+
+  // Take the first segment (usually the brand name)
+  let brandName = segments[0].trim();
+
+  // If still too long (>30 chars), take first 3 words
+  if (brandName.length > 30) {
+    brandName = brandName.split(/\s+/).slice(0, 3).join(' ');
+  }
+
+  return brandName || capitalizeFirstLetter(domain.split('.')[0]);
+}
+
 Deno.serve(async (req: Request) => {
   const logger = createLogger('extract-brand');
   const requestId = logger.generateRequestId();
@@ -611,7 +685,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Map Brand.dev response to our format
-    const extractedData = mapBrandDevToOurFormat(brandDevData);
+    const extractedData = mapBrandDevToOurFormat(brandDevData, domain);
 
     // Extract fonts from fonts API or styleguide API
     if (fontsData?.fonts && Array.isArray(fontsData.fonts) && fontsData.fonts.length > 0) {

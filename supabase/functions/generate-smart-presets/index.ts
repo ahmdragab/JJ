@@ -17,6 +17,16 @@ const GPT_MODEL = "gpt-4o-mini";
 // TYPE DEFINITIONS
 // ============================================================================
 
+interface AdPersonality {
+  visual_approach?: 'photography' | 'illustration' | '3D' | 'clean_UI' | 'abstract' | 'mixed';
+  human_presence?: 'prominent' | 'subtle' | 'none';
+  color_treatment?: 'bold_saturated' | 'muted_pastel' | 'monochrome' | 'gradient_heavy';
+  composition?: 'centered' | 'asymmetric' | 'editorial' | 'grid' | 'chaotic';
+  copy_style?: 'punchy_minimal' | 'data_driven' | 'storytelling' | 'conversational';
+  tone?: 'serious' | 'playful' | 'provocative' | 'inspirational';
+  imagery_subjects?: string[];
+}
+
 interface Brand {
   id: string;
   name: string;
@@ -50,11 +60,14 @@ interface Brand {
   styleguide?: {
     mode?: string;
     summary?: string;
+    industry?: string;
+    keyServices?: string[];
     colors?: {
       accent?: string;
       background?: string;
       text?: string;
     };
+    ad_personality?: AdPersonality;
   };
 }
 
@@ -72,19 +85,58 @@ interface PresetTemplate {
   aspectRatio: '1:1' | '2:3' | '3:4' | '4:5' | '9:16' | '3:2' | '4:3' | '5:4' | '16:9' | '21:9';
 }
 
-// Available preset templates - All focused on ads with specific platforms and objectives
+// Available preset templates - Diverse categories based on brand needs
 const PRESET_TEMPLATES: PresetTemplate[] = [
-  { id: 'facebook-ad-awareness', icon: '📢', label: 'Facebook Ad - Brand Awareness', category: 'Advertising', aspectRatio: '4:5' },
-  { id: 'facebook-ad-conversion', icon: '💰', label: 'Facebook Ad - Conversions', category: 'Advertising', aspectRatio: '1:1' },
-  { id: 'instagram-ad-engagement', icon: '📱', label: 'Instagram Ad - Engagement', category: 'Advertising', aspectRatio: '1:1' },
-  { id: 'instagram-ad-conversion', icon: '🎯', label: 'Instagram Ad - Conversions', category: 'Advertising', aspectRatio: '4:5' },
-  { id: 'linkedin-ad-awareness', icon: '💼', label: 'LinkedIn Ad - Brand Awareness', category: 'Advertising', aspectRatio: '16:9' },
-  { id: 'linkedin-ad-leadgen', icon: '📋', label: 'LinkedIn Ad - Lead Generation', category: 'Advertising', aspectRatio: '1:1' },
-  { id: 'google-display-awareness', icon: '🔍', label: 'Google Display - Awareness', category: 'Advertising', aspectRatio: '16:9' },
-  { id: 'google-display-conversion', icon: '🛒', label: 'Google Display - Conversions', category: 'Advertising', aspectRatio: '16:9' },
-  { id: 'tiktok-ad-engagement', icon: '🎵', label: 'TikTok Ad - Engagement', category: 'Advertising', aspectRatio: '9:16' },
-  { id: 'youtube-ad-awareness', icon: '▶️', label: 'YouTube Ad - Awareness', category: 'Advertising', aspectRatio: '16:9' },
+  // Product & E-commerce
+  { id: 'product-hero', icon: '✨', label: 'Product Hero Shot', category: 'Product', aspectRatio: '1:1' },
+  { id: 'product-lifestyle', icon: '🏠', label: 'Lifestyle Product Shot', category: 'Product', aspectRatio: '4:5' },
+  { id: 'product-flatlay', icon: '📐', label: 'Product Flat Lay', category: 'Product', aspectRatio: '1:1' },
+
+  // Social Media
+  { id: 'social-post', icon: '📱', label: 'Social Media Post', category: 'Social', aspectRatio: '1:1' },
+  { id: 'social-story', icon: '📲', label: 'Story / Reel Cover', category: 'Social', aspectRatio: '9:16' },
+  { id: 'social-carousel', icon: '🎠', label: 'Carousel Slide', category: 'Social', aspectRatio: '1:1' },
+
+  // Advertising
+  { id: 'ad-awareness', icon: '📢', label: 'Brand Awareness Ad', category: 'Advertising', aspectRatio: '4:5' },
+  { id: 'ad-conversion', icon: '🎯', label: 'Conversion Ad', category: 'Advertising', aspectRatio: '1:1' },
+  { id: 'ad-retargeting', icon: '🔄', label: 'Retargeting Ad', category: 'Advertising', aspectRatio: '1:1' },
+
+  // Website & Digital
+  { id: 'website-hero', icon: '🖥️', label: 'Website Hero Banner', category: 'Website', aspectRatio: '16:9' },
+  { id: 'website-feature', icon: '💡', label: 'Feature Illustration', category: 'Website', aspectRatio: '16:9' },
+  { id: 'email-header', icon: '📧', label: 'Email Header', category: 'Email', aspectRatio: '16:9' },
+
+  // Brand & Abstract
+  { id: 'brand-texture', icon: '🎨', label: 'Brand Texture / Pattern', category: 'Brand', aspectRatio: '1:1' },
+  { id: 'brand-mood', icon: '🌈', label: 'Brand Mood Visual', category: 'Brand', aspectRatio: '16:9' },
+
+  // Promotional
+  { id: 'promo-sale', icon: '🏷️', label: 'Sale / Promotion', category: 'Promotional', aspectRatio: '1:1' },
+  { id: 'promo-launch', icon: '🚀', label: 'Product Launch', category: 'Promotional', aspectRatio: '4:5' },
+  { id: 'promo-seasonal', icon: '🎉', label: 'Seasonal Campaign', category: 'Promotional', aspectRatio: '1:1' },
 ];
+
+// Map visual approach to relevant preset categories
+const VISUAL_APPROACH_PRESETS: Record<string, string[]> = {
+  'photography': ['product-hero', 'product-lifestyle', 'social-post', 'ad-awareness', 'ad-conversion', 'promo-launch'],
+  'illustration': ['website-feature', 'brand-mood', 'social-carousel', 'email-header', 'ad-awareness'],
+  '3D': ['product-hero', 'brand-texture', 'website-hero', 'ad-awareness', 'promo-launch'],
+  'clean_UI': ['website-feature', 'website-hero', 'social-post', 'email-header', 'ad-conversion'],
+  'abstract': ['brand-texture', 'brand-mood', 'website-hero', 'social-story', 'email-header'],
+  'mixed': ['social-post', 'ad-awareness', 'website-hero', 'promo-sale', 'product-hero', 'brand-mood'],
+};
+
+// Map imagery subjects to additional relevant presets
+const SUBJECT_PRESETS: Record<string, string[]> = {
+  'products': ['product-hero', 'product-lifestyle', 'product-flatlay', 'promo-sale', 'promo-launch'],
+  'people': ['ad-awareness', 'social-post', 'product-lifestyle', 'website-hero'],
+  'lifestyle_scenes': ['product-lifestyle', 'social-post', 'ad-awareness', 'brand-mood'],
+  'UI_screenshots': ['website-feature', 'website-hero', 'ad-conversion', 'social-carousel'],
+  'abstract_shapes': ['brand-texture', 'brand-mood', 'email-header', 'website-hero'],
+  'data_visualizations': ['website-feature', 'ad-conversion', 'social-carousel', 'email-header'],
+  'landscapes': ['brand-mood', 'website-hero', 'social-story', 'ad-awareness'],
+};
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -92,83 +144,200 @@ const PRESET_TEMPLATES: PresetTemplate[] = [
 
 function buildBrandContext(brand: Brand): string {
   const parts: string[] = [];
-  
+
   parts.push(`BRAND: ${brand.name}`);
   if (brand.slogan) parts.push(`Tagline: "${brand.slogan}"`);
   if (brand.domain) parts.push(`Domain: ${brand.domain}`);
-  
+
   if (brand.styleguide?.summary) {
     parts.push(`\nWHAT THIS BRAND DOES:\n${brand.styleguide.summary}`);
-    parts.push(`\nThis description is essential - use it to understand what ${brand.name} does, their industry, and their target audience.`);
   }
-  
+
+  if (brand.styleguide?.industry) {
+    parts.push(`Industry: ${brand.styleguide.industry}`);
+  }
+
+  if (brand.styleguide?.keyServices?.length) {
+    parts.push(`Key Services/Products: ${brand.styleguide.keyServices.join(', ')}`);
+  }
+
+  // Add ad personality - this is the key differentiator
+  const adPersonality = brand.styleguide?.ad_personality;
+  if (adPersonality) {
+    parts.push(`\nBRAND VISUAL PERSONALITY (extracted from their website):`);
+    if (adPersonality.visual_approach) {
+      parts.push(`- Visual Style: ${adPersonality.visual_approach.replace('_', ' ')}`);
+    }
+    if (adPersonality.human_presence) {
+      parts.push(`- Human Presence: ${adPersonality.human_presence}`);
+    }
+    if (adPersonality.color_treatment) {
+      parts.push(`- Color Treatment: ${adPersonality.color_treatment.replace(/_/g, ' ')}`);
+    }
+    if (adPersonality.composition) {
+      parts.push(`- Composition Style: ${adPersonality.composition}`);
+    }
+    if (adPersonality.copy_style) {
+      parts.push(`- Copy Style: ${adPersonality.copy_style.replace(/_/g, ' ')}`);
+    }
+    if (adPersonality.tone) {
+      parts.push(`- Tone: ${adPersonality.tone}`);
+    }
+    if (adPersonality.imagery_subjects?.length) {
+      parts.push(`- Common Imagery: ${adPersonality.imagery_subjects.join(', ')}`);
+    }
+  }
+
   if (brand.voice) {
-    parts.push(`\nBRAND VOICE & TONE:`);
+    parts.push(`\nBRAND VOICE:`);
     if (brand.voice.formality) parts.push(`- Formality: ${brand.voice.formality}`);
     if (brand.voice.energy) parts.push(`- Energy: ${brand.voice.energy}`);
     if (brand.voice.adjectives?.length) {
-      parts.push(`- Adjectives: ${brand.voice.adjectives.join(', ')}`);
+      parts.push(`- Brand Adjectives: ${brand.voice.adjectives.join(', ')}`);
     }
     if (brand.voice.keywords?.length) {
       parts.push(`- Keywords: ${brand.voice.keywords.join(', ')}`);
     }
   }
-  
+
   return parts.join('\n');
 }
 
-async function generatePresetsWithLLM(brand: Brand): Promise<SmartPreset[]> {
+function selectRelevantPresets(brand: Brand): PresetTemplate[] {
+  const adPersonality = brand.styleguide?.ad_personality;
+  const relevantIds = new Set<string>();
+
+  // If we have ad_personality, use it to select presets
+  if (adPersonality) {
+    // Add presets based on visual approach
+    if (adPersonality.visual_approach && VISUAL_APPROACH_PRESETS[adPersonality.visual_approach]) {
+      VISUAL_APPROACH_PRESETS[adPersonality.visual_approach].forEach(id => relevantIds.add(id));
+    }
+
+    // Add presets based on imagery subjects
+    if (adPersonality.imagery_subjects?.length) {
+      adPersonality.imagery_subjects.forEach(subject => {
+        const normalizedSubject = subject.toLowerCase().replace(/\s+/g, '_');
+        if (SUBJECT_PRESETS[normalizedSubject]) {
+          SUBJECT_PRESETS[normalizedSubject].forEach(id => relevantIds.add(id));
+        }
+      });
+    }
+  }
+
+  // If we got presets from ad_personality, use those
+  if (relevantIds.size >= 6) {
+    return PRESET_TEMPLATES.filter(p => relevantIds.has(p.id)).slice(0, 10);
+  }
+
+  // Fallback: use summary to guess brand type and select presets
+  const summary = (brand.styleguide?.summary || '').toLowerCase();
+
+  if (summary.includes('saas') || summary.includes('software') || summary.includes('platform') || summary.includes('app')) {
+    // SaaS/Tech - focus on UI, features, website assets
+    ['website-feature', 'website-hero', 'social-post', 'ad-conversion', 'email-header', 'brand-mood'].forEach(id => relevantIds.add(id));
+  } else if (summary.includes('shop') || summary.includes('store') || summary.includes('product') || summary.includes('e-commerce') || summary.includes('retail')) {
+    // E-commerce - focus on products
+    ['product-hero', 'product-lifestyle', 'product-flatlay', 'promo-sale', 'ad-conversion', 'social-post'].forEach(id => relevantIds.add(id));
+  } else if (summary.includes('agency') || summary.includes('consulting') || summary.includes('service')) {
+    // Services - focus on brand awareness, trust
+    ['ad-awareness', 'website-hero', 'social-post', 'brand-mood', 'email-header', 'promo-launch'].forEach(id => relevantIds.add(id));
+  } else if (summary.includes('food') || summary.includes('restaurant') || summary.includes('cafe') || summary.includes('coffee')) {
+    // Food & Beverage
+    ['product-hero', 'product-lifestyle', 'social-post', 'social-story', 'promo-sale', 'ad-awareness'].forEach(id => relevantIds.add(id));
+  } else {
+    // Default mix - balanced selection
+    ['social-post', 'ad-awareness', 'website-hero', 'brand-mood', 'promo-sale', 'email-header'].forEach(id => relevantIds.add(id));
+  }
+
+  return PRESET_TEMPLATES.filter(p => relevantIds.has(p.id)).slice(0, 10);
+}
+
+async function generatePresetsWithLLM(brand: Brand, relevantPresets: PresetTemplate[]): Promise<SmartPreset[]> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY not set");
   }
 
   const brandContext = buildBrandContext(brand);
-  const availablePresetIds = PRESET_TEMPLATES.map(p => p.id).join(', ');
+  const adPersonality = brand.styleguide?.ad_personality;
 
-  const systemPrompt = `You are a creative advertising strategist that generates personalized ad concepts for brands.
+  // Build visual style guidance based on ad_personality
+  let visualGuidance = '';
+  if (adPersonality) {
+    const styleNotes: string[] = [];
+    if (adPersonality.visual_approach) {
+      styleNotes.push(`visual style should be ${adPersonality.visual_approach.replace('_', ' ')}`);
+    }
+    if (adPersonality.color_treatment) {
+      styleNotes.push(`colors should feel ${adPersonality.color_treatment.replace(/_/g, ' ')}`);
+    }
+    if (adPersonality.tone) {
+      styleNotes.push(`overall tone is ${adPersonality.tone}`);
+    }
+    if (adPersonality.composition) {
+      styleNotes.push(`composition tends to be ${adPersonality.composition}`);
+    }
+    if (styleNotes.length > 0) {
+      visualGuidance = `\nVISUAL STYLE TO MATCH: ${styleNotes.join(', ')}.`;
+    }
+  }
 
-Your task: Generate 6-8 smart ad presets (image generation prompts) that are highly relevant to the given brand. Each preset must be for a SPECIFIC AD TYPE with a CLEAR OBJECTIVE and include a CREATIVE CONCEPT/IDEA related to what the brand does.
+  // Build the available presets list with descriptions
+  const presetDescriptions = relevantPresets.map(p => `- ${p.id}: ${p.label} (${p.aspectRatio})`).join('\n');
+
+  const systemPrompt = `You are a creative director generating image prompts for ${brand.name}. Your prompts will be used to generate marketing images with AI.
 
 ${brandContext}
+${visualGuidance}
 
-CRITICAL REQUIREMENTS:
-1. Each preset MUST be for an AD (not generic posts or banners)
-2. Each preset must specify the PLATFORM (Facebook, Instagram, LinkedIn, Google, TikTok, YouTube) and OBJECTIVE (Awareness, Conversion, Engagement, Lead Gen)
-3. Each prompt must include a SPECIFIC CREATIVE CONCEPT/IDEA that relates to what ${brand.name} does - not generic marketing slop
-4. The creative concept should be tied to the brand's product/service, target audience, or unique value proposition
-5. Match the brand's voice and tone exactly (${brand.voice?.formality || 'professional'} formality, ${brand.voice?.energy || 'moderate'} energy)
-6. Use the brand name naturally: "${brand.name}"
-7. Prompts should be 15-25 words, clear and direct
-8. Consider the brand's industry, what they actually do, and their target audience
-9. Each ad should have a clear creative angle/idea - think about what problem the brand solves, what makes them unique, or what their customers care about
+YOUR TASK: Generate 6-8 image prompts that are SPECIFICALLY tailored to ${brand.name}. Each prompt must reference something SPECIFIC about this brand - their product, their industry, their customers, or their unique value.
 
-EXAMPLES OF GOOD AD CONCEPTS:
-- For a SaaS tool: "Facebook awareness ad showing how [brand] transforms chaotic workflows into organized productivity"
-- For an e-commerce brand: "Instagram conversion ad featuring a customer's before/after transformation using [brand]'s product"
-- For a service: "LinkedIn lead gen ad illustrating the hidden costs of not using [brand]'s expertise"
+AVAILABLE PRESET TYPES (choose from these):
+${presetDescriptions}
 
-BAD EXAMPLES (too generic):
-- "Create a Facebook ad for [brand]" ❌
-- "Instagram post showcasing [brand]" ❌
-- "LinkedIn banner for [brand]" ❌
+CRITICAL RULES:
+1. Every prompt MUST mention something specific from the brand description above
+2. Reference their actual product/service, not generic placeholders
+3. Match the brand's visual personality exactly
+4. Each prompt should paint a clear mental picture - what does the viewer SEE?
+5. Prompts should be 15-30 words, descriptive and specific
+6. Do NOT use generic phrases like "showcasing the brand" or "highlighting features"
 
-You must respond with a valid JSON object with this structure:
+EXAMPLES SHOWING THE DIFFERENCE:
+
+For a coffee subscription brand "Bean Box":
+❌ BAD: "Product hero shot showcasing Bean Box products"
+✅ GOOD: "Fresh roasted coffee beans spilling from a Bean Box subscription package, morning light, steam rising from a cup nearby"
+
+For a project management SaaS "Taskflow":
+❌ BAD: "Website hero showing Taskflow's features"
+✅ GOOD: "Split screen showing chaotic sticky notes transforming into clean Taskflow boards, satisfying before/after moment"
+
+For a fitness app "FitPulse":
+❌ BAD: "Social media post for FitPulse engagement"
+✅ GOOD: "Runner checking FitPulse stats mid-workout, city sunrise backdrop, sense of personal achievement and data-driven progress"
+
+Notice how good prompts:
+- Reference the SPECIFIC product (coffee beans, project boards, fitness stats)
+- Create a SCENE the viewer can visualize
+- Connect to the EXPERIENCE of using the product
+
+Respond with valid JSON:
 {
   "presets": [
     {
-      "preset_id": "facebook-ad-awareness",
-      "prompt": "Facebook brand awareness ad showing [specific creative concept related to what brand does]",
-      "why_relevant": "This creative concept connects to [specific aspect of brand/product] and targets [specific audience/need]"
-    },
-    ...
+      "preset_id": "product-hero",
+      "prompt": "Your specific, vivid prompt here",
+      "why_relevant": "Brief explanation of why this concept fits this brand"
+    }
   ]
-}
+}`;
 
-Available preset_ids: ${availablePresetIds}
+  const userMessage = `Generate 6-8 image prompts for ${brand.name}.
 
-Generate 6-8 ad presets with specific creative concepts. Each must have a clear idea behind it related to what ${brand.name} does, not generic marketing.`;
+Remember: Each prompt must reference something SPECIFIC about what ${brand.name} does. Read their description carefully and make sure every prompt connects to their actual product, service, or customer experience.
 
-  const userMessage = `Generate 6-8 ad presets for ${brand.name}. Each preset must be for a specific ad platform/objective and include a creative concept/idea that relates to what ${brand.name} does - their product, service, or value proposition. Avoid generic marketing slop. Make each ad concept specific and relevant to the brand.`;
+What specific thing does ${brand.name} offer? Make sure that shows up in your prompts.`;
 
   console.log("Calling OpenAI to generate smart presets...");
   
@@ -222,52 +391,77 @@ Generate 6-8 ad presets with specific creative concepts. Each must have a clear 
   }
 }
 
-function generateFallbackPresets(brand: Brand): Array<{ preset: PresetTemplate; prompt: string; whyRelevant?: string }> {
-  const tone = brand.voice?.energy === 'high' ? 'energetic' : 
-               brand.voice?.formality === 'professional' ? 'professional' : 
-               'modern';
-  
-  const summary = brand.styleguide?.summary?.toLowerCase() || '';
-  let creativeConcept = '';
-  let whyRelevant = '';
-  
-  // Generate product-specific creative concepts based on brand type
-  if (summary.includes('saas') || summary.includes('software') || summary.includes('app')) {
-    creativeConcept = `showing how ${brand.name} transforms workflows and boosts productivity`;
-    whyRelevant = 'Highlights the core value proposition of efficiency and productivity';
-  } else if (summary.includes('e-commerce') || summary.includes('shop') || summary.includes('store')) {
-    creativeConcept = `featuring a customer's transformation or success story with ${brand.name}'s products`;
-    whyRelevant = 'Social proof and customer success drive conversions';
-  } else if (summary.includes('service') || summary.includes('consulting') || summary.includes('agency')) {
-    creativeConcept = `illustrating the problem ${brand.name} solves and the results clients achieve`;
-    whyRelevant = 'Problem-solution framing resonates with service buyers';
-  } else if (summary.includes('education') || summary.includes('course') || summary.includes('learning')) {
-    creativeConcept = `showing the learning journey and outcomes students achieve with ${brand.name}`;
-    whyRelevant = 'Outcome-focused messaging drives education conversions';
-  } else if (brand.voice?.keywords?.length) {
-    const keyword = brand.voice.keywords[0];
-    creativeConcept = `highlighting how ${brand.name} delivers ${keyword} to customers`;
-    whyRelevant = `Connects to your brand's core value: ${keyword}`;
-  } else {
-    creativeConcept = `showcasing ${brand.name}'s unique value proposition and customer benefits`;
-    whyRelevant = 'Focuses on what makes your brand different';
-  }
-  
-  // Select ad-focused templates
-  const adTemplates = PRESET_TEMPLATES.filter(t => t.category === 'Advertising').slice(0, 6);
-  
-  return adTemplates.map(template => {
-    // Extract objective from label
-    const objective = template.label.includes('Awareness') ? 'brand awareness' :
-                     template.label.includes('Conversion') ? 'conversions' :
-                     template.label.includes('Engagement') ? 'engagement' :
-                     template.label.includes('Lead') ? 'lead generation' : 'awareness';
-    
-    return {
-      preset: template,
-      prompt: `${template.label} ${creativeConcept} for ${brand.name}`,
-      whyRelevant: whyRelevant || `Targets ${objective} with a concept relevant to your brand`,
-    };
+function generateFallbackPresets(brand: Brand, relevantPresets: PresetTemplate[]): Array<{ preset: PresetTemplate; prompt: string; whyRelevant?: string }> {
+  const summary = brand.styleguide?.summary || '';
+  const adPersonality = brand.styleguide?.ad_personality;
+
+  // Build a base concept from what we know about the brand
+  const brandDescription = summary.length > 20 ? summary.substring(0, 100) : brand.name;
+
+  // Generate prompts based on preset type and brand info
+  return relevantPresets.slice(0, 6).map(template => {
+    let prompt = '';
+    let whyRelevant = '';
+
+    switch (template.id) {
+      case 'product-hero':
+        prompt = `Hero shot of ${brand.name} product, clean background, professional lighting, ${adPersonality?.color_treatment?.replace(/_/g, ' ') || 'vibrant'} colors`;
+        whyRelevant = 'Showcases your product as the hero';
+        break;
+      case 'product-lifestyle':
+        prompt = `${brand.name} product in real-world use, lifestyle setting, natural lighting, authentic moment`;
+        whyRelevant = 'Shows your product in context';
+        break;
+      case 'social-post':
+        prompt = `Engaging social media visual for ${brand.name}, ${adPersonality?.tone || 'modern'} tone, eye-catching composition`;
+        whyRelevant = 'Perfect for social media engagement';
+        break;
+      case 'social-story':
+        prompt = `Vertical story format for ${brand.name}, bold typography space, ${adPersonality?.composition || 'dynamic'} layout`;
+        whyRelevant = 'Optimized for stories and reels';
+        break;
+      case 'ad-awareness':
+        prompt = `Brand awareness ad for ${brand.name}, memorable visual, ${adPersonality?.visual_approach?.replace('_', ' ') || 'clean'} style`;
+        whyRelevant = 'Builds brand recognition';
+        break;
+      case 'ad-conversion':
+        prompt = `Conversion-focused ad for ${brand.name}, clear value proposition, compelling visual with action focus`;
+        whyRelevant = 'Drives customer action';
+        break;
+      case 'website-hero':
+        prompt = `Website hero banner for ${brand.name}, wide format, ${adPersonality?.composition || 'balanced'} composition, space for headline`;
+        whyRelevant = 'Makes a strong first impression';
+        break;
+      case 'website-feature':
+        prompt = `Feature illustration for ${brand.name}, clean and modern, explains key benefit visually`;
+        whyRelevant = 'Communicates features clearly';
+        break;
+      case 'brand-mood':
+        prompt = `Abstract brand mood visual for ${brand.name}, ${adPersonality?.color_treatment?.replace(/_/g, ' ') || 'harmonious'} palette, evokes brand feeling`;
+        whyRelevant = 'Captures your brand essence';
+        break;
+      case 'brand-texture':
+        prompt = `Brand texture or pattern for ${brand.name}, seamless, uses brand colors, subtle and sophisticated`;
+        whyRelevant = 'Adds visual richness to designs';
+        break;
+      case 'promo-sale':
+        prompt = `Promotional sale graphic for ${brand.name}, urgent but on-brand, space for offer text`;
+        whyRelevant = 'Drives promotional campaigns';
+        break;
+      case 'promo-launch':
+        prompt = `Product launch visual for ${brand.name}, exciting reveal moment, ${adPersonality?.tone || 'energetic'} feeling`;
+        whyRelevant = 'Creates launch excitement';
+        break;
+      case 'email-header':
+        prompt = `Email header banner for ${brand.name}, horizontal format, clean and professional, brand colors`;
+        whyRelevant = 'Enhances email marketing';
+        break;
+      default:
+        prompt = `Marketing visual for ${brand.name}, ${adPersonality?.visual_approach?.replace('_', ' ') || 'professional'} style`;
+        whyRelevant = 'Versatile marketing asset';
+    }
+
+    return { preset: template, prompt, whyRelevant };
   });
 }
 
@@ -320,12 +514,16 @@ Deno.serve(async (req: Request) => {
     const brand = brandData as Brand;
     console.log(`Generating smart presets for brand: ${brand.name}`);
 
+    // Select relevant presets based on brand's visual personality
+    const relevantPresets = selectRelevantPresets(brand);
+    console.log(`Selected ${relevantPresets.length} relevant preset types for ${brand.name}`);
+
     let smartPresets: SmartPreset[] = [];
     let useFallback = false;
 
     // Try LLM generation first
     try {
-      smartPresets = await generatePresetsWithLLM(brand);
+      smartPresets = await generatePresetsWithLLM(brand, relevantPresets);
     } catch (error) {
       console.error("LLM generation failed, using fallback:", error);
       useFallback = true;
@@ -336,7 +534,7 @@ Deno.serve(async (req: Request) => {
       ? smartPresets.map(llmPreset => {
           const template = PRESET_TEMPLATES.find(t => t.id === llmPreset.preset_id);
           if (!template) return null;
-          
+
           return {
             id: template.id,
             icon: template.icon,
@@ -347,7 +545,7 @@ Deno.serve(async (req: Request) => {
             smartContext: llmPreset.why_relevant ? { whyRelevant: llmPreset.why_relevant } : undefined,
           };
         }).filter(Boolean)
-      : generateFallbackPresets(brand).map(fallback => ({
+      : generateFallbackPresets(brand, relevantPresets).map(fallback => ({
           id: fallback.preset.id,
           icon: fallback.preset.icon,
           label: fallback.preset.label,

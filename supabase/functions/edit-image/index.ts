@@ -216,16 +216,31 @@ function getBestLogoUrl(brand: Brand): string | null {
 
   if (brand.all_logos?.length) {
     const rasterLogos = brand.all_logos
-      .filter(logo => logo.url && isLikelyRaster(logo.url))
+      .filter(logo => {
+        if (!logo.url || !isLikelyRaster(logo.url)) return false;
+        // Exclude og-image - these are social preview images, not logos
+        if (logo.type === 'og-image') return false;
+        return true;
+      })
       .sort((a, b) => {
-        const getPriority = (url: string): number => {
+        // First priority: type (logo > favicon > other)
+        const getTypePriority = (type?: string): number => {
+          if (type === 'logo') return 0;
+          if (type === 'favicon' || type === 'icon') return 2;
+          return 1; // Other types (like wordmark) in the middle
+        };
+        const typeDiff = getTypePriority(a.type) - getTypePriority(b.type);
+        if (typeDiff !== 0) return typeDiff;
+
+        // Second priority: format (PNG > JPG > WEBP > other)
+        const getFormatPriority = (url: string): number => {
           const lower = url.toLowerCase();
           if (lower.includes('.png')) return 0;
           if (lower.includes('.jpg') || lower.includes('.jpeg')) return 1;
           if (lower.includes('.webp')) return 2;
           return 3;
         };
-        return getPriority(a.url) - getPriority(b.url);
+        return getFormatPriority(a.url) - getFormatPriority(b.url);
       });
 
     if (rasterLogos.length > 0) {

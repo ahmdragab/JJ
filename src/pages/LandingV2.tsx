@@ -1,8 +1,34 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Sparkles, Globe, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
 import alwanLogo from '../fav.png';
+
+// Example gallery images
+import exampleTabby from '../examples/tabby.png';
+import exampleDeel1 from '../examples/deel-1.png';
+import exampleDeel2 from '../examples/deel-2.png';
+import exampleDeel3 from '../examples/deel-3.png';
+import exampleLattice from '../examples/lattice.png';
+import exampleLattice2 from '../examples/lattice-2.png';
+import exampleRippling from '../examples/rippling-1.png';
+import exampleDownload from '../examples/download.png';
+import exampleDownload1 from '../examples/download (1).png';
+import exampleDownload2 from '../examples/download (2).png';
+import exampleDownload3 from '../examples/download (3).png';
+
+const galleryImages = [
+  exampleTabby,
+  exampleDeel1,
+  exampleLattice,
+  exampleDeel2,
+  exampleRippling,
+  exampleLattice2,
+  exampleDeel3,
+  exampleDownload1,
+  exampleDownload2,
+  exampleDownload3,
+];
 
 // ============================================================================
 // SHARED TYPES & HOOKS
@@ -78,19 +104,43 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const { styles: showcaseStyles } = useShowcaseStyles(6);
-  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [plansLoading, setPlansLoading] = useState(true);
+  const [sectionInView, setSectionInView] = useState(false);
+  const howItWorksSectionRef = useRef<HTMLElement>(null);
 
-  // Auto-rotate through steps
+  // Intersection Observer to detect when "How it works" section is in view
   useEffect(() => {
+    const section = howItWorksSectionRef.current;
+    if (!section) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setSectionInView(true);
+          setActiveStep(0); // Reset to step 0 when section comes into view
+        } else {
+          setSectionInView(false);
+        }
+      },
+      { threshold: 0.3 } // Trigger when 30% of section is visible
+    );
+
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, []);
+
+  // Auto-rotate through steps only when section is in view
+  useEffect(() => {
+    if (!sectionInView) return;
+
     const interval = setInterval(() => {
       setActiveStep((prev) => (prev + 1) % 3);
-    }, 3000);
+    }, 5000); // 5s to match animation duration
     return () => clearInterval(interval);
-  }, []);
+  }, [sectionInView]);
 
   // Load plans from Supabase
   useEffect(() => {
@@ -162,15 +212,6 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
     },
   ];
 
-  // Card positions for showcase
-  const cardLayoutB = [
-    { top: '5%', left: '5%', rotate: -8, width: 'w-40', zIndex: 20 },
-    { top: '15%', right: '5%', rotate: 6, width: 'w-44', zIndex: 25 },
-    { top: '45%', left: '0%', rotate: -4, width: 'w-36', zIndex: 15 },
-    { top: '35%', right: '10%', rotate: 10, width: 'w-48', zIndex: 30 },
-    { bottom: '5%', left: '15%', rotate: -6, width: 'w-40', zIndex: 20 },
-    { bottom: '10%', right: '0%', rotate: 4, width: 'w-36', zIndex: 15 },
-  ];
 
   return (
     <div className="relative overflow-hidden bg-white">
@@ -308,45 +349,28 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                 </div>
               </div>
 
-              {/* Right: Card showcase */}
-              <div className="relative h-[450px] lg:h-[550px] hidden lg:block">
-                {showcaseStyles.slice(0, 6).map((style, index) => {
-                  const pos = cardLayoutB[index];
-                  const isHovered = hoveredCard === index;
-                  return (
-                    <div
-                      key={style.id}
-                      className={`absolute ${pos.width} rounded-xl overflow-hidden transition-all duration-500 cursor-pointer group`}
-                      style={{
-                        top: pos.top,
-                        bottom: pos.bottom,
-                        left: pos.left,
-                        right: pos.right,
-                        transform: `rotate(${isHovered ? pos.rotate * 0.3 : pos.rotate}deg) scale(${isHovered ? 1.05 : 1})`,
-                        zIndex: isHovered ? 50 : pos.zIndex,
-                        boxShadow: isHovered
-                          ? '0 25px 50px -12px rgba(0, 0, 0, 0.2)'
-                          : '0 4px 20px -4px rgba(0, 0, 0, 0.1)',
-                      }}
-                      onMouseEnter={() => setHoveredCard(index)}
-                      onMouseLeave={() => setHoveredCard(null)}
-                    >
-                      <img
-                        src={style.url}
-                        alt={style.name}
-                        className="w-full h-auto block rounded-xl"
-                        loading="lazy"
-                      />
-                    </div>
-                  );
-                })}
+              {/* Right: 2x2 grid of example ads */}
+              <div className="hidden lg:grid grid-cols-2 gap-4 w-full max-w-md">
+                {[exampleDownload, exampleLattice, exampleTabby, exampleDeel2].map((img, index) => (
+                  <div
+                    key={index}
+                    className="hero-grid-card group rounded-2xl overflow-hidden shadow-lg"
+                  >
+                    <img
+                      src={img}
+                      alt={`Ad example ${index + 1}`}
+                      className="w-full h-auto block transition-transform duration-500 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </section>
 
         {/* How it works - Dynamic Animated Section */}
-        <section className="px-6 sm:px-8 lg:px-16 py-20 lg:py-28 bg-gray-50">
+        <section ref={howItWorksSectionRef} className="px-6 sm:px-8 lg:px-16 py-20 lg:py-28 bg-gray-50">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
               <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4"
@@ -404,7 +428,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                       <div className="mt-4 h-1 bg-gray-100 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-[#3531B7] rounded-full animate-progress"
-                          style={{ animation: 'progress 3s linear' }}
+                          style={{ animation: 'progress 5s linear' }}
                         />
                       </div>
                     )}
@@ -414,10 +438,12 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
               {/* Right: Visual showcase */}
               <div className="relative h-[400px] lg:h-[450px] rounded-3xl overflow-hidden bg-white shadow-2xl shadow-gray-200/50">
-                {/* Step 1: URL Input visual */}
-                <div className={`absolute inset-0 p-8 transition-all duration-700 ${
-                  activeStep === 0 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
-                }`}>
+                {/* Step 1: URL Input visual - key forces remount to restart animations */}
+                <div
+                  key={sectionInView && activeStep === 0 ? 'step1-active' : 'step1-inactive'}
+                  className={`absolute inset-0 p-8 transition-all duration-700 ${
+                    activeStep === 0 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
+                  }`}>
                   <div className="h-full flex flex-col items-center justify-center">
                     <div className="w-full max-w-md">
                       {/* Browser mockup */}
@@ -428,17 +454,16 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="w-3 h-3 rounded-full bg-yellow-400" />
                             <div className="w-3 h-3 rounded-full bg-green-400" />
                           </div>
-                          <div className="flex-1 bg-white rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2 relative overflow-hidden">
+                          <div className="flex-1 bg-white rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2">
                             <Globe className="w-4 h-4 text-gray-400" />
-                            <span className="animate-paste flex-1">
+                            <span className="animate-paste">
                               yourcompany.com
                             </span>
-                            {/* Paste highlight effect */}
-                            <div className="absolute inset-0 bg-[#3531B7]/10 animate-paste-highlight rounded-lg pointer-events-none" />
                           </div>
-                          {/* Go button */}
-                          <button className="px-3 py-2 bg-[#3531B7] text-white text-xs font-semibold rounded-lg animate-button-click">
+                          {/* Go button with glow effect */}
+                          <button className="px-3 py-2 bg-[#3531B7] text-white text-xs font-semibold rounded-lg animate-button-glow relative overflow-hidden">
                             Go
+                            <div className="absolute inset-0 bg-white/30 animate-button-shine rounded-lg" />
                           </button>
                         </div>
                         <div className="bg-white rounded-lg m-1 p-6 h-48 flex items-center justify-center">
@@ -447,13 +472,6 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="h-3 w-32 bg-gray-200 rounded mx-auto mb-2" />
                             <div className="h-2 w-24 bg-gray-100 rounded mx-auto" />
                           </div>
-                        </div>
-
-                        {/* Animated cursor */}
-                        <div className="absolute animate-cursor pointer-events-none" style={{ top: '20px', right: '80px' }}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="drop-shadow-md">
-                            <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 0 0-.85.36Z" fill="#1a1a1a" stroke="#fff" strokeWidth="1.5"/>
-                          </svg>
                         </div>
                       </div>
                     </div>
@@ -544,18 +562,38 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
           </div>
         </section>
 
-        {/* Platform logos */}
-        <section className="px-6 sm:px-8 lg:px-16 py-16 bg-white">
-          <div className="max-w-4xl mx-auto text-center">
-            <p className="text-sm text-gray-400 mb-8" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              Generate ads for every platform
+        {/* Gallery - Ads created using Alwan */}
+        <section className="py-16 lg:py-20 bg-white overflow-hidden">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              Ads created using Alwan
+            </h2>
+            <p className="text-gray-400 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              Real examples from real brands
             </p>
-            <div className="flex flex-wrap justify-center items-center gap-8 lg:gap-12">
-              {['Meta', 'Google', 'TikTok', 'LinkedIn', 'X', 'YouTube'].map((platform) => (
-                <span key={platform} className="text-xl font-semibold text-gray-300 hover:text-gray-900 transition-colors cursor-default"
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                  {platform}
-                </span>
+          </div>
+
+          {/* Scrolling gallery with micro-interactions */}
+          <div className="relative">
+            {/* Gradient fade edges */}
+            <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none" />
+            <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none" />
+
+            {/* Scrolling container */}
+            <div className="flex items-start gap-5 animate-gallery-scroll hover:[animation-play-state:paused]">
+              {/* Double the images for seamless loop */}
+              {[...galleryImages, ...galleryImages].map((img, index) => (
+                <div
+                  key={index}
+                  className="gallery-card flex-shrink-0 w-56 sm:w-64 lg:w-72 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer group"
+                >
+                  <img
+                    src={img}
+                    alt={`Ad example ${(index % galleryImages.length) + 1}`}
+                    className="w-full h-auto block transition-transform duration-500 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                </div>
               ))}
             </div>
           </div>
@@ -816,58 +854,69 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
           animation: float-up 3s ease-in-out infinite;
         }
         @keyframes paste {
-          0%, 25% { opacity: 0; transform: scale(0.95); }
+          0%, 20% { opacity: 0; transform: scale(0.95); }
           35% { opacity: 1; transform: scale(1.02); }
           45%, 100% { opacity: 1; transform: scale(1); }
         }
         .animate-paste {
-          animation: paste 4s ease-out infinite;
+          animation: paste 5s ease-out infinite;
         }
-        @keyframes paste-highlight {
-          0%, 25% { opacity: 0; }
-          35% { opacity: 1; }
-          50% { opacity: 1; }
-          60%, 100% { opacity: 0; }
-        }
-        .animate-paste-highlight {
-          animation: paste-highlight 4s ease-out infinite;
-        }
-        @keyframes cursor-move {
-          0%, 40% {
-            opacity: 0;
-            transform: translate(0, 0);
+        @keyframes button-glow {
+          0%, 45% {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
           }
-          50% {
-            opacity: 1;
-            transform: translate(0, 0);
-          }
-          70% {
-            opacity: 1;
-            transform: translate(40px, 12px);
-          }
-          75% {
-            opacity: 1;
-            transform: translate(40px, 12px) scale(0.9);
-          }
-          80%, 90% {
-            opacity: 1;
-            transform: translate(40px, 12px);
+          60%, 80% {
+            box-shadow: 0 0 20px rgba(53, 49, 183, 0.5), 0 0 40px rgba(53, 49, 183, 0.3);
           }
           100% {
-            opacity: 0;
-            transform: translate(40px, 12px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
           }
         }
-        .animate-cursor {
-          animation: cursor-move 4s ease-in-out infinite;
+        .animate-button-glow {
+          animation: button-glow 5s ease-out infinite;
         }
-        @keyframes button-click {
-          0%, 70% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-          75% { transform: scale(0.95); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-          80%, 100% { transform: scale(1); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        @keyframes button-shine {
+          0%, 45% {
+            opacity: 0;
+            transform: translateX(-100%);
+          }
+          55% {
+            opacity: 1;
+            transform: translateX(0%);
+          }
+          65%, 100% {
+            opacity: 0;
+            transform: translateX(100%);
+          }
         }
-        .animate-button-click {
-          animation: button-click 4s ease-out infinite;
+        .animate-button-shine {
+          animation: button-shine 5s ease-out infinite;
+        }
+        @keyframes gallery-scroll {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-50%);
+          }
+        }
+        .animate-gallery-scroll {
+          animation: gallery-scroll 40s linear infinite;
+        }
+        .gallery-card {
+          transform: translateY(0) rotate(0deg);
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+        }
+        .gallery-card:hover {
+          transform: translateY(-8px) rotate(1deg);
+        }
+        /* Hero grid cards */
+        .hero-grid-card {
+          transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+        }
+        .hero-grid-card:hover {
+          transform: translateY(-6px) scale(1.02);
+          box-shadow: 0 20px 40px -12px rgba(53, 49, 183, 0.2);
         }
       `}</style>
     </div>

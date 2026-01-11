@@ -190,7 +190,7 @@ export function Studio({ brand }: { brand: Brand }) {
   // Variations mode - generate 3 variations instead of 1
   const [variationsMode, setVariationsMode] = useState(true); // ON by default
   const [comparing, setComparing] = useState(false);
-  const [savingComparison, setSavingComparison] = useState<string | null>(null);
+  const [savingComparison, setSavingComparison] = useState<Set<string>>(new Set());
   const [savedVersions, setSavedVersions] = useState<Set<string>>(new Set()); // Track saved variations
   // Debug info type for generation diagnostics
   type GenerationDebugInfo = {
@@ -206,9 +206,9 @@ export function Studio({ brand }: { brand: Brand }) {
   };
 
   const [comparisonResults, setComparisonResults] = useState<{
-    v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null;
-    v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null;
-    v3: { image_base64: string; prompt_used?: string; debug?: GenerationDebugInfo } | null;
+    v1: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null | 'loading';
+    v2: { image_base64: string; design_type?: string; gpt_prompt_info?: GPTPromptInfo; debug?: GenerationDebugInfo } | null | 'loading';
+    v3: { image_base64: string; prompt_used?: string; debug?: GenerationDebugInfo } | null | 'loading';
   } | null>(null);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   
@@ -471,129 +471,12 @@ export function Studio({ brand }: { brand: Brand }) {
     return { tag, IconComponent };
   };
 
-  const handlePresetClick = async (preset: SmartPreset) => {
-    if (generating) return; // Don't allow multiple generations at once
-    
-    // Set the prompt and aspect ratio
+  const handlePresetClick = (preset: SmartPreset) => {
+    // Set the prompt and aspect ratio, let user edit and click Create
     setPrompt(preset.prompt);
     setSelectedAspectRatio(preset.aspectRatio);
     setSelectedPlatform(null); // Clear platform when preset is selected
-    
-    // Immediately start generating with V1
-    setGenerating(true);
-    
-    try {
-      if (!user?.id) {
-        throw new Error('Not authenticated');
-      }
-
-      const { data: imageRecord, error: insertError } = await supabase
-        .from('images')
-        .insert({
-          user_id: user.id,
-          brand_id: brand.id,
-          template_id: null,
-          prompt: preset.prompt,
-          status: 'generating',
-          metadata: {
-            aspect_ratio: preset.aspectRatio === 'auto' ? undefined : preset.aspectRatio,
-          },
-          conversation: [],
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      // Add to images list optimistically
-      setImages(prev => [imageRecord, ...prev]);
-      setPrompt('');
-      localStorage.removeItem(STORAGE_KEY);
-      setInputFocused(false);
-      setSelectedAssets([]);
-      setSelectedReferences([]);
-      setSelectedStyles([]);
-      setSelectedPlatform(null);
-
-      // Combine references and styles
-      const allReferences = [
-        ...selectedReferences.map(r => ({
-          id: r.id,
-          url: r.url,
-          name: r.name,
-          category: r.category,
-          role: 'style_reference' as const,
-        })),
-        ...selectedStyles.map(s => ({
-          id: s.id,
-          url: s.url,
-          name: s.name,
-          category: s.category,
-          role: 'style_reference' as const,
-          style_description: s.style_description,
-        })),
-      ];
-
-      // Always use V1 for presets
-      const authHeaders = await getAuthHeaders();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`,
-        {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({
-            prompt: preset.prompt,
-            brandId: brand.id,
-            imageId: imageRecord.id,
-            aspectRatio: preset.aspectRatio === 'auto' ? undefined : preset.aspectRatio,
-            productId: selectedProduct?.id,
-            assets: selectedAssets.map(a => ({
-              id: a.id,
-              url: a.url,
-              name: a.name,
-              category: a.category,
-              role: 'must_include',
-            })),
-            references: allReferences,
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        // Handle credit errors specifically
-        if (response.status === 402) {
-          toast.error('Insufficient Credits', `You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
-          // Remove the image record that was created
-          await supabase.from('images').delete().eq('id', imageRecord.id);
-          setImages(prev => prev.filter(img => img.id !== imageRecord.id));
-        } else {
-          throw new Error(errorData.error || 'Failed to generate image');
-        }
-        return;
-      }
-
-      // Capture GPT prompt info if available
-      const responseData = await response.json();
-      if (responseData.gpt_prompt_info) {
-        setGptPromptInfo(responseData.gpt_prompt_info);
-        console.log('GPT Prompt Info captured:', responseData.gpt_prompt_info);
-      }
-
-      // Reload to get the generated image
-      await loadImages();
-      
-    } catch (error) {
-      const errorObj = error instanceof Error ? error : new Error(String(error));
-      logger.error('Failed to generate image from preset', errorObj, {
-        brand_id: brand.id,
-        preset_id: preset.id,
-        prompt_preview: preset.prompt.substring(0, 100),
-      });
-      toast.error('Generation Failed', errorObj.message);
-    } finally {
-      setGenerating(false);
-    }
+    setInputFocused(true); // Focus the input so user can edit
   };
 
   const handleGenerate = async () => {
@@ -726,7 +609,10 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!prompt.trim() || comparing) return;
 
     setComparing(true);
-    setComparisonResults(null);
+    // Show modal immediately with single loading state (progressive loading)
+    setComparisonResults({ v1: 'loading', v2: null, v3: null });
+    setShowComparisonModal(true);
+    setSavedVersions(new Set());
 
     try {
       const authHeaders = await getAuthHeaders();
@@ -784,67 +670,57 @@ export function Studio({ brand }: { brand: Brand }) {
         sessionId, // All requests use the same session (credits already deducted)
       };
 
-      // Step 2: Generate with 3 versions in parallel using the session
-      const [v1Response, v2Response, v3Response] = await Promise.all([
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify(requestBody),
-        }),
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V2 uses skipCredits (no session support yet)
-        }),
-        fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({ ...requestBody, skipCredits: true }), // V3 uses skipCredits (no session support yet)
-        }),
-      ]);
-
-      const [v1Data, v2Data, v3Data] = await Promise.all([
-        v1Response.json(),
-        v2Response.json(),
-        v3Response.json(),
-      ]);
-
-      // Log debug info for each version to help diagnose logo/asset issues
-      console.group('[Generation Debug Info]');
-      console.log('Brand ID:', brand.id);
-      if (v1Data.debug) {
-        console.log('V1 Debug:', JSON.stringify(v1Data.debug, null, 2));
-      }
-      if (v2Data.debug) {
-        console.log('V2 Debug:', JSON.stringify(v2Data.debug, null, 2));
-      }
-      if (v3Data.debug) {
-        console.log('V3 Debug:', JSON.stringify(v3Data.debug, null, 2));
-      }
-      console.groupEnd();
-
-      // Reset saved versions when new variations are generated
-      setSavedVersions(new Set());
-
-      setComparisonResults({
-        v1: v1Response.ok ? {
-          image_base64: v1Data.image_base64,
-          gpt_prompt_info: v1Data.gpt_prompt_info,
-          debug: v1Data.debug,
-        } : null,
-        v2: v2Response.ok ? {
-          image_base64: v2Data.image_base64,
-          design_type: v2Data.design_type,
-          gpt_prompt_info: v2Data.gpt_prompt_info || v2Data.gpt_concept,
-          debug: v2Data.debug,
-        } : null,
-        v3: v3Response.ok ? {
-          image_base64: v3Data.image_base64,
-          prompt_used: v3Data.prompt_used,
-          debug: v3Data.debug,
-        } : null,
+      // Step 2: Generate with 3 versions in parallel, updating UI as each completes
+      const v1Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify(requestBody),
+      }).then(async (res) => {
+        const data = await res.json();
+        if (data.debug) console.log('V1 Debug:', JSON.stringify(data.debug, null, 2));
+        setComparisonResults(prev => prev ? {
+          ...prev,
+          v1: res.ok ? { image_base64: data.image_base64, gpt_prompt_info: data.gpt_prompt_info, debug: data.debug } : null,
+          // When first image arrives, set others to loading if they haven't started
+          v2: prev.v2 === null ? 'loading' : prev.v2,
+          v3: prev.v3 === null ? 'loading' : prev.v3,
+        } : null);
       });
-      setShowComparisonModal(true);
+
+      const v2Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ ...requestBody, skipCredits: true }),
+      }).then(async (res) => {
+        const data = await res.json();
+        if (data.debug) console.log('V2 Debug:', JSON.stringify(data.debug, null, 2));
+        setComparisonResults(prev => prev ? {
+          ...prev,
+          // When first image arrives, set others to loading if they haven't started
+          v1: prev.v1 === null ? 'loading' : prev.v1,
+          v2: res.ok ? { image_base64: data.image_base64, design_type: data.design_type, gpt_prompt_info: data.gpt_prompt_info || data.gpt_concept, debug: data.debug } : null,
+          v3: prev.v3 === null ? 'loading' : prev.v3,
+        } : null);
+      });
+
+      const v3Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ ...requestBody, skipCredits: true }),
+      }).then(async (res) => {
+        const data = await res.json();
+        if (data.debug) console.log('V3 Debug:', JSON.stringify(data.debug, null, 2));
+        setComparisonResults(prev => prev ? {
+          ...prev,
+          // When first image arrives, set others to loading if they haven't started
+          v1: prev.v1 === null ? 'loading' : prev.v1,
+          v2: prev.v2 === null ? 'loading' : prev.v2,
+          v3: res.ok ? { image_base64: data.image_base64, prompt_used: data.prompt_used, debug: data.debug } : null,
+        } : null);
+      });
+
+      // Wait for all to complete
+      await Promise.all([v1Promise, v2Promise, v3Promise]);
 
       // Clear selections after successful comparison
       setPrompt('');
@@ -866,15 +742,15 @@ export function Studio({ brand }: { brand: Brand }) {
 
   // Save a comparison result image to the database and storage
   const handleSaveComparisonImage = async (version: 'v1' | 'v2' | 'v3') => {
-    if (!comparisonResults || savingComparison || savedVersions.has(version)) return;
+    if (!comparisonResults || savingComparison.has(version) || savedVersions.has(version)) return;
 
     const result = comparisonResults[version];
-    if (!result || !result.image_base64) {
+    if (!result || result === 'loading') {
       toast.warning('No Image', `No image available for ${version.toUpperCase()}`);
       return;
     }
 
-    setSavingComparison(version);
+    setSavingComparison(prev => new Set(prev).add(version));
 
     try {
       if (!user?.id) {
@@ -953,7 +829,11 @@ export function Studio({ brand }: { brand: Brand }) {
       console.error('Failed to save comparison image:', error);
       toast.error('Save Failed', error instanceof Error ? error.message : 'Failed to save image');
     } finally {
-      setSavingComparison(null);
+      setSavingComparison(prev => {
+        const next = new Set(prev);
+        next.delete(version);
+        return next;
+      });
     }
   };
 
@@ -962,7 +842,7 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!comparisonResults) return;
 
     const result = comparisonResults[version];
-    if (!result || !result.image_base64) {
+    if (!result || result === 'loading') {
       toast.warning('No Image', `No image available for ${version.toUpperCase()}`);
       return;
     }
@@ -1422,6 +1302,20 @@ export function Studio({ brand }: { brand: Brand }) {
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [selectedImage, showModalEditPrompt, modalEditing]);
+
+  // Handle Escape key to close variations modal
+  useEffect(() => {
+    if (!showComparisonModal) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowComparisonModal(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showComparisonModal]);
 
   if (loading) {
     return (
@@ -3166,40 +3060,92 @@ export function Studio({ brand }: { brand: Brand }) {
       {/* 3 Variations Modal */}
       {showComparisonModal && comparisonResults && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
           onClick={() => setShowComparisonModal(false)}
         >
           <div className="absolute inset-0 bg-black/60" />
 
-          <div
-            className="relative bg-white rounded-xl shadow-lg w-full max-w-5xl max-h-[95vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-neutral-100">
-              <div>
-                <h3 className="text-lg sm:text-xl font-bold text-neutral-900">
-                  3 Variations
-                </h3>
-                <p className="text-sm text-neutral-500 mt-1">
-                  {prompt.substring(0, 80)}{prompt.length > 80 ? '...' : ''}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowComparisonModal(false)}
-                className="w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-600 hover:text-neutral-900 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+          {/* Modal wrapper for positioning X button outside */}
+          <div className="relative">
+            {/* Floating Close Button - outside modal */}
+            <button
+              onClick={() => setShowComparisonModal(false)}
+              className="absolute -top-3 -right-3 z-20 w-8 h-8 rounded-full bg-black/70 hover:bg-black/90 flex items-center justify-center text-white transition-colors shadow-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
 
+            <div
+              className="relative bg-white rounded-xl shadow-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
             {/* Variations Grid */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+              {/* Check if any image has loaded */}
+              {(() => {
+                const hasAnyImage = (comparisonResults.v1 && comparisonResults.v1 !== 'loading') ||
+                                   (comparisonResults.v2 && comparisonResults.v2 !== 'loading') ||
+                                   (comparisonResults.v3 && comparisonResults.v3 !== 'loading');
+
+                // Initial loading state - beautiful centered overlay
+                if (!hasAnyImage) {
+                  return (
+                    <div className="flex items-center justify-center min-h-[400px]">
+                      <div className="flex flex-col items-center gap-6 max-w-md text-center">
+                        {/* Animated loader rings */}
+                        <div className="relative w-24 h-24">
+                          <div className="absolute inset-0 rounded-full border-4 border-violet-200 animate-pulse" />
+                          <div className="absolute inset-2 rounded-full border-4 border-transparent border-t-violet-500 animate-spin" />
+                          <div className="absolute inset-4 rounded-full border-4 border-transparent border-t-violet-400 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1.5s' }} />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <Sparkles className="w-6 h-6 text-violet-500 animate-pulse" />
+                          </div>
+                        </div>
+
+                        {/* Text content */}
+                        <div className="space-y-2">
+                          <h3 className="text-lg font-semibold text-neutral-800">Creating Your Variations</h3>
+                          <p className="text-sm text-neutral-500">
+                            Generating 3 unique designs based on your prompt...
+                          </p>
+                        </div>
+
+                        {/* Progress dots */}
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-violet-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <div className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <div className="w-2 h-2 rounded-full bg-violet-300 animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Grid view - show as soon as any image is ready
+                return (
               <div className="grid grid-cols-3 gap-4">
                 {/* Variation 1 */}
                 <div className="flex flex-col">
-                  {comparisonResults.v1 ? (
-                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                  {comparisonResults.v1 === 'loading' || !comparisonResults.v1 ? (
+                    comparisonResults.v1 === 'loading' ? (
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 aspect-square">
+                        {/* Shimmer effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-neutral-100 via-neutral-200 to-neutral-100 animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" style={{ animation: 'shimmer 2s infinite' }} />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                            <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                          </div>
+                          <span className="text-sm font-medium text-neutral-500 bg-white/80 px-3 py-1 rounded-full">Generating...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center aspect-square bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                        Failed
+                      </div>
+                    )
+                  ) : (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group animate-in fade-in zoom-in-95 duration-300">
                       <img
                         src={`data:image/png;base64,${comparisonResults.v1.image_base64}`}
                         alt="Variation 1"
@@ -3224,8 +3170,10 @@ export function Studio({ brand }: { brand: Brand }) {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => {
+                                  const v1 = comparisonResults.v1;
+                                  if (!v1 || v1 === 'loading') return;
                                   const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${comparisonResults.v1?.image_base64}`;
+                                  link.href = `data:image/png;base64,${v1.image_base64}`;
                                   link.download = `variation-1-${Date.now()}.png`;
                                   link.click();
                                 }}
@@ -3236,24 +3184,20 @@ export function Studio({ brand }: { brand: Brand }) {
                               </button>
                               <button
                                 onClick={() => handleSaveComparisonImage('v1')}
-                                disabled={!!savingComparison || savedVersions.has('v1')}
+                                disabled={savingComparison.has('v1') || savedVersions.has('v1')}
                                 className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
                                 title="Save to gallery"
                               >
-                                {savingComparison === 'v1' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                                {savingComparison.has('v1') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
                               </button>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
                   )}
                   {/* Admin Debug Panel */}
-                  {isAdmin && comparisonResults.v1?.debug && (
+                  {isAdmin && comparisonResults.v1 && comparisonResults.v1 !== 'loading' && comparisonResults.v1.debug && (
                     <details className="mt-2 text-[10px]">
                       <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
                         <Bug className="w-3 h-3" /> Debug
@@ -3278,8 +3222,26 @@ export function Studio({ brand }: { brand: Brand }) {
 
                 {/* Variation 2 */}
                 <div className="flex flex-col">
-                  {comparisonResults.v2 ? (
-                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                  {comparisonResults.v2 === 'loading' || !comparisonResults.v2 ? (
+                    comparisonResults.v2 === 'loading' ? (
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 aspect-square">
+                        {/* Shimmer effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-neutral-100 via-neutral-200 to-neutral-100 animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full" style={{ animation: 'shimmer 2s infinite' }} />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                            <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                          </div>
+                          <span className="text-sm font-medium text-neutral-500 bg-white/80 px-3 py-1 rounded-full">Generating...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center aspect-square bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                        Failed
+                      </div>
+                    )
+                  ) : (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group animate-in fade-in zoom-in-95 duration-300">
                       <img
                         src={`data:image/png;base64,${comparisonResults.v2.image_base64}`}
                         alt="Variation 2"
@@ -3302,8 +3264,10 @@ export function Studio({ brand }: { brand: Brand }) {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => {
+                                  const v2 = comparisonResults.v2;
+                                  if (!v2 || v2 === 'loading') return;
                                   const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${comparisonResults.v2?.image_base64}`;
+                                  link.href = `data:image/png;base64,${v2.image_base64}`;
                                   link.download = `variation-2-${Date.now()}.png`;
                                   link.click();
                                 }}
@@ -3314,24 +3278,20 @@ export function Studio({ brand }: { brand: Brand }) {
                               </button>
                               <button
                                 onClick={() => handleSaveComparisonImage('v2')}
-                                disabled={!!savingComparison || savedVersions.has('v2')}
+                                disabled={savingComparison.has('v2') || savedVersions.has('v2')}
                                 className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
                                 title="Save to gallery"
                               >
-                                {savingComparison === 'v2' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                                {savingComparison.has('v2') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
                               </button>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
                   )}
                   {/* Admin Debug Panel */}
-                  {isAdmin && comparisonResults.v2?.debug && (
+                  {isAdmin && comparisonResults.v2 && comparisonResults.v2 !== 'loading' && comparisonResults.v2.debug && (
                     <details className="mt-2 text-[10px]">
                       <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
                         <Bug className="w-3 h-3" /> Debug
@@ -3356,8 +3316,26 @@ export function Studio({ brand }: { brand: Brand }) {
 
                 {/* Variation 3 */}
                 <div className="flex flex-col">
-                  {comparisonResults.v3 ? (
-                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                  {comparisonResults.v3 === 'loading' || !comparisonResults.v3 ? (
+                    comparisonResults.v3 === 'loading' ? (
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 aspect-square">
+                        {/* Shimmer effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-neutral-100 via-neutral-200 to-neutral-100 animate-pulse" />
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full" style={{ animation: 'shimmer 2s infinite' }} />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                          <div className="w-12 h-12 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                            <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+                          </div>
+                          <span className="text-sm font-medium text-neutral-500 bg-white/80 px-3 py-1 rounded-full">Generating...</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center aspect-square bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
+                        Failed
+                      </div>
+                    )
+                  ) : (
+                    <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group animate-in fade-in zoom-in-95 duration-300">
                       <img
                         src={`data:image/png;base64,${comparisonResults.v3.image_base64}`}
                         alt="Variation 3"
@@ -3380,8 +3358,10 @@ export function Studio({ brand }: { brand: Brand }) {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => {
+                                  const v3 = comparisonResults.v3;
+                                  if (!v3 || v3 === 'loading') return;
                                   const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${comparisonResults.v3?.image_base64}`;
+                                  link.href = `data:image/png;base64,${v3.image_base64}`;
                                   link.download = `variation-3-${Date.now()}.png`;
                                   link.click();
                                 }}
@@ -3392,24 +3372,20 @@ export function Studio({ brand }: { brand: Brand }) {
                               </button>
                               <button
                                 onClick={() => handleSaveComparisonImage('v3')}
-                                disabled={!!savingComparison || savedVersions.has('v3')}
+                                disabled={savingComparison.has('v3') || savedVersions.has('v3')}
                                 className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
                                 title="Save to gallery"
                               >
-                                {savingComparison === 'v3' ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
+                                {savingComparison.has('v3') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
                               </button>
                             </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-64 bg-red-50 rounded-xl border border-red-200 text-red-600 text-sm">
-                      Failed
-                    </div>
                   )}
                   {/* Admin Debug Panel */}
-                  {isAdmin && comparisonResults.v3?.debug && (
+                  {isAdmin && comparisonResults.v3 && comparisonResults.v3 !== 'loading' && comparisonResults.v3.debug && (
                     <details className="mt-2 text-[10px]">
                       <summary className="flex items-center gap-1 text-neutral-400 cursor-pointer hover:text-neutral-600">
                         <Bug className="w-3 h-3" /> Debug
@@ -3432,16 +3408,10 @@ export function Studio({ brand }: { brand: Brand }) {
                   )}
                 </div>
               </div>
+                );
+              })()}
             </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-end p-4 sm:p-6 border-t border-neutral-100">
-              <button
-                onClick={() => setShowComparisonModal(false)}
-                className="px-4 py-2 text-sm font-medium text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

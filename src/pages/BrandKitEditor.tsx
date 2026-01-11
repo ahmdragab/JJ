@@ -69,6 +69,9 @@ export function BrandKitEditor({
   const [newAssetCategory, setNewAssetCategory] = useState('');
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
 
+  // Editable brand name state
+  const [isEditingName, setIsEditingName] = useState(false);
+
   useEffect(() => {
     // Only reset localBrand if we're not in the middle of an update
     // This prevents losing unsaved changes when switching tabs
@@ -906,9 +909,28 @@ export function BrandKitEditor({
             <div className="flex-1 pt-0 sm:pt-2 text-center sm:text-left w-full">
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
                 <div>
-                  <h1 className="text-3xl sm:text-4xl md:text-5xl font-light text-neutral-900 tracking-tight mb-2">
-                    {localBrand.name}
-                  </h1>
+                  {isEditingName ? (
+                    <input
+                      type="text"
+                      value={localBrand.name}
+                      onChange={(e) => setLocalBrand({ ...localBrand, name: e.target.value })}
+                      onBlur={() => {
+                        setIsEditingName(false);
+                        onUpdate({ name: localBrand.name });
+                      }}
+                      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                      autoFocus
+                      className="text-3xl sm:text-4xl md:text-5xl font-light text-neutral-900 tracking-tight bg-transparent border-b-2 border-primary outline-none mb-2 w-full"
+                    />
+                  ) : (
+                    <h1
+                      className="text-3xl sm:text-4xl md:text-5xl font-light text-neutral-900 tracking-tight mb-2 cursor-pointer group inline-flex items-center gap-2"
+                      onClick={() => setIsEditingName(true)}
+                    >
+                      {localBrand.name}
+                      <Pencil className="w-4 h-4 text-neutral-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </h1>
+                  )}
                   <p className="text-neutral-400 text-base sm:text-lg">{localBrand.domain}</p>
                 </div>
                 <Button
