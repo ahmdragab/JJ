@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Sparkles, Loader2, X, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Sparkles, Loader2, X, ArrowRight, Globe } from 'lucide-react';
 import { supabase, Brand } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,10 +8,10 @@ import { Button } from '../components/ui';
 
 export function BrandsList({
   onSelectBrand,
-  onCreateNew,
+  onExtractBrand,
 }: {
   onSelectBrand: (slug: string) => void;
-  onCreateNew: () => void;
+  onExtractBrand: (domain: string) => void;
 }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -22,6 +22,25 @@ export function BrandsList({
     isOpen: false,
     brandId: null,
   });
+  const [showNewBrandModal, setShowNewBrandModal] = useState(false);
+  const [newBrandUrl, setNewBrandUrl] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus input when modal opens
+  useEffect(() => {
+    if (showNewBrandModal && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [showNewBrandModal]);
+
+  const handleNewBrandSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBrandUrl.trim()) return;
+
+    onExtractBrand(newBrandUrl.trim());
+    setShowNewBrandModal(false);
+    setNewBrandUrl('');
+  };
 
   useEffect(() => {
     if (user) {
@@ -161,7 +180,7 @@ export function BrandsList({
                   A collection of your creative identities
                 </p>
               </div>
-              <Button size="lg" onClick={onCreateNew} className="w-full sm:w-auto">
+              <Button size="lg" onClick={() => setShowNewBrandModal(true)} className="w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 New Brand
               </Button>
@@ -181,7 +200,7 @@ export function BrandsList({
                 <p className="text-neutral-500 mb-8">
                   Create your first brand and bring it to life
                 </p>
-                <Button size="lg" onClick={onCreateNew}>
+                <Button size="lg" onClick={() => setShowNewBrandModal(true)}>
                   Create Your First Brand
                 </Button>
               </div>
@@ -312,6 +331,66 @@ export function BrandsList({
         cancelText="Cancel"
         variant="danger"
       />
+
+      {/* New Brand Modal */}
+      {showNewBrandModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setShowNewBrandModal(false)}
+          />
+
+          {/* Modal */}
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setShowNewBrandModal(false)}
+              className="absolute top-4 right-4 p-2 rounded-lg hover:bg-neutral-100 text-neutral-400 hover:text-neutral-600 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-6">
+              <h2 className="text-2xl font-semibold text-neutral-800 font-display">Add New Brand</h2>
+              <p className="text-neutral-500 mt-1">Enter your website URL to extract brand assets</p>
+            </div>
+
+            <form onSubmit={handleNewBrandSubmit}>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Globe className="w-5 h-5 text-neutral-400" />
+                </div>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={newBrandUrl}
+                  onChange={(e) => setNewBrandUrl(e.target.value)}
+                  placeholder="example.com"
+                  className="w-full pl-12 pr-4 py-3 rounded-xl border border-neutral-200 focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 outline-none transition-all text-neutral-800 placeholder:text-neutral-400"
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowNewBrandModal(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={!newBrandUrl.trim()}
+                  className="flex-1"
+                >
+                  Extract Brand
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

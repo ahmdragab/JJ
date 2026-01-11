@@ -322,7 +322,73 @@ function BrandRoutes() {
 
 // Brands list wrapper
 function BrandsListWrapper() {
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
+
+  const handleExtractBrand = async (input: string) => {
+    if (!user) return;
+
+    try {
+      // Validate domain format
+      if (!isValidDomain(input)) {
+        toast.error('Invalid Domain', 'Please enter a valid domain name (e.g., example.com)');
+        return;
+      }
+
+      let domain: string;
+      let url: string;
+
+      if (input.includes('://')) {
+        domain = new URL(input).hostname;
+        url = input;
+      } else {
+        domain = normalizeDomain(input);
+        url = `https://${domain}`;
+      }
+
+      domain = normalizeDomain(domain);
+
+      // Track brand extraction started
+      track('brand_extraction_started', { domain });
+
+      // Generate a slug for the brand
+      const slug = generateSlug(domain);
+
+      const { data: newBrand, error } = await supabase
+        .from('brands')
+        .insert({
+          user_id: user.id,
+          domain,
+          slug,
+          name: domain.replace('www.', '').split('.')[0],
+          status: 'extracting',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Navigate using slug
+      navigate(`/brands/${newBrand.slug}`);
+
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-brand-firecrawl`,
+        {
+          method: 'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ url, brandId: newBrand.id }),
+        }
+      );
+
+      if (!response.ok) throw new Error('Brand extraction failed');
+
+    } catch (error) {
+      console.error('Failed to start extraction:', error);
+      toast.error('Extraction Failed', 'Failed to start brand extraction. Please try again.');
+    }
+  };
 
   return (
     <>
@@ -330,7 +396,7 @@ function BrandsListWrapper() {
       <div className="pt-16">
         <BrandsList
           onSelectBrand={(slug) => navigate(`/brands/${slug}`)}
-          onCreateNew={() => navigate('/')}
+          onExtractBrand={handleExtractBrand}
         />
       </div>
     </>
