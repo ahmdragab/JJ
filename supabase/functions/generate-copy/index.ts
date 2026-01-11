@@ -3,15 +3,20 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, unauthorizedResponse } from "../_shared/auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+import { validateAndSanitizePrompt, logSuspiciousPrompt } from "../_shared/prompt-defense.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 Deno.serve(async (req: Request) => {
   const logger = createLogger('generate-copy');
@@ -21,7 +26,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
-      headers: corsHeaders,
+      headers: getCors(req),
     });
   }
 
@@ -33,7 +38,7 @@ Deno.serve(async (req: Request) => {
     const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
 
     if (authError || !userId) {
-      return unauthorizedResponse(authError || 'Authentication required', corsHeaders);
+      return unauthorizedResponse(authError || 'Authentication required', getCors(req));
     }
 
     logger.setContext({ request_id: requestId, user_id: userId });
@@ -45,7 +50,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Missing required fields" }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -77,7 +82,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ success: true, copy: generatedCopy }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
@@ -100,7 +105,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ error: errorObj.message }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }

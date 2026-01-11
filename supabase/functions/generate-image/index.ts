@@ -4,6 +4,7 @@ import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, verifyBrandOwnership } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { validateAndSanitizePrompt, logSuspiciousPrompt } from "../_shared/prompt-defense.ts";
 
 // =============================================================================
 // TODO: HIGH-CONVERTING AD GENERATION ORCHESTRATION
@@ -1287,6 +1288,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Validate and sanitize prompt for injection attacks
+    const promptValidation = validateAndSanitizePrompt(prompt, {
+      maxLength: 4000,
+      allowMarkdown: false, // Prompts don't need markdown
+      strictMode: false, // Log warnings but don't block (for now)
+    });
+
+    // Log suspicious activity for monitoring
+    if (promptValidation.warnings.length > 0) {
+      logSuspiciousPrompt(prompt, undefined, promptValidation.warnings, {
+        function_name: 'generate-image',
+        request_id: requestId,
+      });
+    }
+
+    // Use sanitized prompt for all downstream processing
+    const sanitizedPrompt = promptValidation.sanitizedPrompt;
+
     if (!GEMINI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not set" }),
@@ -1534,7 +1553,7 @@ Deno.serve(async (req: Request) => {
 
     // Consolidated request logging
       logger.info(`Image generation started`, {
-        prompt_preview: prompt.substring(0, 100),
+        prompt_preview: sanitizedPrompt.substring(0, 100),
         assets_count: assets.length,
         references_count: references.length,
         aspect_ratio: aspectRatio,
@@ -1592,7 +1611,7 @@ Deno.serve(async (req: Request) => {
       // Pass aspectRatio only if user specified one (not 'auto' or undefined)
       const aspectRatioToPass = aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined;
       const gptResult = await callGPT51(
-        prompt,
+        sanitizedPrompt, // Use sanitized prompt for security
         brand,
         assets as AssetInput[],
         references as AssetInput[],
@@ -1603,7 +1622,7 @@ Deno.serve(async (req: Request) => {
       renderPlan = gptResult.renderPlan;
       gptPromptInfo = gptResult.promptInfo;
       finalPrompt = renderPlan.final_prompt;
-      
+
       // Consolidated GPT optimization logging
       const gptInfo = [
         `Channel: ${renderPlan.channel}`,
@@ -1612,7 +1631,7 @@ Deno.serve(async (req: Request) => {
       ].filter(Boolean).join(' | ');
       console.log(`[GPT-5.1 Optimized] ${gptInfo}`);
     } else {
-      finalPrompt = prompt;
+      finalPrompt = sanitizedPrompt; // Use sanitized prompt for security
     }
 
     // Store logo OR icon data to add AFTER the prompt (closer to generation = more attention)
