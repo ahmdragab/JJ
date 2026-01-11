@@ -820,32 +820,104 @@ Deno.serve(async (req: Request) => {
             }
           }
 
-          // Add page images to asset library (skip duplicates)
+          // Add page images to asset library (upload to storage to avoid hotlink issues)
           if (brandData.page_images && brandData.page_images.length > 0) {
-            const assetInserts = brandData.page_images
-              .filter(img => img.url && !existingUrls.has(img.url))
-              .map((img, index) => ({
-                brand_id: brandId,
-                user_id: brandRecord.user_id,
-                name: `Extracted Image ${index + 1}`,
-                description: `Automatically extracted from website (${img.type || 'image'})`,
-                url: img.url,
-                type: 'asset' as const,
-                category: img.type || 'extracted',
-              }));
+            // Limit to 15 images to avoid excessive storage/processing
+            const imagesToProcess = brandData.page_images
+              .filter(img => img.url && !existingUrls.has(img.url) && !img.url.startsWith('data:'))
+              .slice(0, 15);
 
-            // Insert in batches to avoid overwhelming the database
-            if (assetInserts.length > 0) {
-              const batchSize = 10;
-              for (let i = 0; i < assetInserts.length; i += batchSize) {
-                const batch = assetInserts.slice(i, i + batchSize);
-                const { error: batchError } = await supabase
-                  .from('brand_assets')
-                  .insert(batch);
-                
-                if (batchError) {
-                  console.error(`Failed to add page images batch ${i / batchSize + 1} to asset library:`, batchError);
+            console.log(`[Assets] Processing ${imagesToProcess.length} page images for brand ${brandId}`);
+
+            const assetInserts: Array<{
+              brand_id: string;
+              user_id: string;
+              name: string;
+              description: string;
+              url: string;
+              type: 'asset';
+              category: string;
+            }> = [];
+
+            // Upload each image to Supabase storage
+            for (let i = 0; i < imagesToProcess.length; i++) {
+              const img = imagesToProcess[i];
+              try {
+                console.log(`[Assets] Uploading image ${i + 1}/${imagesToProcess.length}: ${img.url.substring(0, 60)}...`);
+
+                const response = await fetch(img.url, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; BrandExtractor/1.0)',
+                    'Accept': 'image/*,*/*',
+                  },
+                });
+
+                if (!response.ok) {
+                  console.warn(`[Assets] Failed to download image ${i + 1}: ${response.status}`);
+                  continue;
                 }
+
+                const contentType = response.headers.get('content-type') || 'image/png';
+                const imageData = await response.arrayBuffer();
+
+                if (imageData.byteLength === 0 || imageData.byteLength > 10 * 1024 * 1024) {
+                  console.warn(`[Assets] Skipping image ${i + 1}: invalid size (${imageData.byteLength} bytes)`);
+                  continue;
+                }
+
+                // Determine file extension
+                let extension = 'png';
+                if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = 'jpg';
+                else if (contentType.includes('webp')) extension = 'webp';
+                else if (contentType.includes('gif')) extension = 'gif';
+                else if (contentType.includes('svg')) extension = 'svg';
+
+                const storagePath = `${brandId}/asset-${i + 1}-${Date.now()}.${extension}`;
+
+                const { data: uploadData, error: uploadError } = await supabase.storage
+                  .from('brand-logos')
+                  .upload(storagePath, imageData, {
+                    contentType,
+                    cacheControl: '31536000',
+                    upsert: true,
+                  });
+
+                if (uploadError) {
+                  console.warn(`[Assets] Failed to upload image ${i + 1}:`, uploadError.message);
+                  continue;
+                }
+
+                const { data: urlData } = supabase.storage
+                  .from('brand-logos')
+                  .getPublicUrl(uploadData.path);
+
+                assetInserts.push({
+                  brand_id: brandId,
+                  user_id: brandRecord.user_id,
+                  name: `Extracted Image ${i + 1}`,
+                  description: `Automatically extracted from website (${img.type || 'image'})`,
+                  url: urlData.publicUrl,
+                  type: 'asset' as const,
+                  category: img.type || 'extracted',
+                });
+
+                console.log(`[Assets] Uploaded image ${i + 1}: ${urlData.publicUrl}`);
+              } catch (error) {
+                console.warn(`[Assets] Error processing image ${i + 1}:`, error);
+                continue;
+              }
+            }
+
+            // Insert all successfully uploaded assets
+            if (assetInserts.length > 0) {
+              const { error: insertError } = await supabase
+                .from('brand_assets')
+                .insert(assetInserts);
+
+              if (insertError) {
+                console.error('[Assets] Failed to insert assets:', insertError);
+              } else {
+                console.log(`[Assets] Successfully added ${assetInserts.length} assets to library`);
               }
             }
           }
