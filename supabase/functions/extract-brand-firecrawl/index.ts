@@ -292,6 +292,70 @@ async function downloadAndUploadImage(
 }
 
 /**
+ * Download screenshot from Firecrawl's temporary URL and upload to Supabase Storage
+ * Firecrawl screenshots are signed URLs that expire after ~7 days
+ */
+async function uploadScreenshot(
+  screenshotUrl: string,
+  brandId: string
+): Promise<string | null> {
+  try {
+    if (!screenshotUrl) return null;
+
+    console.log(`[Screenshot] Downloading from: ${screenshotUrl.substring(0, 80)}...`);
+
+    // Download the screenshot
+    const response = await fetch(screenshotUrl);
+
+    if (!response.ok) {
+      console.error(`[Screenshot] Failed to download: ${response.status}`);
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const imageData = await response.arrayBuffer();
+
+    if (imageData.byteLength === 0) {
+      console.error(`[Screenshot] Empty image data`);
+      return null;
+    }
+
+    // Determine file extension
+    let extension = 'png';
+    if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = 'jpg';
+    else if (contentType.includes('webp')) extension = 'webp';
+
+    // Upload to Supabase Storage (using brand-logos bucket for simplicity)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const storagePath = `${brandId}/screenshot-${Date.now()}.${extension}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("brand-logos")
+      .upload(storagePath, imageData, {
+        contentType,
+        cacheControl: "31536000", // Cache for 1 year since it's permanent
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error(`[Screenshot] Storage upload failed:`, uploadError);
+      return null;
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from("brand-logos")
+      .getPublicUrl(uploadData.path);
+
+    console.log(`[Screenshot] Uploaded: ${urlData.publicUrl}`);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error(`[Screenshot] Error:`, error);
+    return null;
+  }
+}
+
+/**
  * Process logos - convert SVGs to PNGs using ConvertAPI
  * Also downloads and re-uploads raster images to avoid hotlink protection
  * Detects and skips animated/unsupported formats (like GIFs)
@@ -673,6 +737,17 @@ Deno.serve(async (req: Request) => {
     if (brandId && brandData.logos) {
       console.log("[SVG] Processing logos for brand:", brandId);
       brandData.logos = await processLogos(brandData.logos, brandId);
+    }
+
+    // Upload screenshot to Supabase storage (Firecrawl URLs expire after ~7 days)
+    if (brandId && brandData.screenshot) {
+      console.log("[Screenshot] Processing screenshot for brand:", brandId);
+      const uploadedScreenshot = await uploadScreenshot(brandData.screenshot, brandId);
+      if (uploadedScreenshot) {
+        brandData.screenshot = uploadedScreenshot;
+      } else {
+        console.warn("[Screenshot] Failed to upload, keeping original URL (may expire)");
+      }
     }
 
     // If brandId provided, update the brand in the database
