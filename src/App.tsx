@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider, useToast } from './components/Toast';
 import { Navbar } from './components/Navbar';
@@ -7,6 +7,7 @@ import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain, getAuthH
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { isAdminUser } from './lib/admin';
+import { initAnalytics, trackPageView, track } from './lib/analytics';
 
 // Lazy-loaded page components for code splitting
 const LandingV2 = lazy(() => import('./pages/LandingV2').then(m => ({ default: m.LandingV2 })));
@@ -271,6 +272,8 @@ function BrandRoutes() {
           // Mark this brand as confirmed in localStorage
           if (brand) {
             localStorage.setItem(`brand_confirmed_${brand.id}`, 'true');
+            // Track brand confirmation
+            track('brand_confirmed', { brand_id: brand.id });
           }
         }}
       />
@@ -363,6 +366,9 @@ function LandingV2Wrapper() {
 
       domain = normalizeDomain(domain);
 
+      // Track brand extraction started
+      track('brand_extraction_started', { domain });
+
       // Generate a slug for the brand
       const slug = generateSlug(domain);
 
@@ -410,6 +416,44 @@ function LandingV2Wrapper() {
       onViewBrands={() => navigate('/brands')}
     />
   );
+}
+
+// Track page views on route changes
+function PageViewTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    // Extract page name from pathname
+    const pathname = location.pathname;
+    let pageName = 'home';
+    let brandId: string | undefined;
+
+    if (pathname === '/') {
+      pageName = 'landing';
+    } else if (pathname === '/brands') {
+      pageName = 'brands_list';
+    } else if (pathname.startsWith('/brands/')) {
+      const parts = pathname.split('/');
+      brandId = parts[2]; // This is the brand slug, but good enough for tracking
+      if (pathname.endsWith('/studio')) {
+        pageName = 'studio';
+      } else {
+        pageName = 'brand_editor';
+      }
+    } else if (pathname === '/pricing') {
+      pageName = 'pricing';
+    } else if (pathname === '/privacy') {
+      pageName = 'privacy';
+    } else if (pathname === '/terms') {
+      pageName = 'terms';
+    } else if (pathname.startsWith('/admin')) {
+      pageName = pathname.replace('/', '').replace('/', '_');
+    }
+
+    trackPageView(pageName, brandId);
+  }, [location.pathname]);
+
+  return null;
 }
 
 function AppRoutes() {
@@ -496,11 +540,17 @@ function AppRoutes() {
 }
 
 function App() {
+  // Initialize analytics on app mount
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
   return (
     <BrowserRouter>
       <AuthProvider>
         <ToastProvider>
           <Suspense fallback={<PageLoader />}>
+            <PageViewTracker />
             <AppRoutes />
           </Suspense>
         </ToastProvider>

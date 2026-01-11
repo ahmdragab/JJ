@@ -3,6 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { trackConversion } from "../_shared/conversions.ts";
 
 // CORS headers function - uses validated origin from request
 // Note: Stripe webhooks come from Stripe servers, not browsers, so CORS isn't strictly needed
@@ -315,6 +316,26 @@ async function handleSubscriptionUpdated(
       await supabase.rpc("grant_subscription_credits", { subscription_uuid: subRecord.id });
       logger.info("Credits granted for subscription", { subscription_id: subscriptionId });
     }
+
+    // Track subscription created conversion
+    // Get user email for better attribution
+    const { data: userData } = await supabase.auth.admin.getUserById(subscriptionRecord.user_id);
+    const amount = subscription.items?.data?.[0]?.price?.unit_amount
+      ? subscription.items.data[0].price.unit_amount / 100
+      : 0;
+
+    await trackConversion({
+      user_id: subscriptionRecord.user_id,
+      email: userData?.user?.email,
+      event_name: 'subscription_created',
+      value: amount,
+      currency: subscription.currency?.toUpperCase() || 'USD',
+      properties: {
+        plan_id: plan.id,
+        plan_name: plan.name,
+        billing_cycle: billingCycle,
+      },
+    });
   }
 }
 
@@ -461,6 +482,22 @@ async function handleCreditPackagePurchase(
     user_id: actualUserId,
     package_id: packageId,
     credits: packageData.credits,
+  });
+
+  // Track credits purchased conversion
+  const { data: userData } = await supabase.auth.admin.getUserById(actualUserId);
+  const amount = session.amount_total ? session.amount_total / 100 : 0;
+
+  await trackConversion({
+    user_id: actualUserId,
+    email: userData?.user?.email,
+    event_name: 'credits_purchased',
+    value: amount,
+    currency: session.currency?.toUpperCase() || 'USD',
+    properties: {
+      package_id: packageId,
+      credits: packageData.credits,
+    },
   });
 }
 

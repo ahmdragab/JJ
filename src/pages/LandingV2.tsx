@@ -387,7 +387,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         <header className="w-full px-6 sm:px-8 lg:px-16 py-5 flex justify-between items-center relative">
           {/* Left: Logo */}
           <div className="flex items-center">
-            <img src="/fav.png" alt="Alwan" style={{ width: 100, height: 'auto' }} />
+            <img src="/logo-full.png" alt="Alwan" style={{ width: 100, height: 'auto' }} />
           </div>
 
           {/* Center: Nav links */}
@@ -959,7 +959,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         <footer className="px-6 sm:px-8 lg:px-16 py-8 bg-gray-900 border-t border-gray-800">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src="/fav.png" alt="Alwan" className="h-7 w-auto object-contain" />
+              <img src="/logo-full.png" alt="Alwan" className="h-7 w-auto object-contain" />
               <span className="text-sm text-gray-500 font-dm" >
                 Alwan — AI-powered brand ads
               </span>

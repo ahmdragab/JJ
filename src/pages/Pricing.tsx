@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Check, Loader2, CreditCard } from 'lucide-react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useToast } from '../components/Toast';
 import { Button } from '../components/ui';
+import { track } from '../lib/analytics';
 
 interface Plan {
   id: string;
@@ -31,11 +32,14 @@ export function Pricing() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
   const [userPlan, setUserPlan] = useState<{ plan_name: string } | null>(null);
+  const [userCredits, setUserCredits] = useState<number>(0);
+  const hasTrackedView = useRef(false);
 
   useEffect(() => {
     loadPlans();
     if (user) {
       loadUserPlan();
+      loadUserCredits();
     }
 
     const success = searchParams.get('success');
@@ -43,6 +47,14 @@ export function Pricing() {
       setTimeout(() => loadUserPlan(), 2000);
     }
   }, [user, searchParams]);
+
+  // Track pricing page view once when credits are loaded
+  useEffect(() => {
+    if (!hasTrackedView.current && !loading) {
+      hasTrackedView.current = true;
+      track('pricing_viewed', { current_credits: userCredits });
+    }
+  }, [loading, userCredits]);
 
   async function loadPlans() {
     try {
@@ -78,6 +90,24 @@ export function Pricing() {
     }
   }
 
+  async function loadUserCredits() {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('user_credits')
+        .select('credits')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && data) {
+        setUserCredits(data.credits);
+      }
+    } catch (error) {
+      console.error('Error loading user credits:', error);
+    }
+  }
+
   async function handleSubscribe(planId: string) {
     if (!user) {
       navigate('/');
@@ -85,6 +115,20 @@ export function Pricing() {
     }
 
     setProcessing(planId);
+
+    // Find the plan to get details for tracking
+    const plan = plans.find(p => p.id === planId);
+    const price = billingCycle === 'yearly' && plan?.price_yearly
+      ? plan.price_yearly
+      : plan?.price_monthly || 0;
+
+    // Track checkout started
+    track('checkout_started', {
+      plan_id: planId,
+      plan_name: plan?.name || 'unknown',
+      billing_cycle: billingCycle,
+      amount: price,
+    });
 
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {

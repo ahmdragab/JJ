@@ -5,6 +5,7 @@ import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, verifyBrandOwnership } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { validateAndSanitizePrompt, logSuspiciousPrompt } from "../_shared/prompt-defense.ts";
+import { trackConversion } from "../_shared/conversions.ts";
 
 // =============================================================================
 // TODO: HIGH-CONVERTING AD GENERATION ORCHESTRATION
@@ -2022,6 +2023,20 @@ The attached image below is the ONLY acceptable brand identifier. Any other logo
     logger.info("Image generation completed", {
       request_id: requestId,
       duration_ms: Math.round(duration),
+    });
+
+    // Track generation completed conversion (server-side for reliable attribution)
+    trackConversion({
+      user_id: userId,
+      event_name: 'generation_completed',
+      properties: {
+        brand_id: brandId,
+        image_id: imageId,
+        duration_ms: Math.round(duration),
+      },
+    }).catch(err => {
+      // Don't let tracking errors affect the response
+      console.warn('Conversion tracking failed:', err);
     });
 
     // Build debug info for response

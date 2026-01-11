@@ -4,6 +4,7 @@ import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, verifyBrandOwnership, unauthorizedResponse, forbiddenResponse } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { trackConversion } from "../_shared/conversions.ts";
 
 // ConvertAPI configuration
 const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
@@ -783,6 +784,21 @@ Deno.serve(async (req: Request) => {
     logger.info("Brand extraction completed", {
       request_id: requestId,
       duration_ms: Math.round(duration),
+    });
+
+    // Track brand extraction completed conversion
+    trackConversion({
+      user_id: userId,
+      event_name: 'brand_extraction_completed',
+      properties: {
+        brand_id: brandId,
+        domain: url,
+        has_logo: !!(brandData.logos?.primary || brandData.logos?.icon),
+        has_colors: !!(brandData.colors && Object.keys(brandData.colors).length > 0),
+        duration_ms: Math.round(duration),
+      },
+    }).catch(err => {
+      console.warn('Conversion tracking failed:', err);
     });
 
     return new Response(

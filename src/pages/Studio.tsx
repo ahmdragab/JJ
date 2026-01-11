@@ -36,6 +36,7 @@ import { ReferenceUpload } from '../components/ReferenceUpload';
 import { StylesPicker } from '../components/StylesPicker';
 import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
 import { logger } from '../lib/logger';
+import { track } from '../lib/analytics';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { Button } from '../components/ui';
@@ -410,6 +411,10 @@ export function Studio({ brand }: { brand: Brand }) {
         .eq('id', imageId);
 
       if (error) throw error;
+
+      // Track image deletion
+      track('image_deleted', { image_id: imageId });
+
       setImages(images.filter(img => img.id !== imageId));
       if (selectedImage?.id === imageId) {
         setSelectedImage(null);
@@ -484,6 +489,17 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!prompt.trim() || generating) return;
 
     setGenerating(true);
+    const startTime = Date.now();
+
+    // Track generation started
+    track('generation_started', {
+      brand_id: brand.id,
+      prompt_length: prompt.length,
+      aspect_ratio: selectedAspectRatio,
+      platform: selectedPlatform || 'none',
+      has_style: selectedStyles.length > 0,
+      has_product: !!selectedProduct,
+    });
 
     try {
       if (!user?.id) {
@@ -573,6 +589,10 @@ export function Studio({ brand }: { brand: Brand }) {
         const errorData = await response.json();
         // Handle credit errors specifically
         if (response.status === 402) {
+          track('insufficient_credits', {
+            brand_id: brand.id,
+            credits_needed: 1,
+          });
           toast.error('Insufficient Credits', `You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
           // Remove the image record that was created
           await supabase.from('images').delete().eq('id', imageRecord.id);
@@ -592,13 +612,28 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Reload to get the generated image
       await loadImages();
-      
+
+      // Track generation completed
+      track('generation_completed', {
+        brand_id: brand.id,
+        image_id: imageRecord.id,
+        duration_ms: Date.now() - startTime,
+        credits_used: 1,
+      });
+
     } catch (error) {
       const errorObj = error instanceof Error ? error : new Error(String(error));
       logger.error('Failed to generate image', errorObj, {
         brand_id: brand.id,
         prompt_preview: prompt.substring(0, 100),
       });
+
+      // Track generation failed
+      track('generation_failed', {
+        brand_id: brand.id,
+        error_type: errorObj.message,
+      });
+
       toast.error('Generation Failed', errorObj.message);
     } finally {
       setGenerating(false);
@@ -1110,6 +1145,12 @@ export function Studio({ brand }: { brand: Brand }) {
     options?.event?.stopPropagation();
     const urlToDownload = options?.url || image.image_url;
     if (!urlToDownload) return;
+
+    // Track image download
+    track('image_downloaded', {
+      image_id: image.id,
+      format: 'png',
+    });
 
     try {
       // Extract the file path from the Supabase Storage URL
