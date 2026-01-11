@@ -2,12 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 // API Configuration
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
@@ -477,7 +481,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
-      headers: corsHeaders,
+      headers: getCors(req),
     });
   }
 
@@ -492,7 +496,7 @@ Deno.serve(async (req: Request) => {
     if (!brandId) {
       return new Response(
         JSON.stringify({ error: "Missing brandId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -507,7 +511,7 @@ Deno.serve(async (req: Request) => {
       console.error("Brand fetch error:", brandError);
       return new Response(
         JSON.stringify({ error: "Brand not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 404, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -574,7 +578,7 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
@@ -599,7 +603,7 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }

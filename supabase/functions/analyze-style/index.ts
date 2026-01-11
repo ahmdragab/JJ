@@ -2,12 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const GPT_MODEL = "gpt-5.2-chat-latest";  // GPT-5.2 for style analysis
@@ -54,7 +58,7 @@ Deno.serve(async (req: Request) => {
   const startTime = performance.now();
   
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCors(req) });
   }
 
   try {
@@ -64,14 +68,14 @@ Deno.serve(async (req: Request) => {
     if (!imageUrl) {
       return new Response(
         JSON.stringify({ error: "imageUrl is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!OPENAI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "OpenAI API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -135,7 +139,7 @@ Return a JSON object with:
       console.error("Error details:", errorText);
       return new Response(
         JSON.stringify({ error: `OpenAI API error: ${response.status}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -146,7 +150,7 @@ Return a JSON object with:
       console.error("No content in OpenAI response");
       return new Response(
         JSON.stringify({ error: "No response from OpenAI" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -158,7 +162,7 @@ Return a JSON object with:
       console.error("Content:", content.substring(0, 500));
       return new Response(
         JSON.stringify({ error: "Failed to parse analysis result" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -211,7 +215,7 @@ Return a JSON object with:
 
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
 
   } catch (error) {
@@ -232,7 +236,7 @@ Return a JSON object with:
 
     return new Response(
       JSON.stringify({ error: errorObj.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 });

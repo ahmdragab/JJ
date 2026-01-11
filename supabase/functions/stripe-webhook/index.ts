@@ -2,12 +2,19 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Stripe-Signature",
-};
+// CORS headers function - uses validated origin from request
+// Note: Stripe webhooks come from Stripe servers, not browsers, so CORS isn't strictly needed
+// But we keep it for consistency and any browser-based testing
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Stripe-Signature",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
@@ -48,13 +55,13 @@ Deno.serve(async (req: Request) => {
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCors(req) });
   }
 
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 405, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 
@@ -69,7 +76,7 @@ Deno.serve(async (req: Request) => {
       logger.warn("Invalid Stripe webhook signature", { request_id: requestId });
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -114,7 +121,7 @@ Deno.serve(async (req: Request) => {
       });
       return new Response(
         JSON.stringify({ received: true, message: "Event already processed" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 200, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -130,7 +137,7 @@ Deno.serve(async (req: Request) => {
         });
         return new Response(
           JSON.stringify({ received: true, message: "Event already processed" }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
     }
@@ -176,7 +183,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ received: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     const duration = performance.now() - startTime;
@@ -194,7 +201,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ error: errorObj.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 });

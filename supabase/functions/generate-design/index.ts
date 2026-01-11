@@ -2,12 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.4";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 Deno.serve(async (req: Request) => {
   const logger = createLogger('generate-design');
@@ -17,7 +21,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
-      headers: corsHeaders,
+      headers: getCors(req),
     });
   }
 
@@ -29,7 +33,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Missing authorization header" }),
         {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -51,7 +55,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Missing required fields" }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -67,7 +71,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Brand not found" }),
         {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -83,7 +87,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Template not found" }),
         {
           status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -150,7 +154,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Unauthorized" }),
         {
           status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -186,7 +190,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ success: true, design }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
@@ -209,7 +213,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ error: errorObj.message }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }

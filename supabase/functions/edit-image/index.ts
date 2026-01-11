@@ -4,6 +4,7 @@ import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, verifyBrandOwnership } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { validateAndSanitizePrompt, logSuspiciousPrompt } from "../_shared/prompt-defense.ts";
 
 // CORS headers function - uses validated origin from request
 function getCors(request: Request): Record<string, string> {
@@ -280,19 +281,54 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
     
     const uint8Array = new Uint8Array(arrayBuffer);
     
-    // Try to extract dimensions from PNG/JPEG headers
+    // Try to extract dimensions from image headers (PNG, JPEG, WebP)
     let width: number | undefined;
     let height: number | undefined;
-    
+
     if (contentType === 'image/png' && uint8Array.length >= 24) {
+      // PNG: dimensions at bytes 16-23 (IHDR chunk)
       width = (uint8Array[16] << 24) | (uint8Array[17] << 16) | (uint8Array[18] << 8) | uint8Array[19];
       height = (uint8Array[20] << 24) | (uint8Array[21] << 16) | (uint8Array[22] << 8) | uint8Array[23];
     } else if ((contentType === 'image/jpeg' || contentType === 'image/jpg') && uint8Array.length >= 20) {
+      // JPEG: scan for SOF0/SOF1/SOF2 markers
       for (let i = 0; i < uint8Array.length - 9; i++) {
         if (uint8Array[i] === 0xFF && (uint8Array[i + 1] === 0xC0 || uint8Array[i + 1] === 0xC1 || uint8Array[i + 1] === 0xC2)) {
           height = (uint8Array[i + 5] << 8) | uint8Array[i + 6];
           width = (uint8Array[i + 7] << 8) | uint8Array[i + 8];
           break;
+        }
+      }
+    } else if (contentType === 'image/webp' && uint8Array.length >= 30) {
+      // WebP: Check for VP8/VP8L/VP8X chunks after RIFF header
+      // RIFF header: "RIFF" (4) + size (4) + "WEBP" (4) = 12 bytes
+      const isRiff = uint8Array[0] === 0x52 && uint8Array[1] === 0x49 && uint8Array[2] === 0x46 && uint8Array[3] === 0x46;
+      const isWebp = uint8Array[8] === 0x57 && uint8Array[9] === 0x45 && uint8Array[10] === 0x42 && uint8Array[11] === 0x50;
+      if (isRiff && isWebp) {
+        // VP8 lossy: starts at byte 12 with "VP8 " signature
+        if (uint8Array[12] === 0x56 && uint8Array[13] === 0x50 && uint8Array[14] === 0x38 && uint8Array[15] === 0x20) {
+          // VP8 dimensions at bytes 26-29 (after frame tag)
+          if (uint8Array.length >= 30) {
+            width = (uint8Array[26] | (uint8Array[27] << 8)) & 0x3FFF;
+            height = (uint8Array[28] | (uint8Array[29] << 8)) & 0x3FFF;
+          }
+        }
+        // VP8L lossless: starts at byte 12 with "VP8L" signature
+        else if (uint8Array[12] === 0x56 && uint8Array[13] === 0x50 && uint8Array[14] === 0x38 && uint8Array[15] === 0x4C) {
+          if (uint8Array.length >= 25) {
+            // VP8L has dimensions encoded differently - first 14 bits for width-1, next 14 for height-1
+            // Use >>> 0 to convert to unsigned 32-bit integer (avoids sign issues with high byte)
+            const bits = (uint8Array[21] | (uint8Array[22] << 8) | (uint8Array[23] << 16) | (uint8Array[24] << 24)) >>> 0;
+            width = (bits & 0x3FFF) + 1;
+            height = ((bits >>> 14) & 0x3FFF) + 1;
+          }
+        }
+        // VP8X extended: starts at byte 12 with "VP8X" signature
+        else if (uint8Array[12] === 0x56 && uint8Array[13] === 0x50 && uint8Array[14] === 0x38 && uint8Array[15] === 0x58) {
+          if (uint8Array.length >= 30) {
+            // VP8X has canvas dimensions at bytes 24-29 (3 bytes each for width-1 and height-1)
+            width = (uint8Array[24] | (uint8Array[25] << 8) | (uint8Array[26] << 16)) + 1;
+            height = (uint8Array[27] | (uint8Array[28] << 8) | (uint8Array[29] << 16)) + 1;
+          }
         }
       }
     }
@@ -310,7 +346,8 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
       return null;
     }
     
-    console.log(`[fetchImageAsBase64] Successfully fetched and encoded image: ${contentType}, ${Math.round(base64.length / 1024)}KB base64`);
+    const dimensionInfo = width && height ? `, ${width}x${height}` : '';
+    console.log(`[fetchImageAsBase64] Successfully fetched and encoded image: ${contentType}, ${Math.round(base64.length / 1024)}KB base64${dimensionInfo}`);
     return { data: base64, mimeType: contentType, width, height };
   } catch (error) {
     console.error(`[fetchImageAsBase64] Exception fetching image from ${url}:`, error);
@@ -320,9 +357,9 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
 
 function detectAspectRatioFromDimensions(width: number, height: number): AspectRatioValue | null {
   if (!width || !height || width <= 0 || height <= 0) return null;
-  
+
   const ratio = width / height;
-  
+
   const ratios: Array<{ value: AspectRatioValue; ratio: number }> = [
     { value: '1:1', ratio: 1.0 },
     { value: '2:3', ratio: 2/3 },
@@ -335,13 +372,17 @@ function detectAspectRatioFromDimensions(width: number, height: number): AspectR
     { value: '16:9', ratio: 16/9 },
     { value: '21:9', ratio: 21/9 },
   ];
-  
+
+  // Only match if within 5% tolerance - don't snap non-standard ratios
   for (const { value, ratio: targetRatio } of ratios) {
-    if (Math.abs(ratio - targetRatio) < 0.02) {
+    if (Math.abs(ratio - targetRatio) < 0.05) {
+      console.log(`[AspectRatio] Matched ${ratio.toFixed(3)} to ${value}`);
       return value;
     }
   }
-  
+
+  // No match - let the model handle it rather than silently distorting
+  console.log(`[AspectRatio] No standard match for ${ratio.toFixed(3)} (${width}x${height}), letting model decide`);
   return null;
 }
 
@@ -444,6 +485,25 @@ Deno.serve(async (req: Request) => {
         { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
+
+    // Validate and sanitize prompt for injection attacks
+    const promptValidation = validateAndSanitizePrompt(prompt, {
+      maxLength: 2000, // Edit prompts should be shorter
+      allowMarkdown: false,
+      strictMode: false,
+    });
+
+    // Log suspicious activity for monitoring
+    if (promptValidation.warnings.length > 0) {
+      logSuspiciousPrompt(prompt, undefined, promptValidation.warnings, {
+        function_name: 'edit-image',
+        request_id: requestId,
+        imageId,
+      });
+    }
+
+    // Use sanitized prompt for all downstream processing
+    const sanitizedPrompt = promptValidation.sanitizedPrompt;
 
     if (!imageId) {
       return new Response(
@@ -654,43 +714,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log(`[EDIT] Prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
+    console.log(`[EDIT] Prompt: "${sanitizedPrompt.substring(0, 100)}${sanitizedPrompt.length > 100 ? '...' : ''}" | Assets: ${assets.length} | References: ${references.length}`);
 
-    // Get original aspect ratio from image metadata or detect from image
-    let originalAspectRatio: string | null = null;
-    
-    const { data: imageMetadata } = await supabase
-      .from('images')
-      .select('metadata')
-      .eq('id', imageId)
-      .single();
-    
-    if (imageMetadata?.metadata && typeof imageMetadata.metadata === 'object') {
-      const metadata = imageMetadata.metadata as Record<string, unknown>;
-      if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
-        originalAspectRatio = metadata.aspect_ratio;
-      }
-    }
-    
-    // If not found in metadata, try to detect from image dimensions
-    if (!originalAspectRatio) {
-      const previousImageData = await fetchImageAsBase64(previousImageUrl);
-      if (previousImageData?.width && previousImageData?.height) {
-        const detectedRatio = detectAspectRatioFromDimensions(
-          previousImageData.width,
-          previousImageData.height
-        );
-        if (detectedRatio) {
-          originalAspectRatio = detectedRatio;
-        }
-      }
-    }
-
-    // Build the request parts for Gemini
-    const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
-    const attachedAssetNames: string[] = [];
-    
-    // Include the previous image - REQUIRED for editing
+    // Fetch the previous image ONCE and reuse for both aspect ratio detection and parts
     console.log(`[Edit] Fetching previous image from: ${previousImageUrl}`);
     const previousImageData = await fetchImageAsBase64(previousImageUrl);
     if (!previousImageData) {
@@ -723,22 +749,55 @@ Deno.serve(async (req: Request) => {
     if (!previousImageData.data || previousImageData.data.length === 0) {
       console.error(`[Edit] Image data is empty`);
       return new Response(
-        JSON.stringify({ 
-          error: `Invalid image data: image appears to be empty or corrupted.` 
+        JSON.stringify({
+          error: `Invalid image data: image appears to be empty or corrupted.`
         }),
         { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
-    
-      parts.push({
-        text: "Here is the current image. Please modify it according to the user's request:",
-      });
-      parts.push({
-        inline_data: {
-          mime_type: previousImageData.mimeType,
-          data: previousImageData.data,
-        },
-      });
+
+    // Get original aspect ratio from image metadata or detect from image dimensions
+    let originalAspectRatio: string | null = null;
+
+    const { data: imageMetadata } = await supabase
+      .from('images')
+      .select('metadata')
+      .eq('id', imageId)
+      .single();
+
+    if (imageMetadata?.metadata && typeof imageMetadata.metadata === 'object') {
+      const metadata = imageMetadata.metadata as Record<string, unknown>;
+      if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
+        originalAspectRatio = metadata.aspect_ratio;
+        console.log(`[Edit] Using aspect ratio from metadata: ${originalAspectRatio}`);
+      }
+    }
+
+    // If not found in metadata, detect from the fetched image dimensions
+    if (!originalAspectRatio && previousImageData.width && previousImageData.height) {
+      const detectedRatio = detectAspectRatioFromDimensions(
+        previousImageData.width,
+        previousImageData.height
+      );
+      if (detectedRatio) {
+        originalAspectRatio = detectedRatio;
+        console.log(`[Edit] Detected aspect ratio from image: ${originalAspectRatio} (${previousImageData.width}x${previousImageData.height})`);
+      }
+    }
+
+    // Build the request parts for Gemini
+    const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
+    const attachedAssetNames: string[] = [];
+
+    parts.push({
+      text: "Here is the current image. Please modify it according to the user's request:",
+    });
+    parts.push({
+      inline_data: {
+        mime_type: previousImageData.mimeType,
+        data: previousImageData.data,
+      },
+    });
 
     // Add aspect ratio preservation instruction
     const aspectRatioInstruction = originalAspectRatio
@@ -840,7 +899,7 @@ Deno.serve(async (req: Request) => {
 
     // Add the edit request
     parts.push({
-      text: `USER'S EDIT REQUEST: ${prompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.${aspectRatioInstruction}${assetInstruction}`,
+      text: `USER'S EDIT REQUEST: ${sanitizedPrompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.${aspectRatioInstruction}${assetInstruction}`,
     });
 
     // Resolution is always fixed at 2K
@@ -848,31 +907,36 @@ Deno.serve(async (req: Request) => {
     
     // Always use the original aspect ratio if we have it
     const validatedAspectRatio = validateAspectRatio(originalAspectRatio);
-    
-    // Get resolution dimensions for logging
-    const resolutionDims = validatedAspectRatio 
-      ? getResolution(validatedAspectRatio, finalResolution)
-      : null;
-    
+
     // Build generation config
+    // If we have a validated aspect ratio, use it to ensure consistent output
+    // If NOT, don't force an aspect ratio - let the model preserve the input image's dimensions
+    // This prevents distortion when editing non-standard aspect ratio images
     const generationConfig: Record<string, unknown> = {
       responseModalities: ["TEXT", "IMAGE"],
     };
-    
+
+    // Only set image_config if we have a known aspect ratio
+    // Otherwise, the model will naturally preserve the input image's aspect ratio
+    let aspectRatioToUse: string | null = validatedAspectRatio;
+    let actualResolutionDims: { width: number; height: number } | null = null;
+
     if (validatedAspectRatio) {
       generationConfig.image_config = {
         aspect_ratio: validatedAspectRatio,
         image_size: finalResolution,
       };
+      actualResolutionDims = getResolution(validatedAspectRatio, finalResolution);
     }
-    
-    const resolutionInfo = resolutionDims 
-      ? `${resolutionDims.width}x${resolutionDims.height} @ ${finalResolution}`
-      : `model-determined @ ${finalResolution}`;
-    const aspectInfo = validatedAspectRatio 
-      ? `aspect_ratio=${validatedAspectRatio}` 
-      : 'aspect_ratio=auto';
-    console.log(`[Config] ${aspectInfo} | ${resolutionInfo} | preserving original aspect ratio`);
+
+    // Log what we're doing
+    const resolutionInfo = actualResolutionDims
+      ? `${actualResolutionDims.width}x${actualResolutionDims.height} @ ${finalResolution}`
+      : `model-determined (preserving input)`;
+    const aspectInfo = validatedAspectRatio
+      ? `aspect_ratio=${validatedAspectRatio}`
+      : `aspect_ratio=auto (preserving original from ${previousImageData.width}x${previousImageData.height})`;
+    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}`);
 
     // Call Gemini API
     const partsSummary = parts.map((part, index) => {
@@ -1016,9 +1080,10 @@ Deno.serve(async (req: Request) => {
     const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
     updateData.metadata = {
       ...existingMetadata,
-      aspect_ratio: validatedAspectRatio || existingMetadata.aspect_ratio,
+      // Only update aspect_ratio if we had one, otherwise preserve existing or omit
+      ...(aspectRatioToUse ? { aspect_ratio: aspectRatioToUse } : {}),
       resolution: finalResolution,
-      dimensions: resolutionDims,
+      ...(actualResolutionDims ? { dimensions: actualResolutionDims } : {}),
       mime_type: 'image/png',
     };
 
@@ -1038,7 +1103,7 @@ Deno.serve(async (req: Request) => {
         const versionEntry = {
           image_url: currentImage.image_url,
           timestamp: new Date().toISOString(),
-          edit_prompt: prompt,
+          edit_prompt: sanitizedPrompt,
         };
         
         updateData.version_history = [...versionHistory, versionEntry];
@@ -1062,9 +1127,9 @@ Deno.serve(async (req: Request) => {
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
-        aspect_ratio: validatedAspectRatio || 'auto',
+        aspect_ratio: aspectRatioToUse || 'preserved',
         resolution: finalResolution,
-        dimensions: resolutionDims,
+        dimensions: actualResolutionDims,
         text_response: textResponse,
       }),
       {

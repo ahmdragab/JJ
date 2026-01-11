@@ -2,13 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-  "Access-Control-Max-Age": "86400",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 const GEMINI_MODEL = "gemini-3-pro-image-preview";
@@ -294,7 +297,7 @@ Deno.serve(async (req: Request) => {
   const startTime = performance.now();
   
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCors(req) });
   }
 
   try {
@@ -305,7 +308,7 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseKey) {
       return new Response(
         JSON.stringify({ error: "Server configuration error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
     
@@ -317,7 +320,7 @@ Deno.serve(async (req: Request) => {
     } catch {
       return new Response(
         JSON.stringify({ error: "Invalid request body" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -337,14 +340,14 @@ Deno.serve(async (req: Request) => {
     if (!prompt) {
       return new Response(
         JSON.stringify({ error: "Missing prompt" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!GEMINI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "GEMINI_API_KEY not set" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -416,21 +419,21 @@ Deno.serve(async (req: Request) => {
           console.warn("[V3] Invalid session:", { sessionId, userId, error: sessionError });
           return new Response(
             JSON.stringify({ error: "Invalid or expired session" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
         if (new Date(session.expires_at) < new Date()) {
           return new Response(
             JSON.stringify({ error: "Session has expired" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
         if (session.generations_used >= session.max_generations) {
           return new Response(
             JSON.stringify({ error: "Session has reached maximum generations" }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
@@ -455,7 +458,7 @@ Deno.serve(async (req: Request) => {
         if (creditsError || currentCredits < 1) {
           return new Response(
             JSON.stringify({ error: "Insufficient credits.", credits: currentCredits }),
-            { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 402, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
@@ -468,7 +471,7 @@ Deno.serve(async (req: Request) => {
         if (deductError) {
           return new Response(
             JSON.stringify({ error: "Failed to process credits.", credits: currentCredits }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
           );
         }
 
@@ -789,7 +792,7 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
       }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
@@ -815,7 +818,7 @@ This is the ONLY acceptable logo. Do not use any other logo or create variations
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }

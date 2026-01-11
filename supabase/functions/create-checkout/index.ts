@@ -2,12 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -20,13 +24,13 @@ Deno.serve(async (req: Request) => {
 
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response(null, { status: 204, headers: getCors(req) });
   }
 
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 405, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 
@@ -38,7 +42,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -56,7 +60,7 @@ Deno.serve(async (req: Request) => {
     if (userError || !user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -69,7 +73,7 @@ Deno.serve(async (req: Request) => {
       });
       return new Response(
         JSON.stringify({ error: "Payment system not configured. Please contact support." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -92,7 +96,7 @@ Deno.serve(async (req: Request) => {
       if (!plan) {
         return new Response(
           JSON.stringify({ error: "Plan not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -125,7 +129,7 @@ Deno.serve(async (req: Request) => {
       if (!priceId) {
         return new Response(
           JSON.stringify({ error: "Stripe price ID not configured for this plan" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -164,14 +168,14 @@ Deno.serve(async (req: Request) => {
       if (!packageData) {
         return new Response(
           JSON.stringify({ error: "Credit package not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 404, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
       if (!packageData.stripe_price_id) {
         return new Response(
           JSON.stringify({ error: "Stripe price ID not configured for this package" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -205,7 +209,7 @@ Deno.serve(async (req: Request) => {
       });
       return new Response(
         JSON.stringify({ error: "Invalid request: type and planId/packageId required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -217,7 +221,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ url: checkoutSession.url }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   } catch (error) {
     const duration = performance.now() - startTime;
@@ -235,7 +239,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ error: errorObj.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 });

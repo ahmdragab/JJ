@@ -2,12 +2,16 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 // Gemini 3 Flash - latest model for vision tasks (Public Preview, Dec 2025)
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-flash
@@ -224,7 +228,7 @@ Deno.serve(async (req: Request) => {
   const startTime = performance.now();
 
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: getCors(req) });
   }
 
   try {
@@ -233,7 +237,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader) {
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -253,7 +257,7 @@ Deno.serve(async (req: Request) => {
         console.error("Auth validation failed:", error?.message);
         return new Response(
           JSON.stringify({ error: "Invalid authorization token" }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
     }
@@ -264,21 +268,21 @@ Deno.serve(async (req: Request) => {
     if (!brandId) {
       return new Response(
         JSON.stringify({ error: "brandId is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!screenshotUrl) {
       return new Response(
         JSON.stringify({ error: "screenshotUrl is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
     if (!GEMINI_API_KEY) {
       return new Response(
         JSON.stringify({ error: "Gemini API key not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -398,7 +402,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
       console.error("No valid images available for analysis - all images may be unsupported formats");
       return new Response(
         JSON.stringify({ error: "No valid images available for analysis. The logo may be in an unsupported format (SVG) and conversion failed." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -429,7 +433,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
       console.error("Error details:", errorText);
       return new Response(
         JSON.stringify({ error: `Gemini API error: ${response.status}` }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -445,7 +449,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
       console.error("No content in Gemini response:", JSON.stringify(data).substring(0, 500));
       return new Response(
         JSON.stringify({ error: "No response from Gemini" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -461,13 +465,13 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
             error: "Response was truncated. Please try again.",
             message: "The AI response was cut off. Please retry or adjust colors manually."
           }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
       
       return new Response(
         JSON.stringify({ error: "Response was truncated due to token limit. Please try again." }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -488,13 +492,13 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
             error: "Failed to parse AI response",
             message: "Please try again or adjust colors manually"
           }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
       
       return new Response(
         JSON.stringify({ error: "Failed to parse style profile" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -521,7 +525,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
         console.error("Failed to fetch brand:", fetchError);
         return new Response(
           JSON.stringify({ error: "Failed to fetch brand data", details: fetchError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -543,7 +547,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
         console.error("Failed to update brand AI colors:", updateError);
         return new Response(
           JSON.stringify({ error: "Failed to save extracted colors", details: updateError.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
         );
       }
 
@@ -558,7 +562,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
 
       return new Response(
         JSON.stringify({ success: true, extracted_colors: extractedColors }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -625,7 +629,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
       console.error("Failed to fetch brand:", fetchError);
       return new Response(
         JSON.stringify({ error: "Failed to fetch brand data", details: fetchError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -653,7 +657,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
       console.error("Failed to update brand style profile:", updateError);
       return new Response(
         JSON.stringify({ error: "Failed to save style profile", details: updateError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -675,7 +679,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
         style_profile: validatedProfile,
         extracted_colors: validatedProfile.extracted_colors 
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
 
   } catch (error) {
@@ -694,7 +698,7 @@ For colors, extract ACTUAL hex values - analyze the exact colors visible in the 
 
     return new Response(
       JSON.stringify({ error: errorObj.message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ...getCors(req), "Content-Type": "application/json" } }
     );
   }
 });

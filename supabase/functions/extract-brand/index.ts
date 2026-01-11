@@ -5,6 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
 import { getUserIdFromRequest, unauthorizedResponse } from "../_shared/auth.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 // ConvertAPI configuration
 const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
@@ -221,11 +222,14 @@ async function processLogos(
   return processedLogos;
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-};
+// CORS headers function - uses validated origin from request
+function getCors(request: Request): Record<string, string> {
+  return {
+    ...getCorsHeaders(request),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+}
 
 // Brand.dev API configuration
 // To set up:
@@ -515,7 +519,7 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
       status: 200,
-      headers: corsHeaders,
+      headers: getCors(req),
     });
   }
 
@@ -527,7 +531,7 @@ Deno.serve(async (req: Request) => {
     const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
 
     if (authError || !userId) {
-      return unauthorizedResponse(authError || 'Authentication required', corsHeaders);
+      return unauthorizedResponse(authError || 'Authentication required', getCors(req));
     }
 
     logger.setContext({ request_id: requestId, user_id: userId });
@@ -540,7 +544,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "Missing required field: url" }),
         {
           status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -550,7 +554,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ error: "BRAND_DEV_API_KEY environment variable is not set" }),
         {
           status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -671,7 +675,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify({ success: true, data: fallbackData }),
         {
           status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          headers: { ...getCors(req), "Content-Type": "application/json" },
         }
       );
     }
@@ -740,7 +744,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({ success: true, data: extractedData }),
       {
         status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   } catch (error) {
@@ -765,7 +769,7 @@ Deno.serve(async (req: Request) => {
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCors(req), "Content-Type": "application/json" },
       }
     );
   }
