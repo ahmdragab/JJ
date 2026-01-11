@@ -37,6 +37,8 @@ export default {
         heading: ['Poppins', 'system-ui', 'sans-serif'],
         body: ['Inter', 'system-ui', 'sans-serif'],
         mono: ["'JetBrains Mono'", 'monospace'],
+        // Landing page font
+        dm: ["'DM Sans'", 'sans-serif'],
         // Legacy alias
         playful: ['Poppins', 'sans-serif'],
       },

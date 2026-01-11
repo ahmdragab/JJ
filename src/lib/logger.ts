@@ -1,6 +1,6 @@
 /**
  * Structured logging utility for frontend
- * Sends logs to Axiom for aggregation and visualization
+ * Uses console logging only - backend logging via Edge Functions handles Axiom
  */
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -12,30 +12,8 @@ interface LogContext {
   [key: string]: unknown;
 }
 
-interface LogEntry {
-  level: LogLevel;
-  message: string;
-  timestamp: string;
-  context?: LogContext;
-  error?: {
-    name: string;
-    message: string;
-    stack?: string;
-  };
-  [key: string]: unknown;
-}
-
 class Logger {
-  private axiomToken: string | undefined;
-  private axiomDataset: string | undefined;
-  private axiomUrl: string;
   private context: LogContext = {};
-
-  constructor() {
-    this.axiomToken = import.meta.env.VITE_AXIOM_TOKEN;
-    this.axiomDataset = import.meta.env.VITE_AXIOM_DATASET;
-    this.axiomUrl = import.meta.env.VITE_AXIOM_URL || 'https://api.axiom.co/v1/datasets';
-  }
 
   /**
    * Set context that will be included in all subsequent logs
@@ -59,73 +37,24 @@ class Logger {
   }
 
   /**
-   * Send log to Axiom
+   * Format log message with context
    */
-  private async sendToAxiom(entry: LogEntry): Promise<void> {
-    // Only send if Axiom is configured
-    if (!this.axiomToken || !this.axiomDataset) {
-      // Fallback to console if Axiom not configured
-      const consoleMethod = entry.level === 'error' ? 'error' : entry.level === 'warn' ? 'warn' : 'log';
-      console[consoleMethod](`[${entry.level.toUpperCase()}]`, entry.message, entry.context || {});
-      return;
-    }
-
-    try {
-      const response = await fetch(`${this.axiomUrl}/${this.axiomDataset}/ingest`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.axiomToken}`,
-        },
-        body: JSON.stringify([entry]),
-      });
-
-      if (!response.ok) {
-        console.warn('Failed to send log to Axiom:', response.status, response.statusText);
-      }
-    } catch (error) {
-      // Silently fail - don't break the app if logging fails
-      console.warn('Error sending log to Axiom:', error);
-    }
+  private formatLog(level: LogLevel, message: string, context?: Partial<LogContext>): [string, object] {
+    const mergedContext = { ...this.context, ...context };
+    const prefix = `[${level.toUpperCase()}]`;
+    return [
+      `${prefix} ${message}`,
+      Object.keys(mergedContext).length > 0 ? mergedContext : {}
+    ];
   }
 
   /**
-   * Create a log entry
-   */
-  private createLogEntry(
-    level: LogLevel,
-    message: string,
-    context?: Partial<LogContext>,
-    error?: Error
-  ): LogEntry {
-    const entry: LogEntry = {
-      level,
-      message,
-      timestamp: new Date().toISOString(),
-      context: { ...this.context, ...context },
-    };
-
-    if (error) {
-      entry.error = {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-      };
-    }
-
-    return entry;
-  }
-
-  /**
-   * Log at debug level
+   * Log at debug level (only in development)
    */
   debug(message: string, context?: Partial<LogContext>): void {
     if (import.meta.env.DEV) {
-      console.debug(message, context || {});
-    }
-    // Don't send debug logs to Axiom in production to save quota
-    if (import.meta.env.DEV && this.axiomToken) {
-      this.sendToAxiom(this.createLogEntry('debug', message, context));
+      const [msg, ctx] = this.formatLog('debug', message, context);
+      console.debug(msg, ctx);
     }
   }
 
@@ -133,24 +62,24 @@ class Logger {
    * Log at info level
    */
   info(message: string, context?: Partial<LogContext>): void {
-    console.log(`[INFO] ${message}`, context || {});
-    this.sendToAxiom(this.createLogEntry('info', message, context));
+    const [msg, ctx] = this.formatLog('info', message, context);
+    console.log(msg, ctx);
   }
 
   /**
    * Log at warn level
    */
   warn(message: string, context?: Partial<LogContext>): void {
-    console.warn(`[WARN] ${message}`, context || {});
-    this.sendToAxiom(this.createLogEntry('warn', message, context));
+    const [msg, ctx] = this.formatLog('warn', message, context);
+    console.warn(msg, ctx);
   }
 
   /**
    * Log at error level
    */
   error(message: string, error?: Error, context?: Partial<LogContext>): void {
-    console.error(`[ERROR] ${message}`, error, context || {});
-    this.sendToAxiom(this.createLogEntry('error', message, context, error));
+    const [msg, ctx] = this.formatLog('error', message, context);
+    console.error(msg, error, ctx);
   }
 
   /**
@@ -187,7 +116,7 @@ export const logger = new Logger();
 if (typeof window !== 'undefined') {
   (window as any).testObservability = async () => {
     console.log('🧪 Testing Observability...');
-    
+
     // Check Sentry
     const Sentry = (window as any).Sentry;
     if (Sentry) {
@@ -195,17 +124,15 @@ if (typeof window !== 'undefined') {
     } else {
       console.warn('⚠️ Sentry is NOT initialized. Make sure VITE_SENTRY_DSN is set in your .env file');
     }
-    
-    // Test Axiom logging
+
+    // Test logging
     logger.info('Test info log from observability test', { test: true, timestamp: new Date().toISOString() });
     logger.warn('Test warning log from observability test', { test: true });
-    
-    // Test Sentry error - both via logger and directly
+
+    // Test Sentry error
     const testError = new Error('Test error for Sentry - this is intentional');
-    
-    // Log to Axiom
     logger.error('Test error log from observability test', testError, { test: true });
-    
+
     // Also capture directly in Sentry if available
     if (Sentry) {
       Sentry.captureException(testError, {
@@ -214,10 +141,9 @@ if (typeof window !== 'undefined') {
       });
       console.log('✅ Error sent to Sentry');
     }
-    
+
     console.log('✅ Test complete! Check:');
     console.log('  - Sentry: https://sentry.io (should see test error)');
-    console.log('  - Axiom: https://app.axiom.co (should see test logs)');
+    console.log('  - Browser console for local logs');
   };
 }
-
