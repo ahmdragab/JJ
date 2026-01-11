@@ -1,33 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Sparkles, Globe, Check } from 'lucide-react';
+import { ArrowRight, Globe, Check, X, ChevronDown } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
-import alwanLogo from '../fav.png';
 
-// Example gallery images
-import exampleTabby from '../examples/tabby.png';
-import exampleDeel1 from '../examples/deel-1.png';
-import exampleDeel2 from '../examples/deel-2.png';
-import exampleDeel3 from '../examples/deel-3.png';
-import exampleLattice from '../examples/lattice.png';
-import exampleLattice2 from '../examples/lattice-2.png';
-import exampleRippling from '../examples/rippling-1.png';
-import exampleDownload from '../examples/download.png';
-import exampleDownload1 from '../examples/download (1).png';
-import exampleDownload2 from '../examples/download (2).png';
-import exampleDownload3 from '../examples/download (3).png';
+// Contact email - single source of truth
+const SUPPORT_EMAIL = 'support@alwan.io';
 
+// Example gallery images (served from public/examples/)
 const galleryImages = [
-  exampleTabby,
-  exampleDeel1,
-  exampleLattice,
-  exampleDeel2,
-  exampleRippling,
-  exampleLattice2,
-  exampleDeel3,
-  exampleDownload1,
-  exampleDownload2,
-  exampleDownload3,
+  '/examples/tabby.png',
+  '/examples/deel-1.png',
+  '/examples/lattice.png',
+  '/examples/deel-2.png',
+  '/examples/rippling-1.png',
+  '/examples/lattice-2.png',
+  '/examples/deel-3.png',
+  '/examples/download-1.png',
+  '/examples/download-2.png',
+  '/examples/download-3.png',
 ];
 
 // ============================================================================
@@ -39,45 +29,136 @@ interface LandingV2Props {
   onViewBrands?: () => void;
 }
 
-interface ShowcaseStyle {
-  id: string;
-  url: string;
-  name: string;
-  category: string;
+// ============================================================================
+// FAQ SECTION COMPONENT
+// ============================================================================
+
+interface FAQItem {
+  question: string;
+  answer: string;
 }
 
-// Custom hook to fetch showcase styles from Supabase
-function useShowcaseStyles(limit = 6): { styles: ShowcaseStyle[]; loading: boolean } {
-  const [styles, setStyles] = useState<ShowcaseStyle[]>([]);
-  const [loading, setLoading] = useState(true);
+const faqData: FAQItem[] = [
+  {
+    question: 'How does brand extraction work?',
+    answer: 'Simply paste your website URL and our AI analyzes your site to extract your brand colors, fonts, logos, and brand voice. We use advanced machine learning to identify your visual identity and create a comprehensive brand kit that ensures all generated ads stay perfectly on-brand.'
+  },
+  {
+    question: 'What AI models power the image generation?',
+    answer: 'We use a combination of the latest reasoning and generative AI models to produce stunning, photorealistic visuals and craft compelling ad copy that resonates with your audience.'
+  },
+  {
+    question: 'How do credits work?',
+    answer: 'Credits are simple: 1 credit = 1 image generation. When you generate an ad, one credit is deducted from your balance. Free accounts start with 5 credits, and paid plans include monthly credit allowances. Unused credits roll over to the next month on paid plans.'
+  },
+  {
+    question: 'Can I edit generated images?',
+    answer: 'Yes! Every generated image can be refined through our conversational editing feature. Simply describe the changes you want - adjust colors, swap elements, change text, or modify layouts - and our AI will apply your edits while maintaining brand consistency.'
+  },
+  {
+    question: 'What file formats are supported?',
+    answer: 'Generated images are delivered in high-resolution PNG format, optimized for digital advertising. We support all major ad platform dimensions including Instagram (1080x1080, 1080x1920), Facebook, LinkedIn, Twitter, and custom sizes for any platform you need.'
+  },
+  {
+    question: 'Is my brand data secure?',
+    answer: 'Absolutely. Your brand data is encrypted at rest and in transit. We never share your brand assets or generated content with third parties. All data is stored securely on enterprise-grade infrastructure with SOC 2 compliant practices.'
+  }
+];
 
-  useEffect(() => {
-    async function fetchStyles() {
-      try {
-        const { data, error } = await supabase
-          .from('styles')
-          .select('id, url, name, category')
-          .eq('is_active', true)
-          .order('display_order', { ascending: true })
-          .limit(limit);
+function FAQSection() {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
 
-        if (!error && data) {
-          setStyles(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch showcase styles:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
+  const toggleFAQ = (index: number) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
 
-    fetchStyles();
-  }, [limit]);
+  return (
+    <section id="faq" className="px-6 sm:px-8 lg:px-16 py-20 lg:py-28 bg-white">
+      <div className="max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 font-dm"
+              >
+            Frequently asked questions
+          </h2>
+          <p className="text-gray-500 text-lg font-dm"
+             >
+            Everything you need to know about Alwan
+          </p>
+        </div>
 
-  return { styles, loading };
+        {/* FAQ Accordion */}
+        <div className="space-y-3">
+          {faqData.map((faq, index) => (
+            <div
+              key={index}
+              className={`rounded-2xl border transition-all duration-300 ${
+                openIndex === index
+                  ? 'border-[#3531B7]/20 bg-[#3531B7]/[0.02] shadow-lg shadow-[#3531B7]/5'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <button
+                onClick={() => toggleFAQ(index)}
+                className="w-full px-6 py-5 flex items-center justify-between text-left"
+              >
+                <span
+                  className={`text-base sm:text-lg font-semibold transition-colors font-dm ${
+                    openIndex === index ? 'text-[#3531B7]' : 'text-gray-900'
+                  }`}
+                >
+                  {faq.question}
+                </span>
+                <div
+                  className={`ml-4 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    openIndex === index
+                      ? 'bg-[#3531B7] rotate-180'
+                      : 'bg-gray-100'
+                  }`}
+                >
+                  <ChevronDown
+                    className={`w-5 h-5 transition-colors ${
+                      openIndex === index ? 'text-white' : 'text-gray-500'
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {/* Answer with smooth height animation */}
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  openIndex === index ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                }`}
+              >
+                <div className="px-6 pb-5">
+                  <p
+                    className="text-gray-600 leading-relaxed font-dm"
+                    
+                  >
+                    {faq.answer}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Contact CTA */}
+        <div className="mt-10 text-center">
+          <p className="text-gray-500 font-dm" >
+            Still have questions?{' '}
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="text-[#3531B7] hover:underline font-medium"
+            >
+              Get in touch
+            </a>
+          </p>
+        </div>
+      </div>
+    </section>
+  );
 }
-
-
 
 // ============================================================================
 // VERSION B: ALWAN - CONVERSION FOCUSED
@@ -100,16 +181,23 @@ interface Plan {
 }
 
 function VersionB({ onStart }: { onStart: (url: string) => void }) {
-  const { user, signInWithGoogle } = useAuth();
+  const { user, signIn, signUp, signInWithGoogle } = useAuth();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
-  const { styles: showcaseStyles } = useShowcaseStyles(6);
   const [activeStep, setActiveStep] = useState(0);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [plansLoading, setPlansLoading] = useState(true);
   const [sectionInView, setSectionInView] = useState(false);
   const howItWorksSectionRef = useRef<HTMLElement>(null);
+
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Intersection Observer to detect when "How it works" section is in view
   useEffect(() => {
@@ -164,6 +252,76 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
     loadPlans();
   }, []);
 
+  // Recover pending URL after OAuth redirect
+  useEffect(() => {
+    if (user) {
+      const storedPendingUrl = localStorage.getItem('pendingUrl');
+      if (storedPendingUrl) {
+        localStorage.removeItem('pendingUrl');
+        // Security: Validate before using - localStorage could have been tampered with
+        // Check for dangerous protocols (javascript:, data:, etc.)
+        const hasProtocol = storedPendingUrl.includes(':');
+        const isSafeProtocol = storedPendingUrl.startsWith('http://') || storedPendingUrl.startsWith('https://');
+        if (hasProtocol && !isSafeProtocol) {
+          console.warn('Blocked unsafe protocol in pendingUrl:', storedPendingUrl.split(':')[0]);
+          return;
+        }
+        if (isValidDomain(storedPendingUrl)) {
+          onStart(storedPendingUrl);
+        }
+      }
+    }
+  }, [user, onStart]);
+
+  // Email/password auth handler
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+
+    try {
+      if (isSignUp) {
+        await signUp(email, password);
+      } else {
+        await signIn(email, password);
+      }
+      // On success, the user state will update and useEffect will handle pending URL
+      setShowAuthModal(false);
+      setEmail('');
+      setPassword('');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Authentication failed';
+      setAuthError(errorMessage);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Google sign-in handler (stores pending URL for OAuth redirect)
+  const handleGoogleSignIn = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      if (url.trim()) {
+        localStorage.setItem('pendingUrl', url.trim());
+      }
+      await signInWithGoogle();
+      // Note: signInWithGoogle redirects, so we won't reach here on success
+    } catch (err: unknown) {
+      setAuthError(err instanceof Error ? err.message : 'Google sign-in failed');
+      setAuthLoading(false);
+    }
+  };
+
+  // Open auth modal
+  const openAuthModal = (signUpMode = false) => {
+    setIsSignUp(signUpMode);
+    setAuthError('');
+    setEmail('');
+    setPassword('');
+    setShowAuthModal(true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -180,7 +338,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
     if (!user) {
       localStorage.setItem('pendingUrl', url.trim());
-      signInWithGoogle();
+      openAuthModal(true); // Open sign up modal
       return;
     }
 
@@ -226,40 +384,50 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
       {/* Content */}
       <div className="relative z-10">
         {/* Navigation */}
-        <header className="w-full px-6 sm:px-8 lg:px-16 py-5 flex justify-between items-center">
-          <div className="flex items-center gap-2.5">
-            <img src={alwanLogo} alt="Alwan" className="h-10 w-auto object-contain" />
-            <span className="font-semibold text-xl tracking-tight text-gray-900" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-              Alwan
-            </span>
+        <header className="w-full px-6 sm:px-8 lg:px-16 py-5 flex justify-between items-center relative">
+          {/* Left: Logo */}
+          <div className="flex items-center">
+            <img src="/fav.png" alt="Alwan" style={{ width: 100, height: 'auto' }} />
           </div>
 
-          <div className="flex items-center gap-3">
-            <a href="#pricing" className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block"
-               style={{ fontFamily: "'DM Sans', sans-serif" }}>
+          {/* Center: Nav links */}
+          <nav className="hidden md:flex items-center gap-1 absolute left-1/2 -translate-x-1/2">
+            <a href="#how-it-works" className="px-4 py-2 text-base font-medium text-gray-600 hover:text-gray-900 transition-colors font-dm"
+               >
+              How it works
+            </a>
+            <a href="#gallery" className="px-4 py-2 text-base font-medium text-gray-600 hover:text-gray-900 transition-colors font-dm"
+               >
+              Gallery
+            </a>
+            <a href="#pricing" className="px-4 py-2 text-base font-medium text-gray-600 hover:text-gray-900 transition-colors font-dm"
+               >
               Pricing
             </a>
+          </nav>
+
+          {/* Right: Auth buttons */}
+          <div className="flex items-center gap-3">
             {user ? (
               <button
                 onClick={() => window.location.href = '/brands'}
-                className="px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:opacity-90 bg-gray-900 text-white"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
+                className="px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:opacity-90 bg-gray-900 text-white font-dm"
+                
               >
                 Dashboard
               </button>
             ) : (
               <>
                 <button
-                  onClick={() => signInWithGoogle()}
-                  className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block"
-                  style={{ fontFamily: "'DM Sans', sans-serif" }}
+                  onClick={() => openAuthModal(false)}
+                  className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block font-dm"
+                  
                 >
                   Sign In
                 </button>
                 <button
-                  onClick={() => signInWithGoogle()}
-                  className="px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:opacity-90 text-white"
-                  style={{ backgroundColor: '#3531B7', fontFamily: "'DM Sans', sans-serif" }}
+                  onClick={() => openAuthModal(true)}
+                  className="px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:opacity-90 text-white font-dm bg-brand-primary"
                 >
                   Get Started Free
                 </button>
@@ -274,32 +442,19 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
             <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
               {/* Left: Text content */}
               <div className="max-w-xl">
-                {/* Social proof badge */}
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gray-50 border border-gray-100 mb-6">
-                  <div className="flex -space-x-1.5">
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 border-2 border-white" />
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-green-400 to-green-600 border-2 border-white" />
-                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 border-2 border-white" />
-                  </div>
-                  <span className="text-xs font-medium text-gray-600" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                    Trusted by 200+ businesses
-                  </span>
-                </div>
-
                 {/* Headline */}
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] mb-5 text-gray-900"
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-[1.1] mb-5 text-gray-900 font-dm"
+                    >
                   Your brand.
                   <br />
                   <span style={{ color: '#3531B7' }}>Infinite ads.</span>
                 </h1>
 
                 {/* Subheadline */}
-                <p className="text-lg text-gray-500 mb-8 leading-relaxed"
-                   style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                  Drop your website URL. We extract your brand identity — colors, fonts, logo,
-                  voice — and generate scroll-stopping ads for Meta, Google, TikTok, and more.
-                  <span className="text-gray-900 font-medium"> In under 30 seconds.</span>
+                <p className="text-lg text-gray-500 mb-8 leading-relaxed font-dm"
+                   >
+                  Drop your website URL. We extract your brand and generate scroll-stopping ads for all platforms. No design skills. No waiting.
+                  <span className="text-gray-900 font-medium"> Just results in 30 seconds.</span>
                 </p>
 
                 {/* URL Input */}
@@ -314,26 +469,25 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                         value={url}
                         onChange={(e) => { setUrl(e.target.value); setError(''); }}
                         placeholder="Enter your website URL"
-                        className="flex-1 bg-transparent outline-none py-3.5 text-gray-900 placeholder:text-gray-400"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
+                        className="flex-1 bg-transparent outline-none py-3.5 text-gray-900 placeholder:text-gray-400 font-dm"
+                        
                       />
                     </div>
                     <button
                       type="submit"
-                      className="px-6 py-3.5 rounded-xl text-white font-semibold transition-all hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap"
-                      style={{ backgroundColor: '#3531B7', fontFamily: "'DM Sans', sans-serif" }}
+                      className="px-6 py-3.5 rounded-xl text-white font-semibold transition-all hover:opacity-90 active:scale-[0.98] flex items-center justify-center gap-2 whitespace-nowrap font-dm bg-brand-primary"
                     >
                       Generate Ads
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                   {error && (
-                    <p className="text-red-500 text-sm mt-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>{error}</p>
+                    <p className="text-red-500 text-sm mt-2 font-dm" >{error}</p>
                   )}
                 </form>
 
                 {/* Trust indicators */}
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-400" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-400 font-dm" >
                   <div className="flex items-center gap-1.5">
                     <Check className="w-4 h-4 text-green-500" />
                     <span>Free to start</span>
@@ -347,20 +501,44 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                     <span>Results in 30 sec</span>
                   </div>
                 </div>
+
+                {/* Customer logos / social proof */}
+                <div className="mt-10 pt-8 border-t border-gray-100">
+                  <p className="text-xs text-gray-400 mb-4 uppercase tracking-wider font-dm" >
+                    Trusted by teams at
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                    {['Noon', 'Careem', 'Talabat', 'Kitopi', 'Tabby'].map((company) => (
+                      <span
+                        key={company}
+                        className="text-lg font-semibold text-gray-300 font-dm"
+                        
+                      >
+                        {company}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               {/* Right: 2x2 grid of example ads */}
               <div className="hidden lg:grid grid-cols-2 gap-4 w-full max-w-md">
-                {[exampleDownload, exampleLattice, exampleTabby, exampleDeel2].map((img, index) => (
+                {['/examples/lattice.png', '/examples/noon.png', '/examples/tabby.png', '/examples/deel-2.png'].map((img, index) => (
                   <div
                     key={index}
-                    className="hero-grid-card group rounded-2xl overflow-hidden shadow-lg"
+                    className="hero-grid-card group rounded-2xl overflow-hidden shadow-lg aspect-[4/5] bg-gray-200 animate-pulse"
                   >
                     <img
                       src={img}
                       alt={`Ad example ${index + 1}`}
-                      className="w-full h-auto block transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       loading="lazy"
+                      onLoad={(e) => {
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          parent.classList.remove('bg-gray-200', 'animate-pulse');
+                        }
+                      }}
                     />
                   </div>
                 ))}
@@ -370,15 +548,15 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         </section>
 
         {/* How it works - Dynamic Animated Section */}
-        <section ref={howItWorksSectionRef} className="px-6 sm:px-8 lg:px-16 py-20 lg:py-28 bg-gray-50">
+        <section id="how-it-works" ref={howItWorksSectionRef} className="px-6 sm:px-8 lg:px-16 py-20 lg:py-28 bg-gray-50">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4"
-                  style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 font-dm"
+                  >
                 From URL to ads in 3 steps
               </h2>
-              <p className="text-gray-500 text-lg max-w-2xl mx-auto"
-                 style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <p className="text-gray-500 text-lg max-w-2xl mx-auto font-dm"
+                 >
                 No design skills needed. No brand guidelines required. Just your website.
               </p>
             </div>
@@ -407,14 +585,14 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                         )}
                       </div>
                       <div className="flex-1">
-                        <h3 className={`text-lg font-semibold mb-1 transition-colors ${
+                        <h3 className={`text-lg font-semibold mb-1 transition-colors font-dm ${
                           activeStep === index ? 'text-gray-900' : 'text-gray-500'
-                        }`} style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                        }`}>
                           {step.title}
                         </h3>
-                        <p className={`text-sm transition-colors ${
+                        <p className={`text-sm transition-colors font-dm ${
                           activeStep === index ? 'text-gray-600' : 'text-gray-400'
-                        }`} style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                        }`}>
                           {step.desc}
                         </p>
                       </div>
@@ -457,7 +635,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                           <div className="flex-1 bg-white rounded-lg px-4 py-2 text-sm text-gray-600 flex items-center gap-2">
                             <Globe className="w-4 h-4 text-gray-400" />
                             <span className="animate-paste">
-                              yourcompany.com
+                              noon.com
                             </span>
                           </div>
                           {/* Go button with glow effect */}
@@ -468,7 +646,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                         </div>
                         <div className="bg-white rounded-lg m-1 p-6 h-48 flex items-center justify-center">
                           <div className="text-center">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#3531B7] to-purple-600 mx-auto mb-4 animate-pulse" />
+                            <img src="/noon/noon.svg" alt="noon" className="h-12 mx-auto mb-4" />
                             <div className="h-3 w-32 bg-gray-200 rounded mx-auto mb-2" />
                             <div className="h-2 w-24 bg-gray-100 rounded mx-auto" />
                           </div>
@@ -478,83 +656,52 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                   </div>
                 </div>
 
-                {/* Step 2: Brand extraction visual */}
+                {/* Step 2: Brand extraction visual - noon.com */}
                 <div className={`absolute inset-0 p-8 transition-all duration-700 ${
                   activeStep === 1 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
                 }`}>
                   <div className="h-full flex flex-col items-center justify-center">
                     <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
-                      {/* Colors */}
+                      {/* Colors - noon brand colors */}
                       <div className="bg-gray-50 rounded-xl p-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
                         <div className="text-xs text-gray-400 mb-2 font-medium">Colors</div>
                         <div className="flex gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-[#3531B7] animate-scale-in" style={{ animationDelay: '0.2s' }} />
-                          <div className="w-8 h-8 rounded-lg bg-gray-900 animate-scale-in" style={{ animationDelay: '0.3s' }} />
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 border animate-scale-in" style={{ animationDelay: '0.4s' }} />
+                          <div className="w-8 h-8 rounded-lg animate-scale-in" style={{ backgroundColor: '#FEEE00', animationDelay: '0.2s' }} />
+                          <div className="w-8 h-8 rounded-lg animate-scale-in" style={{ backgroundColor: '#404553', animationDelay: '0.3s' }} />
+                          <div className="w-8 h-8 rounded-lg bg-white border animate-scale-in" style={{ animationDelay: '0.4s' }} />
                         </div>
                       </div>
                       {/* Fonts */}
                       <div className="bg-gray-50 rounded-xl p-4 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                         <div className="text-xs text-gray-400 mb-2 font-medium">Fonts</div>
                         <div className="text-lg font-bold text-gray-900">Aa</div>
-                        <div className="text-xs text-gray-500">DM Sans</div>
+                        <div className="text-xs text-gray-500">Noto Sans</div>
                       </div>
-                      {/* Logo */}
+                      {/* Logo - noon */}
                       <div className="bg-gray-50 rounded-xl p-4 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
                         <div className="text-xs text-gray-400 mb-2 font-medium">Logo</div>
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3531B7] to-purple-600 flex items-center justify-center">
-                          <Sparkles className="w-6 h-6 text-white" />
-                        </div>
+                        <img src="/noon/noon.svg" alt="noon" className="h-8" />
                       </div>
                       {/* Voice */}
                       <div className="bg-gray-50 rounded-xl p-4 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
                         <div className="text-xs text-gray-400 mb-2 font-medium">Voice</div>
                         <div className="flex flex-wrap gap-1">
-                          <span className="text-xs px-2 py-1 bg-[#3531B7]/10 text-[#3531B7] rounded-full">Professional</span>
-                          <span className="text-xs px-2 py-1 bg-[#3531B7]/10 text-[#3531B7] rounded-full">Bold</span>
+                          <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#FEEE00', color: '#404553' }}>Bold</span>
+                          <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: '#FEEE00', color: '#404553' }}>Friendly</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Step 3: Generated ads visual */}
-                <div className={`absolute inset-0 p-6 transition-all duration-700 ${
+                {/* Step 3: Generated ads visual - noon.com ads */}
+                <div className={`absolute inset-0 flex items-center justify-center p-4 transition-all duration-700 ${
                   activeStep === 2 ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-8 pointer-events-none'
                 }`}>
-                  <div className="h-full flex items-center justify-center">
-                    <div className="relative w-full max-w-md h-full">
-                      {/* Floating ad cards */}
-                      {showcaseStyles.slice(0, 3).map((style, i) => (
-                        <div
-                          key={style.id}
-                          className="absolute rounded-xl overflow-hidden shadow-lg animate-float-up"
-                          style={{
-                            width: i === 1 ? '160px' : '120px',
-                            left: i === 0 ? '10%' : i === 1 ? '35%' : '65%',
-                            top: i === 0 ? '20%' : i === 1 ? '10%' : '25%',
-                            animationDelay: `${i * 0.2}s`,
-                            zIndex: i === 1 ? 20 : 10,
-                            transform: `rotate(${i === 0 ? -6 : i === 1 ? 0 : 6}deg)`,
-                          }}
-                        >
-                          <img src={style.url} alt={style.name} className="w-full h-auto" />
-                        </div>
-                      ))}
-
-                      {/* Platform badges */}
-                      <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-3">
-                        {['Meta', 'Google', 'TikTok'].map((platform, i) => (
-                          <div
-                            key={platform}
-                            className="px-3 py-1.5 bg-white rounded-full shadow-md text-xs font-medium text-gray-600 animate-fade-in-up"
-                            style={{ animationDelay: `${0.5 + i * 0.1}s` }}
-                          >
-                            {platform}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  <div className="flex gap-2 w-full h-full items-center justify-center">
+                    <img src="/noon/noon-5.png" alt="noon ad 1" className="flex-1 min-w-0 h-auto max-h-full object-contain rounded-xl shadow-lg" />
+                    <img src="/noon/noon-6.png" alt="noon ad 2" className="flex-1 min-w-0 h-auto max-h-full object-contain rounded-xl shadow-lg" />
+                    <img src="/noon/noon-7.png" alt="noon ad 3" className="flex-1 min-w-0 h-auto max-h-full object-contain rounded-xl shadow-lg" />
                   </div>
                 </div>
               </div>
@@ -563,12 +710,12 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         </section>
 
         {/* Gallery - Ads created using Alwan */}
-        <section className="py-16 lg:py-20 bg-white overflow-hidden">
+        <section id="gallery" className="py-16 lg:py-20 bg-white overflow-hidden">
           <div className="text-center mb-10">
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2 font-dm" >
               Ads created using Alwan
             </h2>
-            <p className="text-gray-400 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <p className="text-gray-400 text-sm font-dm" >
               Real examples from real brands
             </p>
           </div>
@@ -585,13 +732,20 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
               {[...galleryImages, ...galleryImages].map((img, index) => (
                 <div
                   key={index}
-                  className="gallery-card flex-shrink-0 w-56 sm:w-64 lg:w-72 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer group"
+                  className="gallery-card flex-shrink-0 w-56 sm:w-64 lg:w-72 aspect-[4/5] rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer group bg-gray-200 animate-pulse"
                 >
                   <img
                     src={img}
                     alt={`Ad example ${(index % galleryImages.length) + 1}`}
-                    className="w-full h-auto block transition-transform duration-500 group-hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                     loading="lazy"
+                    onLoad={(e) => {
+                      // Remove skeleton styles once image loads
+                      const parent = e.currentTarget.parentElement;
+                      if (parent) {
+                        parent.classList.remove('bg-gray-200', 'animate-pulse');
+                      }
+                    }}
                   />
                 </div>
               ))}
@@ -604,19 +758,18 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
           <div className="max-w-6xl mx-auto">
             {/* Header */}
             <div className="text-center mb-12">
-              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4"
-                  style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4 font-dm"
+                  >
                 Simple, transparent pricing
               </h2>
-              <p className="text-gray-500 text-lg mb-8"
-                 style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <p className="text-gray-500 text-lg mb-8 font-dm"
+                 >
                 Start free. Upgrade when you need more.
               </p>
 
               {/* Billing Toggle */}
               <div className="flex items-center justify-center gap-4 mb-6">
-                <span className={`text-sm font-medium transition-colors ${billingCycle === 'monthly' ? 'text-gray-900' : 'text-gray-400'}`}
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                <span className={`text-sm font-medium transition-colors font-dm ${billingCycle === 'monthly' ? 'text-gray-900' : 'text-gray-400'}`}>
                   Monthly
                 </span>
                 <button
@@ -631,19 +784,15 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                     }`}
                   />
                 </button>
-                <span className={`text-sm font-medium transition-colors flex items-center gap-2 ${billingCycle === 'yearly' ? 'text-gray-900' : 'text-gray-400'}`}
-                      style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                <span className={`text-sm font-medium transition-colors flex items-center gap-2 font-dm ${billingCycle === 'yearly' ? 'text-gray-900' : 'text-gray-400'}`}>
                   Annual
-                  {billingCycle === 'yearly' && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
-                      Save 20%
-                    </span>
-                  )}
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
+                    Save 20%
+                  </span>
                 </span>
               </div>
 
-              <div className="inline-flex items-center gap-2 bg-[#3531B7]/10 text-[#3531B7] px-4 py-2 rounded-xl text-sm font-medium">
-                <Sparkles className="w-4 h-4" />
+              <div className="inline-flex items-center bg-[#3531B7]/10 text-[#3531B7] px-4 py-2 rounded-xl text-sm font-medium">
                 <span>1 credit = 1 image generation</span>
               </div>
             </div>
@@ -683,10 +832,10 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                       )}
 
                       <div className="mb-6">
-                        <h3 className="text-xl font-bold text-gray-900 mb-1" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                        <h3 className="text-xl font-bold text-gray-900 mb-1 font-dm" >
                           {plan.display_name}
                         </h3>
-                        <p className="text-gray-500 text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                        <p className="text-gray-500 text-sm font-dm" >
                           {plan.description}
                         </p>
                       </div>
@@ -710,7 +859,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                           <div className="w-5 h-5 rounded-full bg-[#3531B7]/10 flex items-center justify-center">
                             <Check className="w-3 h-3 text-[#3531B7]" />
                           </div>
-                          <span className="text-sm font-medium" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                          <span className="text-sm font-medium font-dm" >
                             {plan.credits_per_month} credits/month
                           </span>
                         </div>
@@ -718,7 +867,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                           <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center">
                             <Check className="w-3 h-3 text-gray-400" />
                           </div>
-                          <span className="text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                          <span className="text-sm font-dm" >
                             All platforms
                           </span>
                         </div>
@@ -727,7 +876,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center">
                               <Check className="w-3 h-3 text-gray-400" />
                             </div>
-                            <span className="text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                            <span className="text-sm font-dm" >
                               Priority support
                             </span>
                           </div>
@@ -737,7 +886,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
                             <div className="w-5 h-5 rounded-full bg-gray-100 flex items-center justify-center">
                               <Check className="w-3 h-3 text-gray-400" />
                             </div>
-                            <span className="text-sm" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                            <span className="text-sm font-dm" >
                               Usage analytics
                             </span>
                           </div>
@@ -746,21 +895,20 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
                       {plan.name === 'free' ? (
                         <button
-                          onClick={() => signInWithGoogle()}
-                          className="w-full py-3 px-4 rounded-xl font-semibold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200"
-                          style={{ fontFamily: "'DM Sans', sans-serif" }}
+                          onClick={() => openAuthModal(true)}
+                          className="w-full py-3 px-4 rounded-xl font-semibold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200 font-dm"
+                          
                         >
                           Get Started
                         </button>
                       ) : (
                         <button
-                          onClick={() => signInWithGoogle()}
-                          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all ${
+                          onClick={() => openAuthModal(true)}
+                          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all font-dm ${
                             isRecommended
                               ? 'bg-[#3531B7] text-white hover:opacity-90 shadow-lg shadow-[#3531B7]/25'
                               : 'bg-gray-900 text-white hover:bg-gray-800'
                           }`}
-                          style={{ fontFamily: "'DM Sans', sans-serif" }}
                         >
                           Subscribe
                         </button>
@@ -773,9 +921,9 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
             {/* Enterprise CTA */}
             <div className="mt-12 text-center">
-              <p className="text-gray-500" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <p className="text-gray-500 font-dm" >
                 Need more credits or custom solutions?{' '}
-                <a href="mailto:support@alwan.io" className="text-[#3531B7] hover:underline font-medium">
+                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#3531B7] hover:underline font-medium">
                   Contact us
                 </a>
               </p>
@@ -783,21 +931,24 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
           </div>
         </section>
 
+        {/* FAQ Section */}
+        <FAQSection />
+
         {/* Final CTA */}
         <section className="px-6 sm:px-8 lg:px-16 py-20 bg-gray-900">
           <div className="max-w-3xl mx-auto text-center">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4 font-dm"
+                >
               Ready to create your first ad?
             </h2>
-            <p className="text-gray-400 text-lg mb-8"
-               style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <p className="text-gray-400 text-lg mb-8 font-dm"
+               >
               Join hundreds of businesses creating on-brand ads in seconds.
             </p>
             <button
-              onClick={() => signInWithGoogle()}
-              className="px-8 py-4 rounded-xl text-gray-900 font-semibold transition-all hover:opacity-90 bg-white text-lg"
-              style={{ fontFamily: "'DM Sans', sans-serif" }}
+              onClick={() => openAuthModal(true)}
+              className="px-8 py-4 rounded-xl text-gray-900 font-semibold transition-all hover:opacity-90 bg-white text-lg font-dm"
+              
             >
               Get Started Free
             </button>
@@ -808,18 +959,143 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         <footer className="px-6 sm:px-8 lg:px-16 py-8 bg-gray-900 border-t border-gray-800">
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="flex items-center gap-2">
-              <img src={alwanLogo} alt="Alwan" className="h-7 w-auto object-contain" />
-              <span className="text-sm text-gray-500" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+              <img src="/fav.png" alt="Alwan" className="h-7 w-auto object-contain" />
+              <span className="text-sm text-gray-500 font-dm" >
                 Alwan — AI-powered brand ads
               </span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-gray-500" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+            <div className="flex items-center gap-6 text-sm text-gray-500 font-dm" >
               <a href="#pricing" className="hover:text-gray-300 transition-colors">Pricing</a>
-              <a href="mailto:support@alwan.io" className="hover:text-gray-300 transition-colors">Contact</a>
+              <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-gray-300 transition-colors">Contact</a>
             </div>
           </div>
         </footer>
       </div>
+
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowAuthModal(false);
+            setAuthError('');
+            setAuthLoading(false);
+          }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+
+          {/* Modal */}
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-8 font-dm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => {
+                setShowAuthModal(false);
+                setAuthError('');
+                setAuthLoading(false);
+                setEmail('');
+                setPassword('');
+              }}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Title */}
+            <h2 className="text-2xl font-bold text-gray-900 mb-6 pr-8">
+              {isSignUp ? 'Create Account' : 'Welcome Back'}
+            </h2>
+
+            <form onSubmit={handleAuth} className="space-y-4">
+              {/* Google Sign-In Button */}
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={authLoading}
+                className="w-full py-3.5 bg-white hover:bg-gray-50 text-gray-700 font-medium rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-gray-200 flex items-center justify-center gap-3"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                </svg>
+                {authLoading ? 'Please wait...' : 'Continue with Google'}
+              </button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-3 bg-white text-gray-500">Or continue with email</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#3531B7] focus:ring-2 focus:ring-[#3531B7]/20 outline-none transition-all text-gray-900 placeholder:text-gray-400"
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-[#3531B7] focus:ring-2 focus:ring-[#3531B7]/20 outline-none transition-all text-gray-900 placeholder:text-gray-400"
+                  placeholder="Enter your password"
+                  required
+                />
+              </div>
+
+              {authError && (
+                <div className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl border border-red-200">
+                  {authError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-3.5 rounded-xl text-white font-semibold transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: '#3531B7' }}
+              >
+                {authLoading ? 'Please wait...' : isSignUp ? 'Create Account' : 'Sign In'}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => {
+                  setIsSignUp(!isSignUp);
+                  setAuthError('');
+                }}
+                className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+              >
+                {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                <span className="font-medium" style={{ color: '#3531B7' }}>
+                  {isSignUp ? 'Sign in' : 'Sign up'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fonts */}
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -923,320 +1199,10 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
   );
 }
 
-// ============================================================================
-// VERSION C: KINETIC SHOWCASE (COMMENTED OUT)
-// ============================================================================
-//
-// This version features a centered layout with sophisticated animations and
-// scattered tilted cards (osmo.supply inspired). It was commented out in favor
-// of Version B's left-aligned two-column layout based on UX research showing:
-//
-// 1. F-pattern reading behavior favors left-aligned text for better comprehension
-// 2. Left-aligned layouts reduce cognitive load (eyes don't search for line starts)
-// 3. Two-column layouts allow pairing text with visual proof (floating ad examples)
-// 4. A/B tests show left-to-right visual flow increases CTA clicks by ~24%
-//
-// The centered layout works well for short headlines but becomes harder to scan
-// with description text. Consider uncommenting if testing a minimal-copy approach.
-// ============================================================================
-
-/*
-function VersionC({ onStart }: { onStart: (url: string) => void }) {
-  const { user, signInWithGoogle } = useAuth();
-  const [url, setUrl] = useState('');
-  const [error, setError] = useState('');
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hoveredCard, setHoveredCard] = useState<number | null>(null);
-  const { styles: showcaseStyles } = useShowcaseStyles(5);
-
-  useEffect(() => {
-    // Trigger entrance animations after mount
-    const timer = setTimeout(() => setIsLoaded(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!url.trim()) {
-      setError('Enter your website URL');
-      return;
-    }
-
-    if (!isValidDomain(url.trim())) {
-      setError('Please enter a valid domain');
-      return;
-    }
-
-    if (!user) {
-      localStorage.setItem('pendingUrl', url.trim());
-      signInWithGoogle();
-      return;
-    }
-
-    onStart(url.trim());
-  };
-
-  const marqueeItems = ['CREATE ADS', 'EXTRACT BRANDS', 'GENERATE DESIGNS', 'LAUNCH CAMPAIGNS', 'SCALE CONTENT'];
-
-  // Scattered card layout positions - mimicking osmo.supply layout (width only)
-  const cardLayoutC = [
-    { rotation: -12, x: '2%', y: '20%', width: 'w-44', delay: 0.1 },
-    { rotation: 4, x: '20%', y: '5%', width: 'w-52', delay: 0.2 },
-    { rotation: -6, x: '42%', y: '25%', width: 'w-40', delay: 0.3 },
-    { rotation: 12, x: '62%', y: '8%', width: 'w-48', delay: 0.4 },
-    { rotation: -4, x: '80%', y: '20%', width: 'w-40', delay: 0.5 },
-  ];
-
-  return (
-    <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#FAFAFA' }}>
-      <div className="absolute inset-0 opacity-[0.02]"
-           style={{
-             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
-           }} />
-
-      <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full opacity-[0.07] blur-[100px] animate-orb-float"
-           style={{ background: 'radial-gradient(circle, #3531B7 0%, transparent 70%)' }} />
-      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full opacity-[0.05] blur-[80px] animate-orb-float-delayed"
-           style={{ background: 'radial-gradient(circle, #840E25 0%, transparent 70%)' }} />
-
-      <div className="relative z-10 min-h-screen flex flex-col">
-        <header className={`w-full px-6 sm:px-10 lg:px-16 py-5 flex justify-between items-center transition-all duration-700 ${
-          isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center relative overflow-hidden group"
-                 style={{ backgroundColor: '#0D0D31' }}>
-              <div className="absolute inset-0 bg-gradient-to-tr from-[#3531B7] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <Sparkles className="w-5 h-5 text-white relative z-10" />
-            </div>
-            <span className="font-bold text-xl tracking-tight" style={{ color: '#0D0D31', fontFamily: "'Cabinet Grotesk', 'Satoshi', sans-serif" }}>
-              AdForge
-            </span>
-          </div>
-
-          <div className="hidden md:flex items-center">
-            <div className="flex items-center gap-1 px-4 py-2 rounded-full border border-gray-200 bg-white/80 backdrop-blur-sm">
-              <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ backgroundColor: '#0D0D31', color: 'white' }}>Menu</span>
-              <span className="text-sm text-gray-500 px-3" style={{ fontFamily: "'Cabinet Grotesk', sans-serif" }}>Login</span>
-              <button
-                onClick={() => user ? window.location.href = '/brands' : signInWithGoogle()}
-                className="px-4 py-1.5 rounded-full text-sm font-medium text-white transition-all hover:scale-105"
-                style={{ backgroundColor: '#84CC16', color: '#0D0D31', fontFamily: "'Cabinet Grotesk', sans-serif" }}
-              >
-                {user ? 'Dashboard' : 'Join'}
-              </button>
-            </div>
-          </div>
-
-          <button
-            onClick={() => user ? window.location.href = '/brands' : signInWithGoogle()}
-            className="md:hidden px-4 py-2 rounded-full text-sm font-medium"
-            style={{ backgroundColor: '#84CC16', color: '#0D0D31', fontFamily: "'Cabinet Grotesk', sans-serif" }}
-          >
-            {user ? 'Dashboard' : 'Join'}
-          </button>
-        </header>
-
-        <div className={`w-full overflow-hidden py-2.5 border-y transition-all duration-700 delay-100 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
-        }`} style={{ borderColor: '#0D0D31', backgroundColor: '#0D0D31' }}>
-          <div className="flex animate-marquee-fast whitespace-nowrap">
-            {[...marqueeItems, ...marqueeItems, ...marqueeItems, ...marqueeItems].map((item, i) => (
-              <span key={i} className="mx-6 text-xs font-medium tracking-[0.2em] flex items-center gap-4"
-                    style={{ color: 'white', fontFamily: "'Cabinet Grotesk', sans-serif" }}>
-                <span className="text-[#84CC16]">✦</span>
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <main className="flex-1 flex flex-col items-center px-6 sm:px-10 lg:px-16 pt-12 lg:pt-16">
-          <div className="text-center max-w-4xl mx-auto mb-8 lg:mb-12">
-            <h1 className={`text-5xl sm:text-6xl lg:text-8xl font-bold leading-[0.9] tracking-tight mb-6 transition-all duration-1000 delay-200 ${
-              isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`} style={{ color: '#0D0D31', fontFamily: "'Cabinet Grotesk', 'Satoshi', sans-serif" }}>
-              Ad Creation{' '}
-              <span className="inline-flex items-center justify-center mx-2">
-                <span className="inline-block animate-icon-spin" style={{ color: '#3531B7' }}>✦</span>
-              </span>
-              {' '}Made
-              <br />
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-[#3531B7] via-[#840E25] to-[#3531B7] animate-gradient-shift bg-[length:200%_100%]">
-                Effortless
-              </span>
-            </h1>
-
-            <p className={`text-lg sm:text-xl text-gray-500 mb-10 max-w-2xl mx-auto leading-relaxed transition-all duration-1000 delay-300 ${
-              isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`} style={{ fontFamily: "'General Sans', sans-serif" }}>
-              Platform packed with{' '}
-              <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">brand extraction</span>
-              {' '}&{' '}
-              <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-medium">AI generation</span>
-              {' '}tools,
-              <br className="hidden sm:block" />
-              templates, formats, and a complete ad creation workflow.
-            </p>
-
-            <form onSubmit={handleSubmit} className={`max-w-xl mx-auto transition-all duration-1000 delay-400 ${
-              isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-            }`}>
-              <div className={`flex items-center gap-2 p-2 rounded-2xl bg-white shadow-xl shadow-black/[0.08] border-2 transition-all duration-300 ${
-                error ? 'border-red-300' : 'border-transparent hover:border-gray-200 focus-within:border-[#3531B7]'
-              }`}>
-                <div className="flex items-center gap-3 flex-1 px-3">
-                  <Globe className="w-5 h-5 text-gray-400" />
-                  <input
-                    type="text"
-                    value={url}
-                    onChange={(e) => { setUrl(e.target.value); setError(''); }}
-                    placeholder="yourwebsite.com"
-                    className="flex-1 bg-transparent outline-none py-3 text-gray-900"
-                    style={{ fontFamily: "'General Sans', sans-serif" }}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="px-6 py-3 rounded-xl text-white font-semibold transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center gap-2 group"
-                  style={{ backgroundColor: '#0D0D31', fontFamily: "'Cabinet Grotesk', sans-serif" }}
-                >
-                  Generate Ads
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </button>
-              </div>
-              {error && (
-                <p className="text-red-500 text-sm mt-3 animate-shake" style={{ fontFamily: "'General Sans', sans-serif" }}>{error}</p>
-              )}
-            </form>
-          </div>
-
-          <div className={`relative w-full max-w-6xl mx-auto h-[400px] sm:h-[450px] lg:h-[500px] mt-4 transition-all duration-1000 delay-500 ${
-            isLoaded ? 'opacity-100' : 'opacity-0'
-          }`}>
-            {showcaseStyles.slice(0, 5).map((style, index) => {
-              const layout = cardLayoutC[index];
-              const isHovered = hoveredCard === index;
-              return (
-                <div
-                  key={style.id}
-                  className={`absolute ${layout.width} rounded-2xl overflow-hidden shadow-2xl shadow-black/20 cursor-pointer transition-all duration-500 ease-out animate-card-float group`}
-                  style={{
-                    left: layout.x,
-                    top: layout.y,
-                    transform: `rotate(${isHovered ? layout.rotation * 0.3 : layout.rotation}deg) scale(${isHovered ? 1.08 : 1})`,
-                    zIndex: isHovered ? 50 : 10 + index,
-                    animationDelay: `${layout.delay}s`,
-                    ['--float-offset' as string]: `${index * 0.5}s`,
-                  }}
-                  onMouseEnter={() => setHoveredCard(index)}
-                  onMouseLeave={() => setHoveredCard(null)}
-                >
-                  <img
-                    src={style.url}
-                    alt={style.name}
-                    className="w-full h-auto block rounded-2xl"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/25 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-2xl" />
-                </div>
-              );
-            })}
-
-            <div className="absolute top-[10%] left-[35%] w-3 h-3 rounded-full animate-float-slow" style={{ backgroundColor: '#3531B7' }} />
-            <div className="absolute bottom-[30%] right-[20%] w-2 h-2 rounded-full animate-float-slow-delayed" style={{ backgroundColor: '#840E25' }} />
-            <div className="absolute top-[40%] right-[5%] w-4 h-4 rounded-full animate-float-slow" style={{ backgroundColor: '#84CC16' }} />
-          </div>
-        </main>
-      </div>
-
-      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,700,800&f[]=general-sans@400,500,600&f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
-
-      <style>{\`
-        @keyframes marquee-fast {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-25%); }
-        }
-        .animate-marquee-fast {
-          animation: marquee-fast 15s linear infinite;
-        }
-
-        @keyframes orb-float {
-          0%, 100% { transform: translate(0, 0) scale(1); }
-          33% { transform: translate(30px, -30px) scale(1.05); }
-          66% { transform: translate(-20px, 20px) scale(0.95); }
-        }
-        .animate-orb-float {
-          animation: orb-float 20s ease-in-out infinite;
-        }
-        .animate-orb-float-delayed {
-          animation: orb-float 25s ease-in-out infinite;
-          animation-delay: -10s;
-        }
-
-        @keyframes icon-spin {
-          0%, 100% { transform: rotate(0deg) scale(1); }
-          50% { transform: rotate(180deg) scale(1.1); }
-        }
-        .animate-icon-spin {
-          animation: icon-spin 4s ease-in-out infinite;
-        }
-
-        @keyframes gradient-shift {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-        }
-        .animate-gradient-shift {
-          animation: gradient-shift 4s ease-in-out infinite;
-        }
-
-        @keyframes card-float {
-          0%, 100% {
-            transform: translateY(0) rotate(var(--rotation, 0deg));
-          }
-          50% {
-            transform: translateY(-15px) rotate(calc(var(--rotation, 0deg) + 1deg));
-          }
-        }
-        .animate-card-float {
-          animation: card-float 6s ease-in-out infinite;
-          animation-delay: var(--float-offset, 0s);
-        }
-
-        @keyframes float-slow {
-          0%, 100% { transform: translateY(0) scale(1); opacity: 0.6; }
-          50% { transform: translateY(-20px) scale(1.2); opacity: 1; }
-        }
-        .animate-float-slow {
-          animation: float-slow 5s ease-in-out infinite;
-        }
-        .animate-float-slow-delayed {
-          animation: float-slow 7s ease-in-out infinite;
-          animation-delay: -3s;
-        }
-
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
-        }
-        .animate-shake {
-          animation: shake 0.3s ease-in-out;
-        }
-      \`}</style>
-    </div>
-  );
-}
-*/
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-// Now using Version B (Alwan) as the primary landing page.
-// Version A was removed, Version C is commented out above for reference.
 
 export function LandingV2({ onStart }: LandingV2Props) {
   return <VersionB onStart={onStart} />;

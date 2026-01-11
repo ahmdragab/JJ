@@ -211,7 +211,8 @@ export function Studio({ brand }: { brand: Brand }) {
     v3: { image_base64: string; prompt_used?: string; debug?: GenerationDebugInfo } | null | 'loading';
   } | null>(null);
   const [showComparisonModal, setShowComparisonModal] = useState(false);
-  
+  const [comparisonPrompt, setComparisonPrompt] = useState(''); // Store prompt used for comparison (before it gets cleared)
+
   // GPT Prompt Info type for comparison
   type GPTPromptInfo = { system_prompt: string; user_message: string; full_prompt: string; design_type?: string };
   
@@ -609,6 +610,7 @@ export function Studio({ brand }: { brand: Brand }) {
     if (!prompt.trim() || comparing) return;
 
     setComparing(true);
+    setComparisonPrompt(prompt); // Store the prompt before it gets cleared
     // Show modal immediately with single loading state (progressive loading)
     setComparisonResults({ v1: 'loading', v2: null, v3: null });
     setShowComparisonModal(true);
@@ -764,7 +766,7 @@ export function Studio({ brand }: { brand: Brand }) {
           user_id: user.id,
           brand_id: brand.id,
           template_id: null,
-          prompt,
+          prompt: comparisonPrompt, // Use stored comparison prompt (before it was cleared)
           status: 'generating',
           metadata: {
             aspect_ratio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
@@ -1101,14 +1103,18 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  const handleDownload = useCallback(async (image: GeneratedImage, e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    if (!image.image_url) return;
+  const handleDownload = useCallback(async (
+    image: GeneratedImage,
+    options?: { event?: React.MouseEvent; url?: string }
+  ) => {
+    options?.event?.stopPropagation();
+    const urlToDownload = options?.url || image.image_url;
+    if (!urlToDownload) return;
 
     try {
       // Extract the file path from the Supabase Storage URL
       // Supabase Storage URLs are like: https://[project].supabase.co/storage/v1/object/public/brand-images/[path]
-      const urlParts = image.image_url.split('/brand-images/');
+      const urlParts = urlToDownload.split('/brand-images/');
       if (urlParts.length === 2) {
         const filePath = urlParts[1];
 
@@ -1121,7 +1127,7 @@ export function Studio({ brand }: { brand: Brand }) {
         if (error) {
           console.error('Storage download error:', error);
           // Fallback to fetching from URL
-          const response = await fetch(image.image_url);
+          const response = await fetch(urlToDownload);
           const blob = await response.blob();
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -1145,7 +1151,7 @@ export function Studio({ brand }: { brand: Brand }) {
         URL.revokeObjectURL(url);
       } else {
         // Fallback for non-Supabase URLs
-        const response = await fetch(image.image_url);
+        const response = await fetch(urlToDownload);
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -1913,7 +1919,7 @@ export function Studio({ brand }: { brand: Brand }) {
                             </button>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={(e) => handleDownload(image, e)}
+                                onClick={(e) => handleDownload(image, { event: e })}
                                 className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
                               >
                                 <Download className="w-4 h-4" />
@@ -2698,7 +2704,15 @@ export function Studio({ brand }: { brand: Brand }) {
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => handleDownload(selectedImage)}
+                    onClick={() => {
+                      const versions = getAllVersions(selectedImage);
+                      const currentVersion = versions[currentVersionIndex] || versions[versions.length - 1];
+                      // Use the current version's URL, or fall back to the image's main URL
+                      const urlToDownload = currentVersion?.image_url || selectedImage.image_url;
+                      if (urlToDownload) {
+                        handleDownload(selectedImage, { url: urlToDownload });
+                      }
+                    }}
                   >
                     <Download className="w-4 h-4" />
                   </Button>
