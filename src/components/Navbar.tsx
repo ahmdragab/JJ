@@ -7,10 +7,11 @@ import {
   LogOut,
   Settings
 } from 'lucide-react';
-import favIcon from '../fav.png';
+const favIcon = '/fav.png';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase, Brand, getUserCredits, normalizeDomain } from '../lib/supabase';
 import { Button } from './ui';
+import { AccountSettings } from './AccountSettings';
 
 interface NavbarProps {
   currentBrand?: Brand;
@@ -23,6 +24,7 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
   const { user, signOut } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showBrandMenu, setShowBrandMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [lastBrand, setLastBrand] = useState<Brand | null>(null);
   const [credits, setCredits] = useState<number>(creditsProp ?? 0);
@@ -136,6 +138,7 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
   const activeBrand = currentBrand || (isOnBrandsPage ? lastBrand : null);
 
   return (
+    <>
     <nav className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
       {/* Gradient backdrop */}
       <div
@@ -256,17 +259,6 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
               <span className="text-sm font-medium text-neutral-700 group-hover:text-neutral-900">{credits}</span>
             </button>
 
-            {/* Studio Button */}
-            {activeBrand && !isOnStudioPage && !isOnBrandKitEditor && (
-              <Button
-                size="sm"
-                onClick={() => navigate(`/brands/${activeBrand.slug}/studio`)}
-                className="shadow-sm hover:shadow-md"
-              >
-                Studio
-              </Button>
-            )}
-
             {/* User Menu */}
             <div className="relative" ref={userMenuRef}>
               <button
@@ -292,7 +284,10 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                   {/* Menu Items */}
                   <div className="py-2">
                     <button
-                      onClick={() => setShowUserMenu(false)}
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        setShowSettings(true);
+                      }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-neutral-50/80 transition-colors"
                     >
                       <Settings className="w-4 h-4 text-neutral-400" />
@@ -333,9 +328,28 @@ export function Navbar({ currentBrand, credits: creditsProp }: NavbarProps) {
                 </div>
               )}
             </div>
+
+            {/* Studio Button */}
+            {activeBrand && !isOnStudioPage && !isOnBrandKitEditor && (
+              <Button
+                size="sm"
+                onClick={() => navigate(`/brands/${activeBrand.slug}/studio`)}
+                className="shadow-sm hover:shadow-md"
+              >
+                Studio
+              </Button>
+            )}
           </div>
         </div>
       </div>
+
     </nav>
+
+    {/* Account Settings Modal */}
+    <AccountSettings
+      isOpen={showSettings}
+      onClose={() => setShowSettings(false)}
+    />
+    </>
   );
 }

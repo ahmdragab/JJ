@@ -9,7 +9,6 @@ import { Loader2 } from 'lucide-react';
 import { isAdminUser } from './lib/admin';
 
 // Lazy-loaded page components for code splitting
-const Landing = lazy(() => import('./pages/Landing').then(m => ({ default: m.Landing })));
 const LandingV2 = lazy(() => import('./pages/LandingV2').then(m => ({ default: m.LandingV2 })));
 const BrandsList = lazy(() => import('./pages/BrandsList').then(m => ({ default: m.BrandsList })));
 const BrandKitEditor = lazy(() => import('./pages/BrandKitEditor').then(m => ({ default: m.BrandKitEditor })));
@@ -318,84 +317,6 @@ function BrandRoutes() {
   );
 }
 
-// Landing wrapper with navigation
-function LandingWrapper() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const toast = useToast();
-
-  const handleStartExtraction = async (input: string) => {
-    if (!user) return;
-
-    try {
-      // Validate domain format
-      if (!isValidDomain(input)) {
-        toast.error('Invalid Domain', 'Please enter a valid domain name (e.g., example.com)');
-        return;
-      }
-
-      let domain: string;
-      let url: string;
-      
-      if (input.includes('://')) {
-        domain = new URL(input).hostname;
-        url = input;
-      } else {
-        domain = normalizeDomain(input);
-        url = `https://${domain}`;
-      }
-      
-      domain = normalizeDomain(domain);
-
-      // Generate a slug for the brand
-      const slug = generateSlug(domain);
-
-      const { data: newBrand, error } = await supabase
-        .from('brands')
-        .insert({
-          user_id: user.id,
-          domain,
-          slug,
-          name: domain.replace('www.', '').split('.')[0],
-          status: 'extracting',
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Navigate using slug
-      navigate(`/brands/${newBrand.slug}`);
-
-      const authHeaders = await getAuthHeaders();
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-brand-firecrawl`,
-        {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({ url, brandId: newBrand.id }),
-        }
-      );
-
-      if (!response.ok) throw new Error('Brand extraction failed');
-
-      // Edge function saves all data directly to DB - no need to save again here
-      // Polling in BrandRoutes will pick up the changes
-      // Removing redundant save prevents overwriting ai_extracted_colors from async analyze-brand-style
-
-    } catch (error) {
-      console.error('Failed to start extraction:', error);
-    }
-  };
-
-  return (
-    <Landing
-      onStart={handleStartExtraction} 
-      onViewBrands={() => navigate('/brands')} 
-    />
-  );
-}
-
 // Brands list wrapper
 function BrandsListWrapper() {
   const navigate = useNavigate();
@@ -494,8 +415,7 @@ function LandingV2Wrapper() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<LandingWrapper />} />
-      <Route path="/landing" element={<LandingV2Wrapper />} />
+      <Route path="/" element={<LandingV2Wrapper />} />
       <Route 
         path="/brands" 
         element={
