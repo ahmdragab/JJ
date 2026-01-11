@@ -215,8 +215,86 @@ async function convertSvgToPng(
 }
 
 /**
+ * Download an image from URL and upload to Supabase Storage
+ * This avoids hotlink protection issues from external sites
+ */
+async function downloadAndUploadImage(
+  imageUrl: string,
+  brandId: string,
+  logoType: string = "primary"
+): Promise<string | null> {
+  try {
+    // Skip data URIs - they need special handling
+    if (imageUrl.startsWith('data:')) {
+      console.log(`[Upload] Skipping data URI for ${logoType}`);
+      return null;
+    }
+
+    console.log(`[Upload] Downloading ${logoType} from: ${imageUrl.substring(0, 80)}...`);
+
+    // Download the image
+    const response = await fetch(imageUrl, {
+      headers: {
+        // Some sites check for browser-like headers
+        'User-Agent': 'Mozilla/5.0 (compatible; BrandExtractor/1.0)',
+        'Accept': 'image/*,*/*',
+      },
+    });
+
+    if (!response.ok) {
+      console.error(`[Upload] Failed to download ${logoType}: ${response.status}`);
+      return null;
+    }
+
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const imageData = await response.arrayBuffer();
+
+    if (imageData.byteLength === 0) {
+      console.error(`[Upload] Empty image data for ${logoType}`);
+      return null;
+    }
+
+    // Determine file extension from content type
+    let extension = 'png';
+    if (contentType.includes('jpeg') || contentType.includes('jpg')) extension = 'jpg';
+    else if (contentType.includes('webp')) extension = 'webp';
+    else if (contentType.includes('gif')) extension = 'gif';
+    else if (contentType.includes('svg')) extension = 'svg';
+
+    // Upload to Supabase Storage
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const storagePath = `${brandId}/${logoType}-${Date.now()}.${extension}`;
+
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("brand-logos")
+      .upload(storagePath, imageData, {
+        contentType,
+        cacheControl: "3600",
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error(`[Upload] Storage upload failed for ${logoType}:`, uploadError);
+      return null;
+    }
+
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from("brand-logos")
+      .getPublicUrl(uploadData.path);
+
+    console.log(`[Upload] ${logoType} uploaded: ${urlData.publicUrl}`);
+    return urlData.publicUrl;
+  } catch (error) {
+    console.error(`[Upload] Error processing ${logoType}:`, error);
+    return null;
+  }
+}
+
+/**
  * Process logos - convert SVGs to PNGs using ConvertAPI
- * Also detects and skips animated/unsupported formats (like GIFs)
+ * Also downloads and re-uploads raster images to avoid hotlink protection
+ * Detects and skips animated/unsupported formats (like GIFs)
  */
 async function processLogos(
   logos: { primary?: string; icon?: string; wordmark?: string },
@@ -242,7 +320,14 @@ async function processLogos(
           console.warn("[SVG] Failed to convert primary logo, keeping original SVG");
         }
       } else {
-        console.log("[SVG] Primary logo is already raster format");
+        // Download and re-upload raster images to avoid hotlink protection
+        console.log("[Upload] Primary logo is raster format, downloading and re-uploading...");
+        const uploadedUrl = await downloadAndUploadImage(logos.primary, brandId, "primary");
+        if (uploadedUrl) {
+          processedLogos.primary = uploadedUrl;
+        } else {
+          console.warn("[Upload] Failed to re-upload primary logo, keeping original URL");
+        }
       }
     }
   }
@@ -261,6 +346,13 @@ async function processLogos(
         const pngUrl = await convertSvgToPng(logos.icon, brandId, "icon");
         if (pngUrl) {
           processedLogos.icon = pngUrl;
+        }
+      } else {
+        // Download and re-upload raster images to avoid hotlink protection
+        console.log("[Upload] Icon is raster format, downloading and re-uploading...");
+        const uploadedUrl = await downloadAndUploadImage(logos.icon, brandId, "icon");
+        if (uploadedUrl) {
+          processedLogos.icon = uploadedUrl;
         }
       }
     }
