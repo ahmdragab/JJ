@@ -37,6 +37,7 @@ import { StylesPicker } from '../components/StylesPicker';
 import { generateSmartPresets, SmartPreset } from '../lib/smartPresets';
 import { logger } from '../lib/logger';
 import { track } from '../lib/analytics';
+import { resilientFetch, sanitizeErrorMessage } from '../lib/fetch';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { Button } from '../components/ui';
@@ -48,6 +49,10 @@ type EditingImage = {
   id: string;
   image_url: string;
   prompt: string;
+  metadata?: {
+    aspect_ratio?: string;
+    [key: string]: unknown;
+  };
 } | null;
 
 // Platform groups with sizes - static constant (no need for useMemo)
@@ -562,7 +567,7 @@ export function Studio({ brand }: { brand: Brand }) {
       const endpoint = 'generate-image';
 
       const authHeaders = await getAuthHeaders();
-      const response = await fetch(
+      const response = await resilientFetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${endpoint}`,
         {
           method: 'POST',
@@ -582,6 +587,8 @@ export function Studio({ brand }: { brand: Brand }) {
             })),
             references: allReferences,
           }),
+          retries: 1,
+          timeout: 120000, // 2 minutes for image generation
         }
       );
 
@@ -634,7 +641,7 @@ export function Studio({ brand }: { brand: Brand }) {
         error_type: errorObj.message,
       });
 
-      toast.error('Generation Failed', errorObj.message);
+      toast.error('Generation Failed', sanitizeErrorMessage(errorObj));
     } finally {
       setGenerating(false);
     }
@@ -656,12 +663,14 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Step 1: Create a session that deducts credits once upfront
       // This prevents race conditions with parallel requests
-      const sessionResponse = await fetch(
+      const sessionResponse = await resilientFetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/start-variations-session`,
         {
           method: 'POST',
           headers: authHeaders,
           body: JSON.stringify({ creditCost: 2, maxGenerations: 3 }),
+          retries: 2,
+          timeout: 30000,
         }
       );
 
@@ -708,10 +717,13 @@ export function Studio({ brand }: { brand: Brand }) {
       };
 
       // Step 2: Generate with 3 versions in parallel, updating UI as each completes
-      const v1Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
+      // Using resilientFetch with retries for network resilience on mobile
+      const v1Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify(requestBody),
+        retries: 1,
+        timeout: 120000, // 2 minutes for image generation
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V1 Debug:', JSON.stringify(data.debug, null, 2));
@@ -724,10 +736,12 @@ export function Studio({ brand }: { brand: Brand }) {
         } : null);
       });
 
-      const v2Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
+      const v2Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ ...requestBody, skipCredits: true }),
+        retries: 1,
+        timeout: 120000,
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V2 Debug:', JSON.stringify(data.debug, null, 2));
@@ -740,10 +754,12 @@ export function Studio({ brand }: { brand: Brand }) {
         } : null);
       });
 
-      const v3Promise = fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
+      const v3Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
         method: 'POST',
         headers: authHeaders,
         body: JSON.stringify({ ...requestBody, skipCredits: true }),
+        retries: 1,
+        timeout: 120000,
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V3 Debug:', JSON.stringify(data.debug, null, 2));
@@ -771,7 +787,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
     } catch (error) {
       console.error('Comparison failed:', error);
-      toast.error('Comparison Failed', error instanceof Error ? error.message : 'Failed to compare versions');
+      toast.error('Generation Failed', sanitizeErrorMessage(error));
     } finally {
       setComparing(false);
     }
@@ -864,7 +880,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
     } catch (error) {
       console.error('Failed to save comparison image:', error);
-      toast.error('Save Failed', error instanceof Error ? error.message : 'Failed to save image');
+      toast.error('Save Failed', sanitizeErrorMessage(error));
     } finally {
       setSavingComparison(prev => {
         const next = new Set(prev);
@@ -922,7 +938,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
     try {
       const authHeaders = await getAuthHeaders();
-      const response = await fetch(
+      const response = await resilientFetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
@@ -932,6 +948,7 @@ export function Studio({ brand }: { brand: Brand }) {
             brandId: brand.id,
             imageId: editingImage.id,
             previousImageUrl: editingImage.image_url,
+            aspectRatio: editingImage.metadata?.aspect_ratio,
             productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
@@ -958,6 +975,8 @@ export function Studio({ brand }: { brand: Brand }) {
               })),
             ],
           }),
+          retries: 1,
+          timeout: 120000,
         }
       );
 
@@ -1035,7 +1054,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Make the API call - this blocks until the image is generated
       const authHeaders = await getAuthHeaders();
-      const response = await fetch(
+      const response = await resilientFetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-image`,
         {
           method: 'POST',
@@ -1045,6 +1064,7 @@ export function Studio({ brand }: { brand: Brand }) {
             brandId: brand.id,
             imageId: imageId,
             previousImageUrl: previousImageUrl,
+            aspectRatio: originalImage.metadata?.aspect_ratio,
             productId: selectedProduct?.id,
             assets: selectedAssets.map(a => ({
               id: a.id,
@@ -1071,6 +1091,8 @@ export function Studio({ brand }: { brand: Brand }) {
               })),
             ],
           }),
+          retries: 1,
+          timeout: 120000,
         }
       );
 
@@ -1245,6 +1267,7 @@ export function Studio({ brand }: { brand: Brand }) {
       id: image.id,
       image_url: image.image_url || '',
       prompt: image.prompt,
+      metadata: image.metadata,
     });
     setPrompt('');
     setInputFocused(true);

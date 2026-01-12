@@ -355,8 +355,12 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mimeType
   }
 }
 
-function detectAspectRatioFromDimensions(width: number, height: number): AspectRatioValue | null {
-  if (!width || !height || width <= 0 || height <= 0) return null;
+function detectAspectRatioFromDimensions(width: number, height: number): AspectRatioValue {
+  // Default to 1:1 if dimensions are invalid
+  if (!width || !height || width <= 0 || height <= 0) {
+    console.log(`[AspectRatio] Invalid dimensions (${width}x${height}), defaulting to 1:1`);
+    return '1:1';
+  }
 
   const ratio = width / height;
 
@@ -373,17 +377,20 @@ function detectAspectRatioFromDimensions(width: number, height: number): AspectR
     { value: '21:9', ratio: 21/9 },
   ];
 
-  // Only match if within 5% tolerance - don't snap non-standard ratios
-  for (const { value, ratio: targetRatio } of ratios) {
-    if (Math.abs(ratio - targetRatio) < 0.05) {
-      console.log(`[AspectRatio] Matched ${ratio.toFixed(3)} to ${value}`);
-      return value;
+  // Find the CLOSEST ratio - never return null to prevent Gemini from picking arbitrarily
+  let closestRatio = ratios[0];
+  let smallestDiff = Math.abs(ratio - ratios[0].ratio);
+
+  for (const r of ratios) {
+    const diff = Math.abs(ratio - r.ratio);
+    if (diff < smallestDiff) {
+      smallestDiff = diff;
+      closestRatio = r;
     }
   }
 
-  // No match - let the model handle it rather than silently distorting
-  console.log(`[AspectRatio] No standard match for ${ratio.toFixed(3)} (${width}x${height}), letting model decide`);
-  return null;
+  console.log(`[AspectRatio] ${width}x${height} = ${ratio.toFixed(3)} → closest match: ${closestRatio.value} (diff: ${smallestDiff.toFixed(3)})`);
+  return closestRatio.value;
 }
 
 async function uploadToStorage(
@@ -469,11 +476,12 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const { 
-      prompt, 
-      brandId, 
+    const {
+      prompt,
+      brandId,
       imageId,
       previousImageUrl,
+      aspectRatio: requestAspectRatio,  // Aspect ratio passed from frontend
       includeLogoReference = true,
       assets = [],
       references = [],
@@ -756,34 +764,46 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Get original aspect ratio from image metadata or detect from image dimensions
+    // Get original aspect ratio with priority: request > metadata > dimension detection
     let originalAspectRatio: string | null = null;
+    let aspectRatioSource = 'none';
 
-    const { data: imageMetadata } = await supabase
-      .from('images')
-      .select('metadata')
-      .eq('id', imageId)
-      .single();
+    // Priority 1: Use aspect ratio passed from frontend (most reliable)
+    if (requestAspectRatio && typeof requestAspectRatio === 'string') {
+      originalAspectRatio = requestAspectRatio;
+      aspectRatioSource = 'request';
+      console.log(`[Edit] Using aspect ratio from request: ${originalAspectRatio}`);
+    }
 
-    if (imageMetadata?.metadata && typeof imageMetadata.metadata === 'object') {
-      const metadata = imageMetadata.metadata as Record<string, unknown>;
-      if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
-        originalAspectRatio = metadata.aspect_ratio;
-        console.log(`[Edit] Using aspect ratio from metadata: ${originalAspectRatio}`);
+    // Priority 2: Check image metadata in database
+    if (!originalAspectRatio) {
+      const { data: imageMetadata } = await supabase
+        .from('images')
+        .select('metadata')
+        .eq('id', imageId)
+        .single();
+
+      if (imageMetadata?.metadata && typeof imageMetadata.metadata === 'object') {
+        const metadata = imageMetadata.metadata as Record<string, unknown>;
+        if (metadata.aspect_ratio && typeof metadata.aspect_ratio === 'string') {
+          originalAspectRatio = metadata.aspect_ratio;
+          aspectRatioSource = 'metadata';
+          console.log(`[Edit] Using aspect ratio from metadata: ${originalAspectRatio}`);
+        }
       }
     }
 
-    // If not found in metadata, detect from the fetched image dimensions
-    if (!originalAspectRatio && previousImageData.width && previousImageData.height) {
-      const detectedRatio = detectAspectRatioFromDimensions(
-        previousImageData.width,
-        previousImageData.height
+    // Priority 3: Detect from the fetched image dimensions (always succeeds now)
+    if (!originalAspectRatio) {
+      originalAspectRatio = detectAspectRatioFromDimensions(
+        previousImageData.width || 0,
+        previousImageData.height || 0
       );
-      if (detectedRatio) {
-        originalAspectRatio = detectedRatio;
-        console.log(`[Edit] Detected aspect ratio from image: ${originalAspectRatio} (${previousImageData.width}x${previousImageData.height})`);
-      }
+      aspectRatioSource = 'dimensions';
     }
+
+    // Log final aspect ratio resolution for debugging
+    console.log(`[AspectRatio Debug] source=${aspectRatioSource}, value=${originalAspectRatio}, image_dims=${previousImageData.width}x${previousImageData.height}`);
 
     // Build the request parts for Gemini
     const parts: Array<{ text: string } | { inline_data: { mime_type: string; data: string } }> = [];
@@ -799,10 +819,9 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    // Add aspect ratio preservation instruction
-    const aspectRatioInstruction = originalAspectRatio
-      ? `\n\nCRITICAL: Maintain the exact same aspect ratio (${originalAspectRatio}) as the original image. The output must have the same dimensions and proportions.`
-      : '';
+    // Add aspect ratio preservation instruction - ALWAYS include this per Google's recommendation
+    // See: https://developers.googleblog.com/en/how-to-prompt-gemini-2-5-flash-image-generation-for-the-best-results/
+    const aspectRatioInstruction = `\n\nCRITICAL: Do not change the input aspect ratio. Preserve the exact dimensions and proportions of the original image.`;
 
     // Add logo reference with STRONG text preservation instructions
     if (brand && includeLogoReference) {
@@ -902,41 +921,16 @@ Deno.serve(async (req: Request) => {
       text: `USER'S EDIT REQUEST: ${sanitizedPrompt}\n\nPlease make these changes while maintaining the overall style and brand consistency.${aspectRatioInstruction}${assetInstruction}`,
     });
 
-    // Resolution is always fixed at 2K
-    const finalResolution: ResolutionLevel = '2K';
-    
-    // Always use the original aspect ratio if we have it
-    const validatedAspectRatio = validateAspectRatio(originalAspectRatio);
-
-    // Build generation config
-    // If we have a validated aspect ratio, use it to ensure consistent output
-    // If NOT, don't force an aspect ratio - let the model preserve the input image's dimensions
-    // This prevents distortion when editing non-standard aspect ratio images
+    // Build generation config - DO NOT set image_config for editing
+    // Per Google's documentation, Gemini preserves input dimensions by default when editing
+    // Setting image_config would override this behavior and could cause aspect ratio issues
+    // See: https://ai.google.dev/gemini-api/docs/image-generation
     const generationConfig: Record<string, unknown> = {
       responseModalities: ["TEXT", "IMAGE"],
     };
 
-    // Only set image_config if we have a known aspect ratio
-    // Otherwise, the model will naturally preserve the input image's aspect ratio
-    let aspectRatioToUse: string | null = validatedAspectRatio;
-    let actualResolutionDims: { width: number; height: number } | null = null;
-
-    if (validatedAspectRatio) {
-      generationConfig.image_config = {
-        aspect_ratio: validatedAspectRatio,
-        image_size: finalResolution,
-      };
-      actualResolutionDims = getResolution(validatedAspectRatio, finalResolution);
-    }
-
-    // Log what we're doing
-    const resolutionInfo = actualResolutionDims
-      ? `${actualResolutionDims.width}x${actualResolutionDims.height} @ ${finalResolution}`
-      : `model-determined (preserving input)`;
-    const aspectInfo = validatedAspectRatio
-      ? `aspect_ratio=${validatedAspectRatio}`
-      : `aspect_ratio=auto (preserving original from ${previousImageData.width}x${previousImageData.height})`;
-    console.log(`[Config] ${aspectInfo} | ${resolutionInfo}`);
+    // Log what we're doing - we're letting Gemini preserve input dimensions
+    console.log(`[Config] Letting Gemini preserve input dimensions (${previousImageData.width}x${previousImageData.height}) - no image_config set`);
 
     // Call Gemini API
     const partsSummary = parts.map((part, index) => {
@@ -1076,14 +1070,13 @@ Deno.serve(async (req: Request) => {
       updated_at: new Date().toISOString(),
     };
 
-    // Update metadata with resolution info
+    // Update metadata - preserve existing aspect_ratio or use detected one from input
     const existingMetadata = (currentImage?.metadata as Record<string, unknown>) || {};
     updateData.metadata = {
       ...existingMetadata,
-      // Only update aspect_ratio if we had one, otherwise preserve existing or omit
-      ...(aspectRatioToUse ? { aspect_ratio: aspectRatioToUse } : {}),
-      resolution: finalResolution,
-      ...(actualResolutionDims ? { dimensions: actualResolutionDims } : {}),
+      // Preserve the aspect ratio from the original image (either from metadata or detected)
+      ...(originalAspectRatio ? { aspect_ratio: originalAspectRatio } : {}),
+      // Note: We let Gemini determine the output dimensions by preserving input
       mime_type: 'image/png',
     };
 
@@ -1127,9 +1120,9 @@ Deno.serve(async (req: Request) => {
         image_url: imageUrl,
         image_base64: imageBase64,
         mime_type: "image/png",
-        aspect_ratio: aspectRatioToUse || 'preserved',
-        resolution: finalResolution,
-        dimensions: actualResolutionDims,
+        aspect_ratio: originalAspectRatio || 'preserved',
+        // Dimensions preserved from input by Gemini
+        input_dimensions: { width: previousImageData.width, height: previousImageData.height },
         text_response: textResponse,
       }),
       {
