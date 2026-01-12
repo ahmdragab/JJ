@@ -11,6 +11,193 @@ const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
+// Gemini configuration for color extraction
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const GEMINI_MODEL = "gemini-3-flash-preview";
+
+interface ExtractedColors {
+  primary: string;
+  secondary: string;
+  background: string;
+  surface: string;
+  text_primary: string;
+  text_on_primary: string;
+}
+
+/**
+ * Fetch image and convert to base64 for Gemini API
+ */
+async function fetchImageAsBase64(url: string): Promise<{ base64: string; mimeType: string } | null> {
+  try {
+    // Skip SVGs - Gemini doesn't support them
+    if (url.toLowerCase().includes('.svg') || url.toLowerCase().startsWith('data:image/svg')) {
+      console.log("[Gemini Colors] Skipping SVG image");
+      return null;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[Gemini Colors] Failed to fetch image: ${response.status}`);
+      return null;
+    }
+
+    const contentType = response.headers.get("content-type") || "image/png";
+    const baseMimeType = contentType.split(";")[0].trim().toLowerCase();
+
+    // Check for supported types
+    const supportedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "image/heic", "image/heif"];
+    if (!supportedTypes.includes(baseMimeType)) {
+      console.log(`[Gemini Colors] Unsupported image type: ${baseMimeType}`);
+      return null;
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    return { base64, mimeType: baseMimeType };
+  } catch (error) {
+    console.error("[Gemini Colors] Error fetching image:", error);
+    return null;
+  }
+}
+
+/**
+ * Extract brand colors using Gemini Vision
+ * Analyzes screenshot and optionally logo to extract accurate brand colors
+ */
+async function extractColorsWithGemini(
+  screenshotUrl: string,
+  logoUrl?: string
+): Promise<ExtractedColors | null> {
+  if (!GEMINI_API_KEY) {
+    console.warn("[Gemini Colors] GEMINI_API_KEY not set, skipping vision color extraction");
+    return null;
+  }
+
+  try {
+    console.log("[Gemini Colors] Starting color extraction with Gemini Vision");
+
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+    // Add instruction
+    parts.push({
+      text: "Extract brand colors from these images. The first image is the website screenshot. If a second image is provided, it's the logo - use it to identify the primary brand color."
+    });
+
+    // Fetch and add screenshot
+    const screenshotData = await fetchImageAsBase64(screenshotUrl);
+    if (!screenshotData) {
+      console.error("[Gemini Colors] Failed to fetch screenshot");
+      return null;
+    }
+    parts.push({
+      inlineData: {
+        mimeType: screenshotData.mimeType,
+        data: screenshotData.base64
+      }
+    });
+
+    // Add logo if provided
+    if (logoUrl) {
+      const logoData = await fetchImageAsBase64(logoUrl);
+      if (logoData) {
+        parts.push({
+          inlineData: {
+            mimeType: logoData.mimeType,
+            data: logoData.base64
+          }
+        });
+      }
+    }
+
+    const systemPrompt = `Extract brand colors from the images. Return JSON only:
+{
+  "extracted_colors": {
+    "primary": "#hex - main brand color from logo or primary buttons",
+    "secondary": "#hex - secondary/accent color",
+    "background": "#hex - main page background",
+    "surface": "#hex - card/component backgrounds",
+    "text_primary": "#hex - main text color",
+    "text_on_primary": "#hex - text color on primary backgrounds"
+  }
+}
+Extract actual hex values you observe. Be precise and accurate.`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: {
+            temperature: 0.1,
+            topP: 0.8,
+            maxOutputTokens: 1000,
+            responseMimeType: "application/json"
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[Gemini Colors] API error: ${response.status}`, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!content) {
+      console.error("[Gemini Colors] No content in response");
+      return null;
+    }
+
+    const parsed = JSON.parse(content);
+    const colors = parsed.extracted_colors;
+
+    if (!colors) {
+      console.error("[Gemini Colors] No extracted_colors in response");
+      return null;
+    }
+
+    // Validate hex colors
+    const isValidHex = (c: string) => /^#[0-9A-Fa-f]{6}$/.test(c) || /^#[0-9A-Fa-f]{3}$/.test(c);
+    const defaultColors: ExtractedColors = {
+      primary: "#6366f1",
+      secondary: "#8b5cf6",
+      background: "#ffffff",
+      surface: "#f8fafc",
+      text_primary: "#1e293b",
+      text_on_primary: "#ffffff",
+    };
+
+    const validatedColors: ExtractedColors = {
+      primary: isValidHex(colors.primary) ? colors.primary : defaultColors.primary,
+      secondary: isValidHex(colors.secondary) ? colors.secondary : defaultColors.secondary,
+      background: isValidHex(colors.background) ? colors.background : defaultColors.background,
+      surface: isValidHex(colors.surface) ? colors.surface : defaultColors.surface,
+      text_primary: isValidHex(colors.text_primary) ? colors.text_primary : defaultColors.text_primary,
+      text_on_primary: isValidHex(colors.text_on_primary) ? colors.text_on_primary : defaultColors.text_on_primary,
+    };
+
+    console.log("[Gemini Colors] Successfully extracted colors:", JSON.stringify(validatedColors));
+    return validatedColors;
+
+  } catch (error) {
+    console.error("[Gemini Colors] Error during extraction:", error);
+    return null;
+  }
+}
+
 /**
  * Check if a URL points to an animated or unsupported image format
  * GIFs are considered animated by default since we can't easily check animation in Edge Functions
@@ -747,6 +934,20 @@ Deno.serve(async (req: Request) => {
         brandData.screenshot = uploadedScreenshot;
       } else {
         console.warn("[Screenshot] Failed to upload, keeping original URL (may expire)");
+      }
+    }
+
+    // Extract colors with Gemini Vision (synchronous - for best first impression)
+    // This replaces Firecrawl's CSS-based colors with more accurate vision-extracted colors
+    if (brandData.screenshot) {
+      console.log("[Gemini Colors] Extracting colors from screenshot...");
+      const logoUrl = brandData.logos?.primary || brandData.logos?.icon;
+      const geminiColors = await extractColorsWithGemini(brandData.screenshot, logoUrl);
+      if (geminiColors) {
+        brandData.colors = geminiColors;
+        console.log("[Gemini Colors] Using Gemini-extracted colors as default");
+      } else {
+        console.log("[Gemini Colors] Falling back to Firecrawl CSS colors");
       }
     }
 

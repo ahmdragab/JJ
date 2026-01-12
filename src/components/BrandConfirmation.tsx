@@ -21,6 +21,8 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
   const [uploadingLogo, setUploadingLogo] = useState<'primary' | 'icon' | null>(null);
   const [saving, setSaving] = useState(false);
   const [reExtractingColors, setReExtractingColors] = useState(false);
+  const [colorRetryCount, setColorRetryCount] = useState(0);
+  const MAX_COLOR_RETRIES = 2;
 
   // Update local brand when prop changes
   useEffect(() => {
@@ -111,11 +113,17 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
   };
 
   /**
-   * Use AI-extracted colors (pre-computed during brand analysis)
-   * Falls back to API call if not available yet
+   * Re-extract colors using Gemini Vision API
+   * Limited to MAX_COLOR_RETRIES attempts
    */
   const handleReExtractColors = async () => {
+    if (colorRetryCount >= MAX_COLOR_RETRIES) {
+      toast.warning('Retry Limit Reached', 'Please manually adjust the colors using the color pickers.');
+      return;
+    }
+
     setReExtractingColors(true);
+    setColorRetryCount(prev => prev + 1);
 
     try {
       // First, check if we have pre-computed AI colors in styleguide
@@ -391,11 +399,11 @@ export function BrandConfirmation({ brand, onConfirm, onComplete }: BrandConfirm
                   variant="ghost"
                   size="lg"
                   onClick={handleReExtractColors}
-                  disabled={reExtractingColors || (!localBrand.styleguide?.ai_extracted_colors && !localBrand.screenshot)}
+                  disabled={reExtractingColors || colorRetryCount >= MAX_COLOR_RETRIES || !localBrand.screenshot}
                   loading={reExtractingColors}
                   className="border border-neutral-200"
                 >
-                  {reExtractingColors ? 'Retrying...' : 'Retry'}
+                  {reExtractingColors ? 'Retrying...' : colorRetryCount >= MAX_COLOR_RETRIES ? 'Retry limit reached' : 'Retry'}
                 </Button>
                 <Button
                   size="lg"

@@ -102,6 +102,8 @@ Deno.serve(async (req: Request) => {
 
       // Get or create Stripe customer
       let customerId: string;
+
+      // First check our database for existing customer ID
       const { data: existingSubscription } = await supabase
         .from("subscriptions")
         .select("stripe_customer_id")
@@ -111,14 +113,24 @@ Deno.serve(async (req: Request) => {
       if (existingSubscription?.stripe_customer_id) {
         customerId = existingSubscription.stripe_customer_id;
       } else {
-        // Create Stripe customer
-        const customer = await stripe.customers.create({
+        // Check Stripe for existing customer by email
+        const existingCustomers = await stripe.customers.list({
           email: user.email,
-          metadata: {
-            user_id: user.id,
-          },
+          limit: 1,
         });
-        customerId = customer.id;
+
+        if (existingCustomers.data.length > 0) {
+          customerId = existingCustomers.data[0].id;
+        } else {
+          // Create new Stripe customer
+          const customer = await stripe.customers.create({
+            email: user.email,
+            metadata: {
+              user_id: user.id,
+            },
+          });
+          customerId = customer.id;
+        }
       }
 
       // Determine price ID based on billing cycle
@@ -136,6 +148,7 @@ Deno.serve(async (req: Request) => {
       checkoutSession = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
+        allow_promotion_codes: true,
         line_items: [
           {
             price: priceId,
@@ -181,6 +194,7 @@ Deno.serve(async (req: Request) => {
 
       checkoutSession = await stripe.checkout.sessions.create({
         mode: "payment",
+        allow_promotion_codes: true,
         line_items: [
           {
             price: packageData.stripe_price_id,

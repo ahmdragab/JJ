@@ -20,13 +20,16 @@ function getCors(request: Request): Record<string, string> {
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 const STRIPE_SECRET_KEY = Deno.env.get("STRIPE_SECRET_KEY");
 
-// Verify Stripe webhook signature
+// Verify Stripe webhook signature and return the event
 async function verifyStripeSignature(
   payload: string,
   signature: string | null
-): Promise<boolean> {
-  if (!STRIPE_WEBHOOK_SECRET || !signature) {
-    return false;
+): Promise<{ valid: boolean; event?: any; error?: string }> {
+  if (!STRIPE_WEBHOOK_SECRET) {
+    return { valid: false, error: "STRIPE_WEBHOOK_SECRET not configured" };
+  }
+  if (!signature) {
+    return { valid: false, error: "No stripe-signature header" };
   }
 
   try {
@@ -34,18 +37,19 @@ async function verifyStripeSignature(
     const stripe = new Stripe(STRIPE_SECRET_KEY || "", {
       apiVersion: "2024-12-18.acacia",
     });
-    
-    // Verify webhook signature
-    const event = stripe.webhooks.constructEvent(
+
+    // Verify webhook signature (use async version for Deno)
+    const event = await stripe.webhooks.constructEventAsync(
       payload,
       signature,
       STRIPE_WEBHOOK_SECRET
     );
-    
-    return !!event;
+
+    return { valid: true, event };
   } catch (error) {
-    console.error("Stripe signature verification failed:", error);
-    return false;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("Stripe signature verification failed:", errorMessage);
+    return { valid: false, error: errorMessage };
   }
 }
 
@@ -73,15 +77,19 @@ Deno.serve(async (req: Request) => {
     const payload = await req.text();
 
     // Verify webhook signature
-    if (!await verifyStripeSignature(payload, signature)) {
-      logger.warn("Invalid Stripe webhook signature", { request_id: requestId });
+    const verification = await verifyStripeSignature(payload, signature);
+    if (!verification.valid) {
+      logger.warn("Invalid Stripe webhook signature", {
+        request_id: requestId,
+        error: verification.error,
+      });
       return new Response(
-        JSON.stringify({ error: "Invalid signature" }),
+        JSON.stringify({ error: "Invalid signature", details: verification.error }),
         { status: 401, headers: { ...getCors(req), "Content-Type": "application/json" } }
       );
     }
 
-    const event = JSON.parse(payload);
+    const event = verification.event;
     logger.info(`Processing Stripe event: ${event.type}`, {
       request_id: requestId,
       event_id: event.id,
@@ -349,6 +357,11 @@ async function handleSubscriptionCreated(
 ) {
   logger.info("Subscription created", { subscription_id: subscriptionId, customer_id: customerId, user_id: userId });
 
+  if (!userId) {
+    logger.error("No user_id provided for subscription creation");
+    return;
+  }
+
   // Fetch subscription details from Stripe
   if (!STRIPE_SECRET_KEY) {
     logger.error("STRIPE_SECRET_KEY not configured");
@@ -362,9 +375,99 @@ async function handleSubscriptionCreated(
     });
 
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-    
-    // Now handle it like an update
-    await handleSubscriptionUpdated(subscription, supabase, logger);
+    const planPriceId = subscription.items?.data?.[0]?.price?.id;
+
+    // Find plan by Stripe price ID
+    const { data: plan } = await supabase
+      .from("plans")
+      .select("id, name, credits_per_month")
+      .or(`stripe_price_id_monthly.eq.${planPriceId},stripe_price_id_yearly.eq.${planPriceId}`)
+      .single();
+
+    if (!plan) {
+      logger.error("Plan not found for price ID", { price_id: planPriceId });
+      return;
+    }
+
+    // Determine billing cycle
+    const billingCycle = subscription.items?.data?.[0]?.price?.recurring?.interval === "year"
+      ? "yearly"
+      : "monthly";
+
+    // Create subscription record
+    const { error: subError } = await supabase
+      .from("subscriptions")
+      .upsert({
+        user_id: userId,
+        plan_id: plan.id,
+        status: "active",
+        billing_cycle: billingCycle,
+        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        cancel_at_period_end: false,
+        stripe_subscription_id: subscriptionId,
+        stripe_customer_id: customerId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (subError) {
+      logger.error("Failed to create subscription record", subError);
+      return;
+    }
+
+    logger.info("Subscription record created", { user_id: userId, plan_id: plan.id });
+
+    // Get the subscription record ID to grant credits via RPC
+    // Using the RPC ensures proper deduplication via last_credit_grant timestamp
+    const { data: subRecord } = await supabase
+      .from("subscriptions")
+      .select("id")
+      .eq("stripe_subscription_id", subscriptionId)
+      .single();
+
+    if (subRecord) {
+      const { error: creditError } = await supabase.rpc("grant_subscription_credits", {
+        subscription_uuid: subRecord.id
+      });
+
+      if (creditError) {
+        logger.error("Failed to grant credits via RPC", creditError);
+        return;
+      }
+
+      logger.info("Credits granted for new subscription via RPC", {
+        user_id: userId,
+        subscription_id: subRecord.id,
+      });
+    } else {
+      logger.error("Could not find subscription record after creation", {
+        stripe_subscription_id: subscriptionId
+      });
+      return;
+    }
+
+    // Track conversion
+    const { data: userData } = await supabase.auth.admin.getUserById(userId);
+    const amount = subscription.items?.data?.[0]?.price?.unit_amount
+      ? subscription.items.data[0].price.unit_amount / 100
+      : 0;
+
+    await trackConversion({
+      user_id: userId,
+      email: userData?.user?.email,
+      event_name: 'subscription_created',
+      value: amount,
+      currency: subscription.currency?.toUpperCase() || 'USD',
+      properties: {
+        plan_id: plan.id,
+        plan_name: plan.name,
+        billing_cycle: billingCycle,
+      },
+    });
+
   } catch (error) {
     logger.error("Failed to fetch subscription from Stripe", error instanceof Error ? error : new Error(String(error)), {
       subscription_id: subscriptionId,
