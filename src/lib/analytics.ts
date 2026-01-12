@@ -29,11 +29,17 @@ const GTM_EVENTS: Set<AnalyticsEventName> = new Set([
 let isInitialized = false;
 let gtmInitialized = false;
 
+// Check if we're in production (not localhost or dev mode)
+const isProduction = typeof window !== 'undefined' &&
+  !window.location.hostname.includes('localhost') &&
+  !window.location.hostname.includes('127.0.0.1') &&
+  import.meta.env.PROD;
+
 /**
  * Initialize GTM (Google Tag Manager)
  */
 function initGTM(): void {
-  if (gtmInitialized || !GTM_ID || typeof window === 'undefined') return;
+  if (gtmInitialized || !GTM_ID || typeof window === 'undefined' || !isProduction) return;
 
   try {
     // Initialize dataLayer
@@ -69,6 +75,12 @@ function initGTM(): void {
  * Call this once when the app loads
  */
 export function initAnalytics(): void {
+  // Skip analytics in development/localhost
+  if (!isProduction) {
+    console.log('[Analytics] Skipped - not in production environment');
+    return;
+  }
+
   // Initialize PostHog
   if (!isInitialized && POSTHOG_KEY) {
     try {
@@ -126,6 +138,14 @@ export function track<T extends AnalyticsEventName>(
   eventName: T,
   properties: AnalyticsEventMap[T]
 ): void {
+  // Log in development (even if analytics disabled)
+  if (import.meta.env.DEV) {
+    console.log('[Analytics] Event:', eventName, properties);
+  }
+
+  // Skip actual tracking in non-production
+  if (!isProduction) return;
+
   // Send to PostHog
   if (isInitialized) {
     posthog.capture(eventName, properties as Record<string, unknown>);
@@ -135,11 +155,6 @@ export function track<T extends AnalyticsEventName>(
   if (GTM_ID && GTM_EVENTS.has(eventName)) {
     gtmPush(eventName, properties as Record<string, unknown>);
   }
-
-  // Log in development
-  if (import.meta.env.DEV) {
-    console.log('[Analytics] Event:', eventName, properties);
-  }
 }
 
 /**
@@ -147,7 +162,11 @@ export function track<T extends AnalyticsEventName>(
  * Call after authentication
  */
 export function identify(userId: string, properties?: UserProperties): void {
-  if (!isInitialized) return;
+  if (import.meta.env.DEV) {
+    console.log('[Analytics] Identify:', userId, properties);
+  }
+
+  if (!isProduction || !isInitialized) return;
 
   posthog.identify(userId, properties);
 
@@ -158,23 +177,19 @@ export function identify(userId: string, properties?: UserProperties): void {
       email: properties.email,
     });
   }
-
-  if (import.meta.env.DEV) {
-    console.log('[Analytics] Identify:', userId, properties);
-  }
 }
 
 /**
  * Reset user identity (on logout)
  */
 export function reset(): void {
-  if (!isInitialized) return;
-
-  posthog.reset();
-
   if (import.meta.env.DEV) {
     console.log('[Analytics] Reset user identity');
   }
+
+  if (!isProduction || !isInitialized) return;
+
+  posthog.reset();
 }
 
 /**
@@ -188,7 +203,7 @@ export function trackPageView(pageName: string, brandId?: string): void {
   });
 
   // Also use PostHog's built-in pageview for session replay
-  if (isInitialized) {
+  if (isProduction && isInitialized) {
     posthog.capture('$pageview', {
       $current_url: window.location.href,
       page_name: pageName,
@@ -201,7 +216,7 @@ export function trackPageView(pageName: string, brandId?: string): void {
  * Set user properties without triggering an event
  */
 export function setUserProperties(properties: UserProperties): void {
-  if (!isInitialized) return;
+  if (!isProduction || !isInitialized) return;
 
   posthog.people.set(properties);
 }
@@ -210,7 +225,7 @@ export function setUserProperties(properties: UserProperties): void {
  * Check if analytics is enabled
  */
 export function isAnalyticsEnabled(): boolean {
-  return isInitialized && !!POSTHOG_KEY;
+  return isProduction && isInitialized && !!POSTHOG_KEY;
 }
 
 /**

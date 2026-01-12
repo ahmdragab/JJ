@@ -16,6 +16,7 @@ const BrandKitEditor = lazy(() => import('./pages/BrandKitEditor').then(m => ({ 
 const Studio = lazy(() => import('./pages/Studio').then(m => ({ default: m.Studio })));
 const StylesAdmin = lazy(() => import('./pages/StylesAdmin').then(m => ({ default: m.StylesAdmin })));
 const AdminImages = lazy(() => import('./pages/AdminImages').then(m => ({ default: m.AdminImages })));
+const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics').then(m => ({ default: m.AdminAnalytics })));
 const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
 const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
@@ -555,8 +556,8 @@ function AppRoutes() {
           </ProtectedRoute>
         } 
       />
-      <Route 
-        path="/admin/images" 
+      <Route
+        path="/admin/images"
         element={
           <AdminRoute>
             <>
@@ -566,7 +567,20 @@ function AppRoutes() {
               </div>
             </>
           </AdminRoute>
-        } 
+        }
+      />
+      <Route
+        path="/admin/analytics"
+        element={
+          <AdminRoute>
+            <>
+              <Navbar />
+              <div className="pt-16">
+                <AdminAnalytics />
+              </div>
+            </>
+          </AdminRoute>
+        }
       />
       <Route
         path="/pricing"
