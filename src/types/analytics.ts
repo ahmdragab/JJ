@@ -11,6 +11,10 @@ export interface UserLoggedInEvent {
 
 export interface UserLoggedOutEvent {}
 
+export interface EmailConfirmedEvent {
+  method: 'email' | 'google';
+}
+
 // Brand Events
 export interface BrandExtractionStartedEvent {
   domain: string;
@@ -163,6 +167,7 @@ export interface AnalyticsEventMap {
   user_signed_up: UserSignedUpEvent;
   user_logged_in: UserLoggedInEvent;
   user_logged_out: UserLoggedOutEvent;
+  email_confirmed: EmailConfirmedEvent;
 
   // Brand
   brand_extraction_started: BrandExtractionStartedEvent;

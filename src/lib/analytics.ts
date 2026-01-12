@@ -10,6 +10,7 @@ const GTM_ID = import.meta.env.VITE_GTM_ID;
 const GTM_EVENTS: Set<AnalyticsEventName> = new Set([
   'user_signed_up',
   'user_logged_in',
+  'email_confirmed',
   'brand_extraction_started',
   'brand_extraction_completed',
   'brand_confirmed',

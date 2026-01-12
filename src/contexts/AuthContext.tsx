@@ -1,8 +1,11 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { User } from '@supabase/supabase-js';
+import { User, AuthChangeEvent } from '@supabase/supabase-js';
 import * as Sentry from '@sentry/react';
 import { supabase } from '../lib/supabase';
 import { track, identify, reset } from '../lib/analytics';
+
+// Storage key for tracking email confirmation
+const EMAIL_CONFIRMED_KEY = 'jj_email_confirmed';
 
 type AuthContextType = {
   user: User | null;
@@ -49,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session) => {
       const newUser = session?.user ?? null;
 
       // Set user context in Sentry
@@ -72,18 +75,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // User logged in
           identifyUser(newUser);
 
-          // Check if this is a new signup (created_at within last minute)
-          const createdAt = new Date(newUser.created_at);
-          const now = new Date();
-          const isNewUser = (now.getTime() - createdAt.getTime()) < 60000; // 1 minute
+          const method = newUser.app_metadata?.provider === 'google' ? 'google' : 'email';
 
-          const method = pendingAuthMethod.current ||
-            (newUser.app_metadata?.provider === 'google' ? 'google' : 'email');
+          // For Google OAuth: detect new user by checking if created_at is very recent (within 30 seconds)
+          // This is only used for Google since email signups are tracked directly in signUp()
+          if (method === 'google') {
+            const createdAt = new Date(newUser.created_at);
+            const now = new Date();
+            const isNewGoogleUser = (now.getTime() - createdAt.getTime()) < 30000; // 30 seconds for OAuth flow
 
-          if (isNewUser) {
-            track('user_signed_up', { method });
+            if (isNewGoogleUser) {
+              track('user_signed_up', { method: 'google' });
+            } else {
+              track('user_logged_in', { method: 'google' });
+            }
           } else {
-            track('user_logged_in', { method });
+            // For email users, only track login here (signup is tracked in signUp())
+            // But we need to check if this is an email confirmation callback
+            const emailConfirmedKey = `${EMAIL_CONFIRMED_KEY}_${newUser.id}`;
+            const wasEmailConfirmed = localStorage.getItem(emailConfirmedKey);
+
+            if (!wasEmailConfirmed && newUser.email_confirmed_at) {
+              // First time seeing this user with confirmed email - track confirmation
+              track('email_confirmed', { method: 'email' });
+              localStorage.setItem(emailConfirmedKey, 'true');
+            }
+
+            track('user_logged_in', { method: 'email' });
           }
 
           pendingAuthMethod.current = null;
@@ -111,10 +129,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     pendingAuthMethod.current = 'email';
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) {
       pendingAuthMethod.current = null;
       throw error;
+    }
+
+    // Track signup immediately when the API call succeeds
+    // This fires before email confirmation, which is what we want
+    if (data.user) {
+      track('user_signed_up', { method: 'email' });
     }
   };
 
