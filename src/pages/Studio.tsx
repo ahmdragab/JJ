@@ -1101,17 +1101,32 @@ export function Studio({ brand }: { brand: Brand }) {
       await handleSaveComparisonImage(version);
     }
 
-    // Find the saved image
-    const { data: images } = await supabase
+    // Map version to variation_index (auto-save uses variation_index, manual save uses prompt_version)
+    const variationIndex = version === 'v1' ? 0 : version === 'v2' ? 1 : 2;
+
+    // Find the saved image - try variation_index first (auto-saved), then prompt_version (manually saved)
+    let { data: foundImages } = await supabase
       .from('images')
       .select('*')
       .eq('brand_id', brand.id)
-      .eq('metadata->>prompt_version', version)
+      .eq('metadata->>variation_index', variationIndex.toString())
       .order('created_at', { ascending: false })
       .limit(1);
 
-    if (images && images.length > 0) {
-      setSelectedImage(images[0] as GeneratedImage);
+    // Fallback to prompt_version query for manually saved images
+    if (!foundImages || foundImages.length === 0) {
+      const { data: fallbackImages } = await supabase
+        .from('images')
+        .select('*')
+        .eq('brand_id', brand.id)
+        .eq('metadata->>prompt_version', version)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      foundImages = fallbackImages;
+    }
+
+    if (foundImages && foundImages.length > 0) {
+      setSelectedImage(foundImages[0] as GeneratedImage);
       setShowComparisonModal(false);
     } else {
       toast.error('Error', 'Could not find saved image for editing');
@@ -1784,6 +1799,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                           <div key={platform.name}>
                                             {/* Platform Header */}
                                             <button
+                                              onMouseDown={(e) => e.stopPropagation()}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 e.preventDefault();
@@ -1794,9 +1810,9 @@ export function Studio({ brand }: { brand: Brand }) {
                                               }`}
                                             >
                                               <div className="flex items-center gap-2">
-                                                <img 
-                                                  src={platform.favicon} 
-                                                  alt="" 
+                                                <img
+                                                  src={platform.favicon}
+                                                  alt=""
                                                   className="w-4 h-4 rounded-sm"
                                                   onError={(e) => {
                                                     (e.target as HTMLImageElement).style.display = 'none';
@@ -1809,17 +1825,18 @@ export function Studio({ brand }: { brand: Brand }) {
                                               </div>
                                               <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                             </button>
-                                            
+
                                             {/* Expanded Sizes */}
                                             {isExpanded && (
                                               <div className="ml-6 mt-1 space-y-0.5 pb-1">
                                                 {platform.sizes.map((size) => {
                                                   const fullName = `${platform.name} - ${size.label}`;
                                                   const isSelected = selectedPlatform === fullName;
-                                                  
+
                                                   return (
                                                     <button
                                                       key={size.label}
+                                                      onMouseDown={(e) => e.stopPropagation()}
                                                       onClick={(e) => {
                                                         e.stopPropagation();
                                                         setSelectedPlatform(fullName);
@@ -2428,6 +2445,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                   <div key={platform.name}>
                                     {/* Platform Header */}
                                     <button
+                                      onMouseDown={(e) => e.stopPropagation()}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         e.preventDefault();
@@ -2438,9 +2456,9 @@ export function Studio({ brand }: { brand: Brand }) {
                                       }`}
                                     >
                                       <div className="flex items-center gap-2">
-                                        <img 
-                                          src={platform.favicon} 
-                                          alt="" 
+                                        <img
+                                          src={platform.favicon}
+                                          alt=""
                                           className="w-4 h-4 rounded-sm"
                                           onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
@@ -2453,17 +2471,18 @@ export function Studio({ brand }: { brand: Brand }) {
                                       </div>
                                       <ChevronDown className={`w-4 h-4 text-neutral-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                                     </button>
-                                    
+
                                     {/* Expanded Sizes */}
                                     {isExpanded && (
                                       <div className="ml-6 mt-1 space-y-0.5 pb-1">
                                         {platform.sizes.map((size) => {
                                           const fullName = `${platform.name} - ${size.label}`;
                                           const isSelected = selectedPlatform === fullName;
-                                          
+
                                           return (
                                             <button
                                               key={size.label}
+                                              onMouseDown={(e) => e.stopPropagation()}
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setSelectedPlatform(fullName);
