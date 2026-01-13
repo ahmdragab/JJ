@@ -20,6 +20,7 @@ const AdminAnalytics = lazy(() => import('./pages/AdminAnalytics').then(m => ({ 
 const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
 const Privacy = lazy(() => import('./pages/Privacy').then(m => ({ default: m.Privacy })));
 const Terms = lazy(() => import('./pages/Terms').then(m => ({ default: m.Terms })));
+const Contact = lazy(() => import('./pages/Contact').then(m => ({ default: m.Contact })));
 
 // Loading fallback component
 function PageLoader() {
@@ -648,6 +649,17 @@ function AppRoutes() {
             <Navbar />
             <div className="pt-16">
               <Terms />
+            </div>
+          </>
+        }
+      />
+      <Route
+        path="/contact"
+        element={
+          <>
+            <Navbar />
+            <div className="pt-16">
+              <Contact />
             </div>
           </>
         }

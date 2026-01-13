@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { ArrowRight, Globe, Check, X, ChevronDown, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
@@ -148,12 +149,12 @@ function FAQSection() {
         <div className="mt-10 text-center">
           <p className="text-gray-500 font-dm" >
             Still have questions?{' '}
-            <a
-              href={`mailto:${SUPPORT_EMAIL}`}
+            <Link
+              to="/contact"
               className="text-[#3531B7] hover:underline font-medium"
             >
               Get in touch
-            </a>
+            </Link>
           </p>
         </div>
       </div>
