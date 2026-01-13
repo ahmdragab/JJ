@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Globe, Check, X, ChevronDown, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
+import { isDisposableEmail, getDisposableEmailError } from '../lib/disposableEmails';
 
 // Contact email - single source of truth
 const SUPPORT_EMAIL = 'support@alwan.io';
@@ -282,6 +283,12 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
     try {
       if (isSignUp) {
+        // Block disposable email addresses to prevent abuse
+        if (isDisposableEmail(email)) {
+          setAuthError(getDisposableEmailError());
+          setAuthLoading(false);
+          return;
+        }
         await signUp(email, password);
         // Show email confirmation message instead of closing modal
         setShowEmailConfirmation(true);

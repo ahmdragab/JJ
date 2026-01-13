@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (isNewGoogleUser) {
               track('user_signed_up', { method: 'google' });
+              track('email_confirmed', { method: 'google' }); // Google OAuth = verified email
             } else {
               track('user_logged_in', { method: 'google' });
             }
