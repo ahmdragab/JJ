@@ -100,38 +100,15 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      // Get or create Stripe customer
-      let customerId: string;
-
-      // First check our database for existing customer ID
+      // Check if user already has a subscription with a Stripe customer ID
+      // If so, reuse it to maintain payment method history
       const { data: existingSubscription } = await supabase
         .from("subscriptions")
         .select("stripe_customer_id")
         .eq("user_id", user.id)
         .single();
 
-      if (existingSubscription?.stripe_customer_id) {
-        customerId = existingSubscription.stripe_customer_id;
-      } else {
-        // Check Stripe for existing customer by email
-        const existingCustomers = await stripe.customers.list({
-          email: user.email,
-          limit: 1,
-        });
-
-        if (existingCustomers.data.length > 0) {
-          customerId = existingCustomers.data[0].id;
-        } else {
-          // Create new Stripe customer
-          const customer = await stripe.customers.create({
-            email: user.email,
-            metadata: {
-              user_id: user.id,
-            },
-          });
-          customerId = customer.id;
-        }
-      }
+      const existingCustomerId = existingSubscription?.stripe_customer_id;
 
       // Determine price ID based on billing cycle
       const priceId = billingCycle === "yearly" 
@@ -146,7 +123,12 @@ Deno.serve(async (req: Request) => {
       }
 
       checkoutSession = await stripe.checkout.sessions.create({
-        customer: customerId,
+        // Only attach existing customer if they have one (returning subscribers)
+        // Otherwise use customer_email so Stripe creates customer on successful payment
+        ...(existingCustomerId
+          ? { customer: existingCustomerId }
+          : { customer_email: user.email }
+        ),
         mode: "subscription",
         allow_promotion_codes: true,
         line_items: [

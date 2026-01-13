@@ -2,7 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { createLogger } from "../_shared/logger.ts";
 import { captureException } from "../_shared/sentry.ts";
-import { getUserIdFromRequest, verifyBrandOwnership, unauthorizedResponse, forbiddenResponse } from "../_shared/auth.ts";
+import { getUserIdFromRequest, verifyBrandOwnership, unauthorizedResponse, forbiddenResponse, isServiceRoleRequest } from "../_shared/auth.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 // =============================================================================
@@ -189,17 +189,12 @@ Deno.serve(async (req: Request) => {
   try {
     logger.setContext({ request_id: requestId });
 
-    // Authenticate user
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
 
-    if (authError || !userId) {
-      return unauthorizedResponse(authError || "Authentication required", corsHeaders);
-    }
+    // Check if this is a service-to-service call (from extract-brand-firecrawl)
+    const isServiceCall = isServiceRoleRequest(req);
 
-    logger.setContext({ request_id: requestId, user_id: userId });
-
-    // Parse request
+    // Parse request first so we can use brandId for logging
     const { brandId, screenshotUrl: providedScreenshot }: AnalyzeRequest = await req.json();
 
     if (!brandId) {
@@ -209,10 +204,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // Verify brand ownership
-    const { owned } = await verifyBrandOwnership(supabase, brandId, userId);
-    if (!owned) {
-      return forbiddenResponse("You do not have permission to analyze this brand", corsHeaders);
+    // For service-to-service calls, skip user auth (trust the calling function)
+    // For user calls, verify authentication and brand ownership
+    if (!isServiceCall) {
+      const { userId, error: authError } = await getUserIdFromRequest(req, supabase);
+
+      if (authError || !userId) {
+        return unauthorizedResponse(authError || "Authentication required", corsHeaders);
+      }
+
+      logger.setContext({ request_id: requestId, user_id: userId });
+
+      // Verify brand ownership
+      const { owned } = await verifyBrandOwnership(supabase, brandId, userId);
+      if (!owned) {
+        return forbiddenResponse("You do not have permission to analyze this brand", corsHeaders);
+      }
+    } else {
+      logger.setContext({ request_id: requestId, service_call: true });
     }
 
     // Get brand data to fetch screenshot if not provided

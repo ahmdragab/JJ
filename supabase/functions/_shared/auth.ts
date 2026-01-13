@@ -122,3 +122,20 @@ export function forbiddenResponse(
     }
   );
 }
+
+/**
+ * Check if the request is using the service role key (server-to-server call)
+ * This allows internal edge functions to call each other without user auth
+ */
+export function isServiceRoleRequest(request: Request): boolean {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader) return false;
+
+  const parts = authHeader.split(' ');
+  if (parts.length !== 2 || parts[0] !== 'Bearer') return false;
+
+  const token = parts[1];
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
+  return token === serviceRoleKey;
+}

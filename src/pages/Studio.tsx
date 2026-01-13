@@ -1532,8 +1532,6 @@ export function Studio({ brand }: { brand: Brand }) {
                                 }}
                                 onClick={() => {
                                   setShowRatioDropdown(!showRatioDropdown);
-                                  // Keep input focused
-                                  inputRef.current?.focus();
                                 }}
                                 className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border hover:border-neutral-300 ${
                                   showRatioDropdown ? 'border-brand-primary/40' : 'border-neutral-200'
@@ -1552,7 +1550,7 @@ export function Studio({ brand }: { brand: Brand }) {
                               </button>
 
                               {showRatioDropdown && (
-                                <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
+                                <div className="absolute top-full left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
                                   {/* Auto Option */}
                                   <div className="px-3 py-2">
                                     <button
@@ -1561,7 +1559,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                         setSelectedPlatform(null);
                                         setShowRatioDropdown(false);
                                       }}
-                                      className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                                      className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                     >
                                       <div className="flex items-center gap-2">
                                         <Grid3x3 className="w-4 h-4 text-neutral-400" />
@@ -1674,7 +1672,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                               setSelectedPlatform(null);
                                               setShowRatioDropdown(false);
                                             }}
-                                            className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                                            className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                           >
                                             <span>{ratio.label}</span>
                                             {isSelected && (
@@ -1705,7 +1703,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                               setSelectedPlatform(null);
                                               setShowRatioDropdown(false);
                                             }}
-                                            className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                                            className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                           >
                                             <span>{ratio.label}</span>
                                             {isSelected && (
@@ -1730,8 +1728,6 @@ export function Studio({ brand }: { brand: Brand }) {
                             }}
                             onClick={() => {
                               setShowMediaLibrary(true);
-                              // Keep input focused
-                              inputRef.current?.focus();
                             }}
                             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 relative"
                             title="Attach assets"
@@ -1808,7 +1804,7 @@ export function Studio({ brand }: { brand: Brand }) {
                           }}
                         >
                           <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                            <span>Quick Style Selection</span>
+                            <span>Quick Style Selection <span className="text-gray-400 font-normal">(optional)</span></span>
                             {selectedStyles.length > 0 && (
                               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
                                 {selectedStyles.length} selected
@@ -1828,9 +1824,6 @@ export function Studio({ brand }: { brand: Brand }) {
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    // Keep input focused
-                                    inputRef.current?.focus();
-                                    // Open the modal
                                     setShowStylesPicker(true);
                                   }}
                                   className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
@@ -1912,7 +1905,7 @@ export function Studio({ brand }: { brand: Brand }) {
                             {/* Content */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-1">
-                                <span className="text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
+                                <span className="text-[11px] sm:text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
                                   {tag}
                                 </span>
                               </div>
@@ -1976,27 +1969,27 @@ export function Studio({ brand }: { brand: Brand }) {
                           <div className="flex items-center justify-between">
                             <button
                               onClick={(e) => startEditing(image, e)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
+                              className="flex items-center gap-1.5 px-4 py-2 sm:px-3 sm:py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-sm sm:text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
                             >
-                              <Edit3 className="w-3.5 h-3.5" />
+                              <Edit3 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                               Edit
                             </button>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-3 sm:gap-2">
                               <button
                                 onClick={(e) => handleDownload(image, { event: e })}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
                               >
-                                <Download className="w-4 h-4" />
+                                <Download className="w-5 h-5 sm:w-4 sm:h-4" />
                               </button>
                               <button
                                 onClick={(e) => handleDeleteClick(image.id, e)}
                                 disabled={deleting === image.id}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
                               >
                                 {deleting === image.id ? (
-                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  <Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" />
                                 ) : (
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
                                 )}
                               </button>
                             </div>
@@ -2038,14 +2031,14 @@ export function Studio({ brand }: { brand: Brand }) {
                 className="w-12 h-12 rounded-lg object-cover"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-neutral-700">Editing image</p>
-                <p className="text-xs text-neutral-500 truncate">{editingImage.prompt}</p>
+                <p className="text-sm sm:text-xs font-medium text-neutral-700">Editing image</p>
+                <p className="text-sm sm:text-xs text-neutral-500 truncate">{editingImage.prompt}</p>
               </div>
               <button
                 onClick={cancelEditing}
-                className="w-8 h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-700 transition-colors shrink-0"
+                className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-500 hover:text-neutral-700 transition-colors shrink-0"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5 sm:w-4 sm:h-4" />
               </button>
             </div>
           )}
@@ -2118,8 +2111,6 @@ export function Studio({ brand }: { brand: Brand }) {
                         }}
                         onClick={() => {
                           setShowRatioDropdown(!showRatioDropdown);
-                          // Keep input focused
-                          inputRef.current?.focus();
                         }}
                         className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border hover:border-neutral-300 ${
                           showRatioDropdown ? 'border-brand-primary/40' : 'border-neutral-200'
@@ -2138,7 +2129,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       </button>
 
                       {showRatioDropdown && (
-                        <div className="absolute top-full left-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
+                        <div className="absolute top-full left-0 mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-xl border border-neutral-200 py-1 z-50 max-h-80 overflow-y-auto">
                           {/* Auto Option */}
                           <div className="px-3 py-2">
                             <button
@@ -2147,7 +2138,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                 setSelectedPlatform(null);
                                 setShowRatioDropdown(false);
                               }}
-                              className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                              className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                             >
                               <div className="flex items-center gap-2">
                                 <Grid3x3 className="w-4 h-4 text-neutral-400" />
@@ -2260,7 +2251,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                       setSelectedPlatform(null);
                                       setShowRatioDropdown(false);
                                     }}
-                                    className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                                    className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                   >
                                     <span>{ratio.label}</span>
                                     {isSelected && (
@@ -2291,7 +2282,7 @@ export function Studio({ brand }: { brand: Brand }) {
                                       setSelectedPlatform(null);
                                       setShowRatioDropdown(false);
                                     }}
-                                    className="w-full px-2 py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
+                                    className="w-full px-2 py-2.5 sm:py-1.5 text-left text-sm text-neutral-700 hover:bg-neutral-50 flex items-center justify-between rounded"
                                   >
                                     <span>{ratio.label}</span>
                                     {isSelected && (
@@ -2316,8 +2307,6 @@ export function Studio({ brand }: { brand: Brand }) {
                     }}
                     onClick={() => {
                       setShowMediaLibrary(true);
-                      // Keep input focused
-                      inputRef.current?.focus();
                     }}
                     className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 text-sm font-medium text-neutral-700 hover:text-neutral-900 transition-all rounded-lg hover:bg-neutral-50 border border-neutral-200 hover:border-neutral-300 relative"
                     title="Attach assets"
@@ -2408,7 +2397,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   }}
                 >
                   <div className="mb-2 text-xs font-medium text-neutral-600 flex items-center gap-1.5">
-                    <span>Quick Style Selection</span>
+                    <span>Quick Style Selection <span className="text-gray-400 font-normal">(optional)</span></span>
                     {selectedStyles.length > 0 && (
                       <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-primary text-white">
                         {selectedStyles.length} selected
@@ -2428,9 +2417,6 @@ export function Studio({ brand }: { brand: Brand }) {
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            // Keep input focused
-                            inputRef.current?.focus();
-                            // Open the modal
                             setShowStylesPicker(true);
                           }}
                           className={`group relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
@@ -2514,9 +2500,9 @@ export function Studio({ brand }: { brand: Brand }) {
                 }
               }}
               disabled={modalEditing}
-              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute top-3 right-3 z-10 w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-700 hover:bg-neutral-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5 sm:w-4 sm:h-4" />
             </button>
 
             {/* Image Panel */}
@@ -3112,7 +3098,7 @@ export function Studio({ brand }: { brand: Brand }) {
                         {/* Content */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
+                            <span className="text-[11px] sm:text-[10px] font-medium text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded shrink-0">
                               {tag}
                             </span>
                           </div>
@@ -3201,7 +3187,7 @@ export function Studio({ brand }: { brand: Brand }) {
 
                 // Grid view - show as soon as any image is ready
                 return (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Variation 1 */}
                 <div className="flex flex-col">
                   {comparisonResults.v1 === 'loading' || !comparisonResults.v1 ? (
