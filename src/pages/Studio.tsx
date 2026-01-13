@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Loader2,
   Trash2,
@@ -26,7 +26,8 @@ import {
   Play,
   Package,
   Copy,
-  Bug
+  Bug,
+  Layers
 } from 'lucide-react';
 import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, Product, getAuthHeaders } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -219,6 +220,9 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showComparisonModal, setShowComparisonModal] = useState(false);
   const [comparisonPrompt, setComparisonPrompt] = useState(''); // Store prompt used for comparison (before it gets cleared)
 
+  // Variation viewer modal state (for viewing saved variation groups from gallery)
+  const [viewingVariationGroup, setViewingVariationGroup] = useState<string | null>(null);
+
   // GPT Prompt Info type for comparison
   type GPTPromptInfo = { system_prompt: string; user_message: string; full_prompt: string; design_type?: string };
   
@@ -243,6 +247,66 @@ export function Studio({ brand }: { brand: Brand }) {
   // Calculate current counts (styles count as references)
   const currentAssets = selectedAssets.length;
   const currentReferences = selectedReferences.length + selectedStyles.length;
+
+  // Group images by variation_group_id for visual stacking in the gallery
+  type ImageGroup = {
+    groupId: string | null;
+    images: GeneratedImage[];
+    newestCreatedAt: string;
+  };
+
+  const groupedImages = useMemo((): ImageGroup[] => {
+    const groups = new Map<string | null, GeneratedImage[]>();
+
+    // Group images by variation_group_id
+    for (const image of images) {
+      const groupId = image.metadata?.variation_group_id || null;
+      if (!groups.has(groupId)) {
+        groups.set(groupId, []);
+      }
+      groups.get(groupId)!.push(image);
+    }
+
+    // Convert to array and sort each group by variation_index
+    const result: ImageGroup[] = [];
+    for (const [groupId, groupImages] of groups) {
+      // Sort by variation_index within group, fallback to created_at
+      groupImages.sort((a, b) => {
+        const indexA = a.metadata?.variation_index ?? 999;
+        const indexB = b.metadata?.variation_index ?? 999;
+        if (indexA !== indexB) return indexA - indexB;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      result.push({
+        groupId,
+        images: groupImages,
+        newestCreatedAt: groupImages[0]?.created_at || '',
+      });
+    }
+
+    // Sort groups by newest image in each group
+    result.sort((a, b) =>
+      new Date(b.newestCreatedAt).getTime() - new Date(a.newestCreatedAt).getTime()
+    );
+
+    return result;
+  }, [images]);
+
+  // Get images for the variation viewer modal
+  const viewingVariationImages = useMemo(() => {
+    if (!viewingVariationGroup) return [];
+    return images
+      .filter(img => img.metadata?.variation_group_id === viewingVariationGroup)
+      .sort((a, b) => (a.metadata?.variation_index ?? 0) - (b.metadata?.variation_index ?? 0));
+  }, [images, viewingVariationGroup]);
+
+  // Close variation viewer modal if all images in group are deleted
+  useEffect(() => {
+    if (viewingVariationGroup && viewingVariationImages.length === 0) {
+      setViewingVariationGroup(null);
+    }
+  }, [viewingVariationGroup, viewingVariationImages.length]);
 
   // Persist prompt to localStorage
   const STORAGE_KEY = `studio-prompt-${brand.id}`;
@@ -647,12 +711,97 @@ export function Studio({ brand }: { brand: Brand }) {
     }
   };
 
-  // Comparison mode: generate with v1, v2, and v3 to compare outputs
+  // Helper to save a variation image to the database
+  const saveVariationImage = async (
+    imageBase64: string,
+    variationIndex: number,
+    variationGroupId: string,
+    promptText: string,
+    aspectRatio: AspectRatio,
+    extraMetadata?: Record<string, unknown>
+  ): Promise<GeneratedImage | null> => {
+    if (!user?.id) return null;
+
+    try {
+      // Create image record in database
+      const { data: imageRecord, error: insertError } = await supabase
+        .from('images')
+        .insert({
+          user_id: user.id,
+          brand_id: brand.id,
+          template_id: null,
+          prompt: promptText,
+          status: 'generating',
+          metadata: {
+            aspect_ratio: aspectRatio === 'auto' ? undefined : aspectRatio,
+            variation_group_id: variationGroupId,
+            variation_index: variationIndex,
+            ...extraMetadata,
+          },
+          conversation: [],
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // Upload base64 image to storage
+      const binaryString = atob(imageBase64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const fileName = `${brand.id}/${imageRecord.id}-${Date.now()}.png`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('brand-images')
+        .upload(fileName, bytes, {
+          contentType: 'image/png',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        // Clean up the image record if upload fails
+        await supabase.from('images').delete().eq('id', imageRecord.id);
+        throw uploadError;
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('brand-images')
+        .getPublicUrl(fileName);
+
+      // Update image record with URL and status
+      const { data: updatedRecord, error: updateError } = await supabase
+        .from('images')
+        .update({
+          image_url: urlData.publicUrl,
+          status: 'ready',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', imageRecord.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      return updatedRecord as GeneratedImage;
+    } catch (error) {
+      console.error('Failed to save variation image:', error);
+      return null;
+    }
+  };
+
+  // Comparison mode: generate with v1, v2, and v3 to compare outputs (auto-saves all variations)
   const handleCompare = async () => {
     if (!prompt.trim() || comparing) return;
 
     setComparing(true);
-    setComparisonPrompt(prompt); // Store the prompt before it gets cleared
+    const currentPrompt = prompt; // Store before it gets cleared
+    const currentAspectRatio = selectedAspectRatio; // Store before it gets cleared
+    const variationGroupId = crypto.randomUUID(); // Group ID for all 3 variations
+    setComparisonPrompt(currentPrompt);
     // Show modal immediately with single loading state (progressive loading)
     setComparisonResults({ v1: 'loading', v2: null, v3: null });
     setShowComparisonModal(true);
@@ -716,8 +865,10 @@ export function Studio({ brand }: { brand: Brand }) {
         sessionId, // All requests use the same session (credits already deducted)
       };
 
-      // Step 2: Generate with 3 versions in parallel, updating UI as each completes
+      // Step 2: Generate with 3 versions in parallel, auto-saving each as it completes
       // Using resilientFetch with retries for network resilience on mobile
+      const savedImages: (GeneratedImage | null)[] = [null, null, null];
+
       const v1Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image`, {
         method: 'POST',
         headers: authHeaders,
@@ -727,10 +878,22 @@ export function Studio({ brand }: { brand: Brand }) {
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V1 Debug:', JSON.stringify(data.debug, null, 2));
+        if (res.ok && data.image_base64) {
+          // Auto-save to database
+          const saved = await saveVariationImage(
+            data.image_base64,
+            0,
+            variationGroupId,
+            currentPrompt,
+            currentAspectRatio,
+            { gpt_prompt_info: data.gpt_prompt_info }
+          );
+          savedImages[0] = saved;
+          setSavedVersions(prev => new Set(prev).add('v1'));
+        }
         setComparisonResults(prev => prev ? {
           ...prev,
           v1: res.ok ? { image_base64: data.image_base64, gpt_prompt_info: data.gpt_prompt_info, debug: data.debug } : null,
-          // When first image arrives, set others to loading if they haven't started
           v2: prev.v2 === null ? 'loading' : prev.v2,
           v3: prev.v3 === null ? 'loading' : prev.v3,
         } : null);
@@ -745,9 +908,21 @@ export function Studio({ brand }: { brand: Brand }) {
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V2 Debug:', JSON.stringify(data.debug, null, 2));
+        if (res.ok && data.image_base64) {
+          // Auto-save to database
+          const saved = await saveVariationImage(
+            data.image_base64,
+            1,
+            variationGroupId,
+            currentPrompt,
+            currentAspectRatio,
+            { design_type: data.design_type, gpt_prompt_info: data.gpt_prompt_info || data.gpt_concept }
+          );
+          savedImages[1] = saved;
+          setSavedVersions(prev => new Set(prev).add('v2'));
+        }
         setComparisonResults(prev => prev ? {
           ...prev,
-          // When first image arrives, set others to loading if they haven't started
           v1: prev.v1 === null ? 'loading' : prev.v1,
           v2: res.ok ? { image_base64: data.image_base64, design_type: data.design_type, gpt_prompt_info: data.gpt_prompt_info || data.gpt_concept, debug: data.debug } : null,
           v3: prev.v3 === null ? 'loading' : prev.v3,
@@ -763,9 +938,21 @@ export function Studio({ brand }: { brand: Brand }) {
       }).then(async (res) => {
         const data = await res.json();
         if (data.debug) console.log('V3 Debug:', JSON.stringify(data.debug, null, 2));
+        if (res.ok && data.image_base64) {
+          // Auto-save to database
+          const saved = await saveVariationImage(
+            data.image_base64,
+            2,
+            variationGroupId,
+            currentPrompt,
+            currentAspectRatio,
+            { prompt_used: data.prompt_used }
+          );
+          savedImages[2] = saved;
+          setSavedVersions(prev => new Set(prev).add('v3'));
+        }
         setComparisonResults(prev => prev ? {
           ...prev,
-          // When first image arrives, set others to loading if they haven't started
           v1: prev.v1 === null ? 'loading' : prev.v1,
           v2: prev.v2 === null ? 'loading' : prev.v2,
           v3: res.ok ? { image_base64: data.image_base64, prompt_used: data.prompt_used, debug: data.debug } : null,
@@ -774,6 +961,15 @@ export function Studio({ brand }: { brand: Brand }) {
 
       // Wait for all to complete
       await Promise.all([v1Promise, v2Promise, v3Promise]);
+
+      // Refresh gallery to show new images
+      await loadImages();
+
+      // Show success toast
+      const savedCount = savedImages.filter(Boolean).length;
+      if (savedCount > 0) {
+        toast.success('Variations Saved', `${savedCount} variation${savedCount > 1 ? 's' : ''} saved to your gallery`);
+      }
 
       // Clear selections after successful comparison
       setPrompt('');
@@ -1629,6 +1825,10 @@ export function Studio({ brand }: { brand: Brand }) {
                                                         setSelectedPlatform(fullName);
                                                         setSelectedAspectRatio(size.ratio);
                                                         setShowRatioDropdown(false);
+                                                        track('platform_selected', {
+                                                          platform: fullName,
+                                                          aspect_ratio: size.ratio
+                                                        });
                                                       }}
                                                       className="w-full px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-50 flex items-center justify-between rounded"
                                                     >
@@ -1926,87 +2126,148 @@ export function Studio({ brand }: { brand: Brand }) {
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-                {images.map((image) => (
-                  <div
-                    key={image.id}
-                    onClick={() => {
-                      setSelectedImage(image);
-                      // GPT prompt info will be loaded from metadata in useEffect
-                    }}
-                    className="group relative bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer hover:bg-white hover:shadow-xl transition-all duration-300 border border-neutral-200/50"
-                  >
-                    {/* Image Preview */}
-                    <div className="aspect-square bg-neutral-50 relative overflow-hidden flex items-center justify-center">
-                      {image.image_url ? (
-                        <img
-                          src={image.image_url}
-                          alt="Generated"
-                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
-                        />
-                      ) : image.status === 'generating' ? (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center">
-                            <Loader2 className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-2" />
-                            <p className="text-xs text-neutral-500">Creating...</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Sparkles className="w-10 h-10 text-neutral-300" />
-                        </div>
-                      )}
+                {groupedImages.map((group) => {
+                  const isVariationGroup = group.groupId && group.images.length > 1;
+                  const primaryImage = group.images[0];
 
-                      {/* Hover overlay with actions and details */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {/* Bottom section with prompt and actions */}
-                        <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
-                          {/* Prompt text - shown on hover at bottom */}
-                          <p className="text-xs text-white line-clamp-2 drop-shadow-lg">
-                            {image.prompt.length > 100 ? image.prompt.slice(0, 100) + '...' : image.prompt}
-                          </p>
-                          
-                          {/* Action buttons */}
-                          <div className="flex items-center justify-between">
-                            <button
-                              onClick={(e) => startEditing(image, e)}
-                              className="flex items-center gap-1.5 px-4 py-2 sm:px-3 sm:py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-sm sm:text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
-                            >
-                              <Edit3 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                              Edit
-                            </button>
-                            <div className="flex items-center gap-3 sm:gap-2">
-                              <button
-                                onClick={(e) => handleDownload(image, { event: e })}
-                                className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                              >
-                                <Download className="w-5 h-5 sm:w-4 sm:h-4" />
-                              </button>
-                              <button
-                                onClick={(e) => handleDeleteClick(image.id, e)}
-                                disabled={deleting === image.id}
-                                className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
-                              >
-                                {deleting === image.id ? (
-                                  <Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
-                                )}
-                              </button>
+                  if (isVariationGroup) {
+                    // Render stacked variation card
+                    return (
+                      <div
+                        key={group.groupId}
+                        onClick={() => setViewingVariationGroup(group.groupId)}
+                        className="group relative cursor-pointer"
+                      >
+                        {/* Stacked layers effect */}
+                        <div className="absolute inset-0 bg-white/50 rounded-2xl border border-neutral-200/30 transform translate-x-2 translate-y-2" />
+                        <div className="absolute inset-0 bg-white/70 rounded-2xl border border-neutral-200/40 transform translate-x-1 translate-y-1" />
+
+                        {/* Main card */}
+                        <div className="relative bg-white/90 backdrop-blur-sm rounded-2xl overflow-hidden hover:shadow-xl transition-all duration-300 border border-neutral-200/50">
+                          <div className="aspect-square bg-neutral-50 relative overflow-hidden flex items-center justify-center">
+                            {primaryImage.image_url ? (
+                              <img
+                                src={primaryImage.image_url}
+                                alt="Generated"
+                                className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                              />
+                            ) : primaryImage.status === 'generating' ? (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <div className="text-center">
+                                  <Loader2 className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-2" />
+                                  <p className="text-xs text-neutral-500">Creating...</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Sparkles className="w-10 h-10 text-neutral-300" />
+                              </div>
+                            )}
+
+                            {/* Variations badge */}
+                            <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-violet-500 text-white text-xs font-medium flex items-center gap-1 shadow-lg">
+                              <Layers className="w-3 h-3" />
+                              {group.images.length} variations
+                            </div>
+
+                            {/* Hover overlay */}
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+                                <p className="text-xs text-white line-clamp-2 drop-shadow-lg">
+                                  {primaryImage.prompt.length > 100 ? primaryImage.prompt.slice(0, 100) + '...' : primaryImage.prompt}
+                                </p>
+                                <div className="flex items-center justify-center">
+                                  <span className="px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700">
+                                    Click to view all {group.images.length} variations
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                      
-                      {/* Edit count badge */}
-                      {image.edit_count > 0 && (
-                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-neutral-900/70 backdrop-blur-sm text-white text-xs font-medium flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {image.edit_count}
+                    );
+                  }
+
+                  // Render single image card (no group or single image in group)
+                  const image = primaryImage;
+                  return (
+                    <div
+                      key={image.id}
+                      onClick={() => {
+                        setSelectedImage(image);
+                      }}
+                      className="group relative bg-white/70 backdrop-blur-sm rounded-2xl overflow-hidden cursor-pointer hover:bg-white hover:shadow-xl transition-all duration-300 border border-neutral-200/50"
+                    >
+                      <div className="aspect-square bg-neutral-50 relative overflow-hidden flex items-center justify-center">
+                        {image.image_url ? (
+                          <img
+                            src={image.image_url}
+                            alt="Generated"
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          />
+                        ) : image.status === 'generating' ? (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center">
+                              <Loader2 className="w-8 h-8 animate-spin text-neutral-400 mx-auto mb-2" />
+                              <p className="text-xs text-neutral-500">Creating...</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Sparkles className="w-10 h-10 text-neutral-300" />
+                          </div>
+                        )}
+
+                        {/* Hover overlay with actions and details */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+                            <p className="text-xs text-white line-clamp-2 drop-shadow-lg">
+                              {image.prompt.length > 100 ? image.prompt.slice(0, 100) + '...' : image.prompt}
+                            </p>
+
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={(e) => startEditing(image, e)}
+                                className="flex items-center gap-1.5 px-4 py-2 sm:px-3 sm:py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-sm sm:text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
+                              >
+                                <Edit3 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                                Edit
+                              </button>
+                              <div className="flex items-center gap-3 sm:gap-2">
+                                <button
+                                  onClick={(e) => handleDownload(image, { event: e })}
+                                  className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                >
+                                  <Download className="w-5 h-5 sm:w-4 sm:h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteClick(image.id, e)}
+                                  disabled={deleting === image.id}
+                                  className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                >
+                                  {deleting === image.id ? (
+                                    <Loader2 className="w-5 h-5 sm:w-4 sm:h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-5 h-5 sm:w-4 sm:h-4" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      )}
+
+                        {/* Edit count badge */}
+                        {image.edit_count > 0 && (
+                          <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-neutral-900/70 backdrop-blur-sm text-white text-xs font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {image.edit_count}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2208,6 +2469,10 @@ export function Studio({ brand }: { brand: Brand }) {
                                                 setSelectedPlatform(fullName);
                                                 setSelectedAspectRatio(size.ratio);
                                                 setShowRatioDropdown(false);
+                                                track('platform_selected', {
+                                                  platform: fullName,
+                                                  aspect_ratio: size.ratio
+                                                });
                                               }}
                                               className="w-full px-2 py-1.5 text-left text-sm text-neutral-600 hover:bg-neutral-50 flex items-center justify-between rounded"
                                             >
@@ -3020,7 +3285,16 @@ export function Studio({ brand }: { brand: Brand }) {
         brandId={brand.id}
         isOpen={showProductPicker}
         onClose={() => setShowProductPicker(false)}
-        onSelect={(product) => setSelectedProduct(product)}
+        onSelect={(product) => {
+          setSelectedProduct(product);
+          if (product) {
+            const primaryImage = product.images?.find(img => img.is_primary)?.url || product.images?.[0]?.url;
+            track('product_added', {
+              product_url: primaryImage || '',
+              success: true
+            });
+          }
+        }}
         selectedProduct={selectedProduct}
       />
 
@@ -3215,12 +3489,6 @@ export function Studio({ brand }: { brand: Brand }) {
                         alt="Variation 1"
                         className="w-full h-auto"
                       />
-                      {/* Saved badge */}
-                      {savedVersions.has('v1') && (
-                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Saved
-                        </div>
-                      )}
                       {/* Hover overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="absolute bottom-0 left-0 right-0 p-3">
@@ -3231,30 +3499,20 @@ export function Studio({ brand }: { brand: Brand }) {
                             >
                               <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  const v1 = comparisonResults.v1;
-                                  if (!v1 || v1 === 'loading') return;
-                                  const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${v1.image_base64}`;
-                                  link.download = `variation-1-${Date.now()}.png`;
-                                  link.click();
-                                }}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                                title="Download"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleSaveComparisonImage('v1')}
-                                disabled={savingComparison.has('v1') || savedVersions.has('v1')}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                                title="Save to gallery"
-                              >
-                                {savingComparison.has('v1') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v1') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => {
+                                const v1 = comparisonResults.v1;
+                                if (!v1 || v1 === 'loading') return;
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${v1.image_base64}`;
+                                link.download = `variation-1-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -3311,11 +3569,6 @@ export function Studio({ brand }: { brand: Brand }) {
                         alt="Variation 2"
                         className="w-full h-auto"
                       />
-                      {savedVersions.has('v2') && (
-                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Saved
-                        </div>
-                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="absolute bottom-0 left-0 right-0 p-3">
                           <div className="flex items-center justify-between">
@@ -3325,30 +3578,20 @@ export function Studio({ brand }: { brand: Brand }) {
                             >
                               <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  const v2 = comparisonResults.v2;
-                                  if (!v2 || v2 === 'loading') return;
-                                  const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${v2.image_base64}`;
-                                  link.download = `variation-2-${Date.now()}.png`;
-                                  link.click();
-                                }}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                                title="Download"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleSaveComparisonImage('v2')}
-                                disabled={savingComparison.has('v2') || savedVersions.has('v2')}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                                title="Save to gallery"
-                              >
-                                {savingComparison.has('v2') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v2') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => {
+                                const v2 = comparisonResults.v2;
+                                if (!v2 || v2 === 'loading') return;
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${v2.image_base64}`;
+                                link.download = `variation-2-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -3405,11 +3648,6 @@ export function Studio({ brand }: { brand: Brand }) {
                         alt="Variation 3"
                         className="w-full h-auto"
                       />
-                      {savedVersions.has('v3') && (
-                        <div className="absolute top-2 right-2 px-2 py-1 rounded-full bg-green-500 text-white text-xs font-medium flex items-center gap-1">
-                          <Check className="w-3 h-3" /> Saved
-                        </div>
-                      )}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                         <div className="absolute bottom-0 left-0 right-0 p-3">
                           <div className="flex items-center justify-between">
@@ -3419,30 +3657,20 @@ export function Studio({ brand }: { brand: Brand }) {
                             >
                               <Edit3 className="w-3.5 h-3.5" /> Edit
                             </button>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  const v3 = comparisonResults.v3;
-                                  if (!v3 || v3 === 'loading') return;
-                                  const link = document.createElement('a');
-                                  link.href = `data:image/png;base64,${v3.image_base64}`;
-                                  link.download = `variation-3-${Date.now()}.png`;
-                                  link.click();
-                                }}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
-                                title="Download"
-                              >
-                                <Download className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleSaveComparisonImage('v3')}
-                                disabled={savingComparison.has('v3') || savedVersions.has('v3')}
-                                className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors disabled:opacity-50"
-                                title="Save to gallery"
-                              >
-                                {savingComparison.has('v3') ? <Loader2 className="w-4 h-4 animate-spin" /> : savedVersions.has('v3') ? <Check className="w-4 h-4 text-green-600" /> : <ImageIcon className="w-4 h-4" />}
-                              </button>
-                            </div>
+                            <button
+                              onClick={() => {
+                                const v3 = comparisonResults.v3;
+                                if (!v3 || v3 === 'loading') return;
+                                const link = document.createElement('a');
+                                link.href = `data:image/png;base64,${v3.image_base64}`;
+                                link.download = `variation-3-${Date.now()}.png`;
+                                link.click();
+                              }}
+                              className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -3481,12 +3709,129 @@ export function Studio({ brand }: { brand: Brand }) {
         </div>
       )}
 
+      {/* Variation Viewer Modal - for viewing saved variation groups from gallery */}
+      {viewingVariationGroup && viewingVariationImages.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setViewingVariationGroup(null)}
+        >
+          <div className="absolute inset-0 bg-black/60" />
+
+          <div className="relative">
+            {/* Close button */}
+            <button
+              onClick={() => setViewingVariationGroup(null)}
+              className="absolute -top-3 -right-3 z-20 w-8 h-8 rounded-full bg-black/70 hover:bg-black/90 flex items-center justify-center text-white transition-colors shadow-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div
+              className="relative bg-white rounded-xl shadow-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-4 sm:px-6 py-4 border-b border-neutral-100">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-violet-500" />
+                  <h3 className="text-lg font-semibold text-neutral-800">
+                    {viewingVariationImages.length} Variations
+                  </h3>
+                </div>
+                <p className="text-sm text-neutral-500 mt-1 line-clamp-1">
+                  {viewingVariationImages[0]?.prompt}
+                </p>
+              </div>
+
+              {/* Variations Grid */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {viewingVariationImages.map((image, index) => (
+                    <div key={image.id} className="flex flex-col">
+                      <div className="relative rounded-xl overflow-hidden bg-neutral-100 border border-neutral-200 group">
+                        {image.image_url ? (
+                          <img
+                            src={image.image_url}
+                            alt={`Variation ${index + 1}`}
+                            className="w-full h-auto"
+                          />
+                        ) : (
+                          <div className="aspect-square flex items-center justify-center">
+                            <Sparkles className="w-10 h-10 text-neutral-300" />
+                          </div>
+                        )}
+
+                        {/* Variation number badge */}
+                        <div className="absolute top-2 left-2 px-2 py-1 rounded-full bg-neutral-900/70 backdrop-blur-sm text-white text-xs font-medium">
+                          #{index + 1}
+                        </div>
+
+                        {/* Hover overlay with actions */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="absolute bottom-0 left-0 right-0 p-3">
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={() => {
+                                  setSelectedImage(image);
+                                  setViewingVariationGroup(null);
+                                }}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-white/90 backdrop-blur-sm rounded-lg text-xs font-medium text-neutral-700 hover:bg-white transition-colors"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" /> Edit
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleDownload(image)}
+                                  className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-white transition-colors"
+                                  title="Download"
+                                >
+                                  <Download className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    handleDeleteClick(image.id, e);
+                                  }}
+                                  disabled={deleting === image.id}
+                                  className="w-8 h-8 rounded-lg bg-white/90 backdrop-blur-sm flex items-center justify-center text-neutral-700 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                  title="Delete"
+                                >
+                                  {deleting === image.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <StylesPicker
         isOpen={showStylesPicker}
         onClose={() => setShowStylesPicker(false)}
         onSelect={(selected) => {
           // Maximum 2 styles allowed
           const filtered = selected.slice(0, 2);
+          // Track newly added styles
+          const newStyles = filtered.filter(
+            s => !selectedStyles.some(existing => existing.id === s.id)
+          );
+          newStyles.forEach(style => {
+            track('style_selected', {
+              style_id: style.id,
+              style_name: style.name,
+              category: style.category || 'uncategorized'
+            });
+          });
           setSelectedStyles(filtered);
         }}
         selectedStyles={selectedStyles}

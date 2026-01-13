@@ -359,6 +359,8 @@ export type GeneratedImage = {
   metadata: {
     aspect_ratio?: string;
     template_fields?: Record<string, string>;
+    variation_group_id?: string;
+    variation_index?: number;
     [key: string]: unknown;
   };
   status: 'generating' | 'ready' | 'error';

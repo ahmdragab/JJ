@@ -77,6 +77,7 @@ function BrandRoutes() {
   const [loading, setLoading] = useState(true);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [wasExtracting, setWasExtracting] = useState(false);
+  const [extractionStartTime, setExtractionStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (brandSlug && user) {
@@ -118,8 +119,11 @@ function BrandRoutes() {
     
     if (data.status === 'extracting') {
       setWasExtracting(true);
+      if (!extractionStartTime) {
+        setExtractionStartTime(Date.now());
+      }
     }
-    
+
     setLoading(false);
   };
 
@@ -127,8 +131,11 @@ function BrandRoutes() {
   useEffect(() => {
     if (brand?.status === 'extracting') {
       setWasExtracting(true);
+      if (!extractionStartTime) {
+        setExtractionStartTime(Date.now());
+      }
     }
-  }, [brand?.status]);
+  }, [brand?.status, extractionStartTime]);
 
   // Poll for brand updates when status is 'extracting'
   useEffect(() => {
@@ -158,6 +165,22 @@ function BrandRoutes() {
           // Show confirmation when extraction completes
           if (wasExtracting && data.status === 'ready') {
             setShowConfirmation(true);
+            // Track successful extraction
+            track('brand_extraction_completed', {
+              domain: data.domain,
+              brand_id: data.id,
+              has_logo: !!(data.logos?.length || data.all_logos?.length),
+              has_colors: !!data.colors?.length,
+              duration_ms: extractionStartTime ? Date.now() - extractionStartTime : 0
+            });
+            setExtractionStartTime(null);
+          } else if (wasExtracting && data.status === 'error') {
+            // Track failed extraction
+            track('brand_extraction_failed', {
+              domain: data.domain,
+              error_type: 'extraction_error'
+            });
+            setExtractionStartTime(null);
           }
         }
       }
@@ -167,7 +190,7 @@ function BrandRoutes() {
       isMounted = false;
       clearInterval(pollInterval);
     };
-  }, [brand?.id, brand?.status, wasExtracting, user?.id]);
+  }, [brand?.id, brand?.status, wasExtracting, user?.id, extractionStartTime]);
 
   const handleUpdateBrand = async (updates: Partial<Brand>) => {
     if (!brand) return;
@@ -330,6 +353,8 @@ function BrandsListWrapper() {
   const handleExtractBrand = async (input: string) => {
     if (!user) return;
 
+    let domain: string | null = null;
+
     try {
       // Validate domain format
       if (!isValidDomain(input)) {
@@ -337,7 +362,6 @@ function BrandsListWrapper() {
         return;
       }
 
-      let domain: string;
       let url: string;
 
       if (input.includes('://')) {
@@ -387,6 +411,12 @@ function BrandsListWrapper() {
 
     } catch (error) {
       console.error('Failed to start extraction:', error);
+      if (domain) {
+        track('brand_extraction_failed', {
+          domain,
+          error_type: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
       toast.error('Extraction Failed', 'Failed to start brand extraction. Please try again.');
     }
   };
@@ -413,6 +443,8 @@ function LandingV2Wrapper() {
   const handleStartExtraction = async (input: string) => {
     if (!user) return;
 
+    let domain: string | null = null;
+
     try {
       // Validate domain format
       if (!isValidDomain(input)) {
@@ -420,7 +452,6 @@ function LandingV2Wrapper() {
         return;
       }
 
-      let domain: string;
       let url: string;
 
       if (input.includes('://')) {
@@ -474,6 +505,12 @@ function LandingV2Wrapper() {
 
     } catch (error) {
       console.error('Failed to start extraction:', error);
+      if (domain) {
+        track('brand_extraction_failed', {
+          domain,
+          error_type: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
     }
   };
 

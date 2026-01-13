@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Loader2, RefreshCw, Users, Globe, Image, CreditCard, TrendingUp, Calendar } from 'lucide-react';
+import { Loader2, RefreshCw, Users, Globe, Image, CreditCard, TrendingUp, Calendar, UserCheck, UserPlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { isAdminUser } from '../lib/admin';
@@ -8,7 +8,9 @@ import { Button } from '../components/ui';
 type TimeRange = 'today' | 'week' | 'month' | 'all';
 
 type AnalyticsData = {
-  signups: number;
+  totalSignups: number;
+  confirmedSignups: number;
+  activeUsers: number;
   extractions: number;
   imagesGenerated: number;
   checkoutsCompleted: number;
@@ -38,7 +40,9 @@ export function AdminAnalytics() {
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('week');
   const [data, setData] = useState<AnalyticsData>({
-    signups: 0,
+    totalSignups: 0,
+    confirmedSignups: 0,
+    activeUsers: 0,
     extractions: 0,
     imagesGenerated: 0,
     checkoutsCompleted: 0,
@@ -61,7 +65,14 @@ export function AdminAnalytics() {
       const rangeFilter = rangeStart ? rangeStart.toISOString() : null;
 
       // Fetch all metrics in parallel
-      const [brandsResult, imagesResult, checkoutsResult, uniqueUsersResult] = await Promise.all([
+      const [
+        brandsResult,
+        imagesResult,
+        checkoutsResult,
+        uniqueUsersResult,
+        totalSignupsResult,
+        confirmedSignupsResult,
+      ] = await Promise.all([
         // Count brands (extractions)
         rangeFilter
           ? supabase.from('brands').select('id', { count: 'exact', head: true }).gte('created_at', rangeFilter)
@@ -79,13 +90,21 @@ export function AdminAnalytics() {
         rangeFilter
           ? supabase.from('brands').select('user_id').gte('created_at', rangeFilter)
           : supabase.from('brands').select('user_id'),
+
+        // Count total user signups from auth.users
+        supabase.rpc('count_user_signups', { since_date: rangeFilter }),
+
+        // Count confirmed users from auth.users
+        supabase.rpc('count_confirmed_users', { since_date: rangeFilter }),
       ]);
 
-      // Calculate unique signups (users who created at least one brand)
+      // Calculate unique active users (users who created at least one brand)
       const uniqueUsers = new Set(uniqueUsersResult.data?.map(b => b.user_id) || []);
 
       setData({
-        signups: uniqueUsers.size,
+        totalSignups: totalSignupsResult.data || 0,
+        confirmedSignups: confirmedSignupsResult.data || 0,
+        activeUsers: uniqueUsers.size,
         extractions: brandsResult.count || 0,
         imagesGenerated: imagesResult.count || 0,
         checkoutsCompleted: checkoutsResult.data || 0,
@@ -113,13 +132,31 @@ export function AdminAnalytics() {
     all: 'All Time',
   };
 
+  const confirmationRate = data.totalSignups > 0
+    ? ((data.confirmedSignups / data.totalSignups) * 100).toFixed(1)
+    : '0';
+
   const metrics = [
     {
-      label: 'Users',
-      value: data.signups,
+      label: 'Signups',
+      value: data.totalSignups,
+      icon: UserPlus,
+      color: 'bg-indigo-500',
+      description: 'Total user registrations',
+    },
+    {
+      label: 'Confirmed',
+      value: data.confirmedSignups,
+      icon: UserCheck,
+      color: 'bg-teal-500',
+      description: `${confirmationRate}% email confirmation rate`,
+    },
+    {
+      label: 'Active Users',
+      value: data.activeUsers,
       icon: Users,
       color: 'bg-blue-500',
-      description: 'Unique users who created brands',
+      description: 'Users who created brands',
     },
     {
       label: 'Extractions',
@@ -196,7 +233,7 @@ export function AdminAnalytics() {
             <Loader2 className="w-8 h-8 animate-spin text-neutral-400" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {metrics.map((metric) => (
               <div
                 key={metric.label}
@@ -230,27 +267,39 @@ export function AdminAnalytics() {
             <div className="space-y-4">
               {/* Funnel Steps */}
               <FunnelStep
-                label="Users"
-                value={data.signups}
+                label="Signups"
+                value={data.totalSignups}
                 percentage={100}
+                color="bg-indigo-500"
+              />
+              <FunnelStep
+                label="Confirmed Email"
+                value={data.confirmedSignups}
+                percentage={data.totalSignups > 0 ? (data.confirmedSignups / data.totalSignups) * 100 : 0}
+                color="bg-teal-500"
+              />
+              <FunnelStep
+                label="Active Users"
+                value={data.activeUsers}
+                percentage={data.totalSignups > 0 ? (data.activeUsers / data.totalSignups) * 100 : 0}
                 color="bg-blue-500"
               />
               <FunnelStep
                 label="Extractions"
                 value={data.extractions}
-                percentage={data.signups > 0 ? (data.extractions / data.signups) * 100 : 0}
+                percentage={data.totalSignups > 0 ? (data.extractions / data.totalSignups) * 100 : 0}
                 color="bg-purple-500"
               />
               <FunnelStep
                 label="Images Generated"
                 value={data.imagesGenerated}
-                percentage={data.signups > 0 ? Math.min((data.imagesGenerated / data.signups) * 100, 100) : 0}
+                percentage={data.totalSignups > 0 ? Math.min((data.imagesGenerated / data.totalSignups) * 100, 100) : 0}
                 color="bg-green-500"
               />
               <FunnelStep
                 label="Checkouts"
                 value={data.checkoutsCompleted}
-                percentage={data.signups > 0 ? (data.checkoutsCompleted / data.signups) * 100 : 0}
+                percentage={data.totalSignups > 0 ? (data.checkoutsCompleted / data.totalSignups) * 100 : 0}
                 color="bg-amber-500"
               />
             </div>
