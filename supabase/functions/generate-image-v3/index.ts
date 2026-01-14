@@ -329,12 +329,11 @@ Deno.serve(async (req: Request) => {
       brandId,
       imageId,
       aspectRatio,
-      skipCredits = false,
       assets = [],           // High-fidelity assets to include
       references = [],       // Style references
       productId,             // Optional: Product to feature
       includeLogoReference = true,
-      sessionId,             // Optional: session ID from start-variations-session
+      sessionId,             // Optional: session ID from start-variations-session (required for variations mode)
     } = requestBody;
 
     if (!prompt) {
@@ -405,7 +404,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Credit handling: Either validate session or deduct credits
-    if (userId && !skipCredits) {
+    if (userId) {
       if (sessionId) {
         // Session-based generation: Validate session instead of deducting credits
         const { data: session, error: sessionError } = await supabase

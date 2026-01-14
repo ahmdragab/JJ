@@ -948,7 +948,7 @@ export function Studio({ brand }: { brand: Brand }) {
       const v2Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v2`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ ...requestBody, skipCredits: true }),
+        body: JSON.stringify(requestBody),
         retries: 1,
         timeout: 120000,
       }).then(async (res) => {
@@ -978,7 +978,7 @@ export function Studio({ brand }: { brand: Brand }) {
       const v3Promise = resilientFetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-image-v3`, {
         method: 'POST',
         headers: authHeaders,
-        body: JSON.stringify({ ...requestBody, skipCredits: true }),
+        body: JSON.stringify(requestBody),
         retries: 1,
         timeout: 120000,
       }).then(async (res) => {
