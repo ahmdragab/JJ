@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Globe, Check, X, ChevronDown, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { isValidDomain, supabase } from '../lib/supabase';
@@ -184,6 +184,7 @@ interface Plan {
 
 function VersionB({ onStart }: { onStart: (url: string) => void }) {
   const { user, signIn, signUp, signInWithGoogle } = useAuth();
+  const navigate = useNavigate();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [activeStep, setActiveStep] = useState(0);
@@ -255,12 +256,15 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
     loadPlans();
   }, []);
 
-  // Recover pending URL after OAuth redirect
+  // Recover pending URL or redirect after OAuth/auth
   useEffect(() => {
     if (user) {
       const storedPendingUrl = localStorage.getItem('pendingUrl');
+      const storedPendingRedirect = localStorage.getItem('pendingRedirect');
+
       if (storedPendingUrl) {
         localStorage.removeItem('pendingUrl');
+        localStorage.removeItem('pendingRedirect');
         // Security: Validate before using - localStorage could have been tampered with
         // Check for dangerous protocols (javascript:, data:, etc.)
         const hasProtocol = storedPendingUrl.includes(':');
@@ -272,9 +276,13 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
         if (isValidDomain(storedPendingUrl)) {
           onStart(storedPendingUrl);
         }
+      } else if (storedPendingRedirect) {
+        localStorage.removeItem('pendingRedirect');
+        // Redirect to brands page after "Get Started" signup (no URL entered)
+        navigate(storedPendingRedirect);
       }
     }
-  }, [user, onStart]);
+  }, [user, onStart, navigate]);
 
   // Email/password auth handler
   const handleAuth = async (e: React.FormEvent) => {
@@ -326,13 +334,17 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
   };
 
   // Open auth modal
-  const openAuthModal = (signUpMode = false) => {
+  const openAuthModal = (signUpMode = false, redirectTo?: string) => {
     setIsSignUp(signUpMode);
     setAuthError('');
     setEmail('');
     setPassword('');
     setShowEmailConfirmation(false);
     setShowAuthModal(true);
+    // Store redirect path for after auth (used by "Get Started" buttons without URL)
+    if (redirectTo) {
+      localStorage.setItem('pendingRedirect', redirectTo);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -432,14 +444,14 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
             ) : (
               <>
                 <button
-                  onClick={() => openAuthModal(false)}
+                  onClick={() => openAuthModal(false, '/brands')}
                   className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block font-dm"
-                  
+
                 >
                   Sign In
                 </button>
                 <button
-                  onClick={() => openAuthModal(true)}
+                  onClick={() => openAuthModal(true, '/brands')}
                   className="px-5 py-2.5 rounded-full text-sm font-medium transition-all hover:opacity-90 text-white font-dm bg-brand-primary"
                 >
                   Get Started Free
@@ -924,15 +936,15 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
                       {plan.name === 'free' ? (
                         <button
-                          onClick={() => openAuthModal(true)}
+                          onClick={() => openAuthModal(true, '/brands')}
                           className="w-full py-3 px-4 rounded-xl font-semibold transition-all bg-gray-100 text-gray-700 hover:bg-gray-200 font-dm"
-                          
+
                         >
                           Get Started
                         </button>
                       ) : (
                         <button
-                          onClick={() => openAuthModal(true)}
+                          onClick={() => openAuthModal(true, '/brands')}
                           className={`w-full py-3 px-4 rounded-xl font-semibold transition-all font-dm ${
                             isRecommended
                               ? 'bg-[#3531B7] text-white hover:opacity-90 shadow-lg shadow-[#3531B7]/25'
@@ -975,9 +987,9 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
               Join hundreds of businesses creating on-brand ads in seconds.
             </p>
             <button
-              onClick={() => openAuthModal(true)}
+              onClick={() => openAuthModal(true, '/brands')}
               className="px-8 py-4 rounded-xl text-gray-900 font-semibold transition-all hover:opacity-90 bg-white text-lg font-dm"
-              
+
             >
               Get Started Free
             </button>
