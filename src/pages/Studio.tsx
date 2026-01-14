@@ -730,6 +730,10 @@ export function Studio({ brand }: { brand: Brand }) {
       // Reload to get the generated image
       await loadImages();
 
+      // Refresh credits to reflect the deduction
+      const updatedCredits = await getUserCredits();
+      setCredits(updatedCredits);
+
       // Track generation completed
       track('generation_completed', {
         brand_id: brand.id,
@@ -886,7 +890,12 @@ export function Studio({ brand }: { brand: Brand }) {
         throw new Error(sessionError.error || 'Failed to start variations session');
       }
 
-      const { sessionId } = await sessionResponse.json();
+      const { sessionId, remainingCredits } = await sessionResponse.json();
+
+      // Update credits immediately from session response
+      if (typeof remainingCredits === 'number') {
+        setCredits(remainingCredits);
+      }
 
       // Combine references and styles
       const allReferences = [
@@ -1737,7 +1746,7 @@ export function Studio({ brand }: { brand: Brand }) {
                   className="max-w-3xl mx-auto overflow-visible"
                 >
                     {/* Low Credit Warning Banner */}
-                    {credits > 0 && credits <= 2 && (
+                    {credits <= 2 && (
                       <div
                         className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors"
                         onClick={() => {
@@ -2400,7 +2409,7 @@ export function Studio({ brand }: { brand: Brand }) {
           )}
 
           {/* Low Credit Warning Banner */}
-          {credits > 0 && credits <= 2 && (
+          {credits <= 2 && (
             <div
               className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors"
               onClick={() => {
