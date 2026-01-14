@@ -995,7 +995,9 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
             </div>
             <div className="flex items-center gap-6 text-sm text-gray-500 font-dm" >
               <a href="#pricing" className="hover:text-gray-300 transition-colors">Pricing</a>
-              <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-gray-300 transition-colors">Contact</a>
+              <a href="/contact" className="hover:text-gray-300 transition-colors">Contact</a>
+              <a href="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</a>
+              <a href="/terms" className="hover:text-gray-300 transition-colors">Terms</a>
             </div>
           </div>
         </footer>
