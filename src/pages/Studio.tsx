@@ -1789,7 +1789,7 @@ export function Studio({ brand }: { brand: Brand }) {
                               editingImage ? handleEdit() : (variationsMode ? handleCompare() : handleGenerate());
                             }
                           }}
-                          placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
+                          placeholder={editingImage ? "What would you like to change?" : "Describe your design idea..."}
                           className={`flex-1 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
                             (prompt.trim() || inputFocused)
                               ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
@@ -1798,22 +1798,20 @@ export function Studio({ brand }: { brand: Brand }) {
                           rows={(prompt.trim() || inputFocused) ? 5 : 1}
                         />
 
-                        {/* Submit Button - Always visible on right when there's text */}
-                        {prompt.trim() && (
-                          <Button
-                            size="sm"
-                            onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
-                            disabled={(generating || editing || comparing) || !prompt.trim()}
-                            loading={generating || editing || comparing}
-                          >
-                            <span className="sm:hidden">
-                              {editingImage ? 'Apply' : 'Go'}
-                            </span>
-                            <span className="hidden sm:inline">
-                              {editingImage ? 'Apply' : 'Create'}
-                            </span>
-                          </Button>
-                        )}
+                        {/* Submit Button - Always visible, disabled when empty */}
+                        <Button
+                          size="sm"
+                          onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
+                          disabled={(generating || editing || comparing) || !prompt.trim()}
+                          loading={generating || editing || comparing}
+                        >
+                          <span className="sm:hidden">
+                            {editingImage ? 'Apply' : 'Go'}
+                          </span>
+                          <span className="hidden sm:inline">
+                            {editingImage ? 'Apply' : 'Create'}
+                          </span>
+                        </Button>
                       </div>
 
                       {/* Actions Row - Moves to bottom when typing or focused */}
@@ -2452,7 +2450,7 @@ export function Studio({ brand }: { brand: Brand }) {
                       editingImage ? handleEdit() : (variationsMode ? handleCompare() : handleGenerate());
                     }
                   }}
-                  placeholder={editingImage ? "What would you like to change?" : "e.g., Create a LinkedIn post to celebrate UAE National Day"}
+                  placeholder={editingImage ? "What would you like to change?" : "Describe your design idea..."}
                   className={`flex-1 bg-transparent border-none outline-none text-neutral-900 placeholder:text-neutral-400 placeholder:text-xs sm:placeholder:text-sm text-sm sm:text-base py-1.5 sm:py-2 resize-none overflow-y-auto min-w-0 [field-sizing:content] ${
                     (prompt.trim() || inputFocused)
                       ? 'min-h-[2.5rem] sm:min-h-[3rem] max-h-[8rem] sm:max-h-[10rem]' 
@@ -2461,22 +2459,20 @@ export function Studio({ brand }: { brand: Brand }) {
                   rows={(prompt.trim() || inputFocused) ? 5 : 1}
                 />
 
-                {/* Submit Button - Always visible on right when there's text */}
-                {prompt.trim() && (
-                  <Button
-                    size="sm"
-                    onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
-                    disabled={(generating || editing || comparing) || !prompt.trim()}
-                    loading={generating || editing || comparing}
-                  >
-                    <span className="sm:hidden">
-                      {editingImage ? 'Apply' : 'Go'}
-                    </span>
-                    <span className="hidden sm:inline">
-                      {editingImage ? 'Apply' : 'Create'}
-                    </span>
-                  </Button>
-                )}
+                {/* Submit Button - Always visible, disabled when empty */}
+                <Button
+                  size="sm"
+                  onClick={editingImage ? handleEdit : (variationsMode ? handleCompare : handleGenerate)}
+                  disabled={(generating || editing || comparing) || !prompt.trim()}
+                  loading={generating || editing || comparing}
+                >
+                  <span className="sm:hidden">
+                    {editingImage ? 'Apply' : 'Go'}
+                  </span>
+                  <span className="hidden sm:inline">
+                    {editingImage ? 'Apply' : 'Create'}
+                  </span>
+                </Button>
               </div>
 
               {/* Actions Row - Moves to bottom when typing or focused */}
