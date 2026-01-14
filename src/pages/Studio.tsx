@@ -871,6 +871,18 @@ export function Studio({ brand }: { brand: Brand }) {
 
       if (!sessionResponse.ok) {
         const sessionError = await sessionResponse.json();
+        // Handle insufficient credits specifically
+        if (sessionResponse.status === 402) {
+          track('insufficient_credits', {
+            brand_id: brand.id,
+            credits_needed: 2,
+          });
+          setCredits(sessionError.credits || 0);
+          setShowComparisonModal(false);
+          setComparisonResults(null);
+          setShowUpgradeModal(true);
+          return;
+        }
         throw new Error(sessionError.error || 'Failed to start variations session');
       }
 
@@ -1030,6 +1042,9 @@ export function Studio({ brand }: { brand: Brand }) {
     } catch (error) {
       console.error('Comparison failed:', error);
       toast.error('Generation Failed', sanitizeErrorMessage(error));
+      // Close modal and clear loading state on error
+      setShowComparisonModal(false);
+      setComparisonResults(null);
     } finally {
       setComparing(false);
     }
