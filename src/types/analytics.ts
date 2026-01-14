@@ -68,6 +68,21 @@ export interface InsufficientCreditsEvent {
   credits_needed: number;
 }
 
+// Upgrade Nudge Events
+export interface UpgradeNudgeClickedEvent {
+  source: 'insufficient_credits_modal' | 'low_credit_warning';
+  current_credits: number;
+}
+
+export interface UpgradeNudgeDismissedEvent {
+  source: 'insufficient_credits_modal' | 'low_credit_warning';
+  current_credits: number;
+}
+
+export interface LowCreditWarningClickedEvent {
+  current_credits: number;
+}
+
 // Image Interaction Events
 export interface ImageDownloadedEvent {
   image_id: string;
@@ -181,6 +196,11 @@ export interface AnalyticsEventMap {
   generation_completed: GenerationCompletedEvent;
   generation_failed: GenerationFailedEvent;
   insufficient_credits: InsufficientCreditsEvent;
+
+  // Upgrade Nudges
+  upgrade_nudge_clicked: UpgradeNudgeClickedEvent;
+  upgrade_nudge_dismissed: UpgradeNudgeDismissedEvent;
+  low_credit_warning_clicked: LowCreditWarningClickedEvent;
 
   // Image Interaction
   image_downloaded: ImageDownloadedEvent;

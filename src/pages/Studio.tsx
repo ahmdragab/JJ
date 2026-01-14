@@ -27,10 +27,12 @@ import {
   Package,
   Copy,
   Bug,
-  Layers
+  Layers,
+  AlertTriangle
 } from 'lucide-react';
-import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, Product, getAuthHeaders } from '../lib/supabase';
+import { supabase, Brand, GeneratedImage, ConversationMessage, BrandAsset, Style, Product, getAuthHeaders, getUserCredits } from '../lib/supabase';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { UpgradeModal } from '../components/UpgradeModal';
 import { AssetPicker } from '../components/AssetPicker';
 import { ProductPicker } from '../components/ProductPicker';
 import { ReferenceUpload } from '../components/ReferenceUpload';
@@ -135,6 +137,49 @@ export function Studio({ brand }: { brand: Brand }) {
   const [showRatioDropdown, setShowRatioDropdown] = useState(false);
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const [editingImage, setEditingImage] = useState<EditingImage>(null);
+
+  // Credits and upgrade modal state
+  const [credits, setCredits] = useState<number>(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // Load credits on mount
+  useEffect(() => {
+    if (!user) return;
+    const loadCredits = async () => {
+      try {
+        const userCredits = await getUserCredits();
+        setCredits(userCredits);
+      } catch (error) {
+        console.error('Failed to load credits:', error);
+      }
+    };
+    loadCredits();
+  }, [user]);
+
+  // Subscribe to real-time credit updates
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('studio_credits_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'user_credits',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload: { new: { credits: number } }) => {
+          setCredits(payload.new.credits);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const togglePlatformExpand = useCallback((platformName: string) => {
     setExpandedPlatforms(prev => {
@@ -664,7 +709,8 @@ export function Studio({ brand }: { brand: Brand }) {
             brand_id: brand.id,
             credits_needed: 1,
           });
-          toast.error('Insufficient Credits', `You have ${errorData.credits || 0} credits remaining. Please purchase more credits to generate images.`);
+          setCredits(errorData.credits || 0);
+          setShowUpgradeModal(true);
           // Remove the image record that was created
           await supabase.from('images').delete().eq('id', imageRecord.id);
           setImages(prev => prev.filter(img => img.id !== imageRecord.id));
@@ -1671,12 +1717,29 @@ export function Studio({ brand }: { brand: Brand }) {
             {images.length === 0 ? (
               <div className="space-y-6 overflow-visible">
                 {/* Input Bar - Moved here when no images */}
-                <div 
+                <div
                   ref={inputContainerRef}
                   className="max-w-3xl mx-auto overflow-visible"
                 >
+                    {/* Low Credit Warning Banner */}
+                    {credits > 0 && credits <= 2 && (
+                      <div
+                        className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors"
+                        onClick={() => {
+                          track('low_credit_warning_clicked', { current_credits: credits });
+                          setShowUpgradeModal(true);
+                        }}
+                      >
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span className="text-sm text-amber-800">
+                          <span className="font-medium">{credits} credit{credits !== 1 ? 's' : ''} left.</span>
+                          {' '}Upgrade to keep creating.
+                        </span>
+                      </div>
+                    )}
+
                     {/* Main Input */}
-                  <div 
+                  <div
                     className={`bg-white rounded-xl sm:rounded-2xl border transition-all duration-300 overflow-visible ${
                       inputFocused
                         ? 'border-brand-primary/40'
@@ -2321,8 +2384,25 @@ export function Studio({ brand }: { brand: Brand }) {
             </div>
           )}
 
+          {/* Low Credit Warning Banner */}
+          {credits > 0 && credits <= 2 && (
+            <div
+              className="mb-3 flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl cursor-pointer hover:bg-amber-100 transition-colors"
+              onClick={() => {
+                track('low_credit_warning_clicked', { current_credits: credits });
+                setShowUpgradeModal(true);
+              }}
+            >
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span className="text-sm text-amber-800">
+                <span className="font-medium">{credits} credit{credits !== 1 ? 's' : ''} left.</span>
+                {' '}Upgrade to keep creating.
+              </span>
+            </div>
+          )}
+
           {/* Main Input */}
-          <div 
+          <div
             className={`bg-white/95 backdrop-blur-xl rounded-xl sm:rounded-2xl border shadow-xl transition-all duration-300 overflow-visible ${
               inputFocused
                 ? 'border-brand-primary/40 shadow-2xl'
@@ -3280,6 +3360,13 @@ export function Studio({ brand }: { brand: Brand }) {
         confirmText="Delete"
         cancelText="Cancel"
         variant="danger"
+      />
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        currentCredits={credits}
       />
 
       {/* Assets Library Picker */}
