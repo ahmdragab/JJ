@@ -73,6 +73,7 @@ interface ProductContext {
   description?: string;
   key_features?: string[];
   value_proposition?: string;
+  images?: Array<{ url: string; is_primary?: boolean }>;
 }
 
 // ============================================================================
@@ -276,7 +277,9 @@ async function uploadToStorage(
 async function generateCreativeConcept(
   userPrompt: string,
   brand: Brand | null,
-  product: ProductContext | null
+  product: ProductContext | null,
+  assets: AssetInput[] = [],
+  references: AssetInput[] = []
 ): Promise<CreativeConcept> {
   if (!OPENAI_API_KEY) {
     throw new Error("OPENAI_API_KEY not set");
@@ -344,6 +347,7 @@ Brand: ${brand.name}
 
   // Add product context if this ad is for a specific product
   if (product) {
+    const hasProductImages = product.images && product.images.length > 0;
     userMessage += `\n================================================================================
 PRODUCT TO FEATURE
 ================================================================================
@@ -353,6 +357,34 @@ PRODUCT NAME: ${product.name}
 ${product.short_description ? `DESCRIPTION: ${product.short_description}` : product.description ? `DESCRIPTION: ${product.description.slice(0, 300)}` : ''}
 ${product.key_features && product.key_features.length > 0 ? `KEY FEATURES:\n${product.key_features.map(f => `- ${f}`).join('\n')}` : ''}
 ${product.value_proposition ? `VALUE PROPOSITION: ${product.value_proposition}` : ''}
+${hasProductImages ? `
+⚠️ PRODUCT IMAGES WILL BE ATTACHED: ${product.images!.length} product photo(s) will be included as high-fidelity assets. Your concept MUST feature these actual product photos as the main visual element. Do NOT describe generic product imagery - the real product photos will be used.` : ''}
+`;
+  }
+
+  // Add attached assets context - GPT needs to know what images will be included
+  if (assets.length > 0) {
+    userMessage += `\n================================================================================
+ATTACHED ASSETS (MUST BE FEATURED IN YOUR CONCEPT)
+================================================================================
+The following images/assets will be attached to the final design. Your creative concept MUST incorporate these assets prominently:
+
+${assets.map((a, i) => `${i + 1}. "${a.name}" (${a.category || 'image'}) - This is a HIGH-FIDELITY asset that MUST appear in the ad`).join('\n')}
+
+⚠️ CRITICAL: Your visual concept MUST feature these attached assets as the main visual elements. Do NOT invent different imagery - use these assets as the hero content.
+`;
+  }
+
+  // Add style references context
+  if (references.length > 0) {
+    userMessage += `\n================================================================================
+STYLE REFERENCES
+================================================================================
+The following reference images will guide the visual style:
+
+${references.map((r, i) => `${i + 1}. "${r.name}" (${r.category || 'reference'})${r.style_description ? ` - Style: ${r.style_description}` : ''}`).join('\n')}
+
+Use these as inspiration for the overall aesthetic, layout, and mood of your concept.
 `;
   }
 
@@ -601,7 +633,7 @@ Deno.serve(async (req: Request) => {
     // STEP 1: GPT generates the creative concept
     // ========================================================================
 
-    const concept = await generateCreativeConcept(prompt, brand, product);
+    const concept = await generateCreativeConcept(prompt, brand, product, assets as AssetInput[], references as AssetInput[]);
 
     // Use user-specified aspect ratio if provided, otherwise use GPT's suggestion
     const finalAspectRatio = userAspectRatio || concept.aspect_ratio || '1:1';

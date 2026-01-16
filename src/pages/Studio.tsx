@@ -847,9 +847,16 @@ export function Studio({ brand }: { brand: Brand }) {
   const handleCompare = async () => {
     if (!prompt.trim() || comparing) return;
 
+    // Capture ALL state values FIRST, before any setState calls
+    // This prevents race conditions where React batching could cause stale values
+    const currentPrompt = prompt;
+    const currentAspectRatio = selectedAspectRatio;
+    const currentReferences = selectedReferences;
+    const currentStyles = selectedStyles;
+    const currentAssets = selectedAssets;
+    const currentProduct = selectedProduct;
+
     setComparing(true);
-    const currentPrompt = prompt; // Store before it gets cleared
-    const currentAspectRatio = selectedAspectRatio; // Store before it gets cleared
     const variationGroupId = crypto.randomUUID(); // Group ID for all 3 variations
     setComparisonPrompt(currentPrompt);
     // Show modal immediately with single loading state (progressive loading)
@@ -897,16 +904,16 @@ export function Studio({ brand }: { brand: Brand }) {
         setCredits(remainingCredits);
       }
 
-      // Combine references and styles
+      // Combine references and styles (using captured variables to avoid race conditions)
       const allReferences = [
-        ...selectedReferences.map(r => ({
+        ...currentReferences.map(r => ({
           id: r.id,
           url: r.url,
           name: r.name,
           category: r.category,
           role: 'style_reference' as const,
         })),
-        ...selectedStyles.map(s => ({
+        ...currentStyles.map(s => ({
           id: s.id,
           url: s.url,
           name: s.name,
@@ -917,11 +924,11 @@ export function Studio({ brand }: { brand: Brand }) {
       ];
 
       const requestBody = {
-        prompt,
+        prompt: currentPrompt,
         brandId: brand.id,
-        aspectRatio: selectedAspectRatio === 'auto' ? undefined : selectedAspectRatio,
-        productId: selectedProduct?.id,
-        assets: selectedAssets.map(a => ({
+        aspectRatio: currentAspectRatio === 'auto' ? undefined : currentAspectRatio,
+        productId: currentProduct?.id,
+        assets: currentAssets.map(a => ({
           id: a.id,
           url: a.url,
           name: a.name,
@@ -1778,8 +1785,8 @@ export function Studio({ brand }: { brand: Brand }) {
                           onChange={(e) => setPrompt(e.target.value)}
                           onFocus={() => setInputFocused(true)}
                           onBlur={() => {
-                            // Only blur if there's no text, no product, no styles, and there are images
-                            if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0 && images.length > 0) {
+                            // Only blur if there's no text, no product, no styles, no assets, no references, and there are images
+                            if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0 && selectedAssets.length === 0 && selectedReferences.length === 0 && images.length > 0) {
                               setInputFocused(false);
                             }
                           }}
@@ -2439,8 +2446,8 @@ export function Studio({ brand }: { brand: Brand }) {
                   onChange={(e) => setPrompt(e.target.value)}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => {
-                    // Only blur if there's no text, no product, no styles
-                    if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0) {
+                    // Only blur if there's no text, no product, no styles, no assets, no references
+                    if (!prompt.trim() && !selectedProduct && selectedStyles.length === 0 && selectedAssets.length === 0 && selectedReferences.length === 0) {
                       setInputFocused(false);
                     }
                   }}
