@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Globe, Check, X, ChevronDown, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { isValidDomain, supabase } from '../lib/supabase';
+import { isValidDomain, isBlockedDomain, supabase } from '../lib/supabase';
 import { isDisposableEmail, getDisposableEmailError } from '../lib/disposableEmails';
 
 // Contact email - single source of truth
@@ -273,7 +273,7 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
           console.warn('Blocked unsafe protocol in pendingUrl:', storedPendingUrl.split(':')[0]);
           return;
         }
-        if (isValidDomain(storedPendingUrl)) {
+        if (isValidDomain(storedPendingUrl) && !isBlockedDomain(storedPendingUrl)) {
           onStart(storedPendingUrl);
         }
       } else if (storedPendingRedirect) {
@@ -358,6 +358,11 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
 
     if (!isValidDomain(url.trim())) {
       setError('Please enter a valid domain');
+      return;
+    }
+
+    if (isBlockedDomain(url.trim())) {
+      setError('This domain is blocked due to service abuse');
       return;
     }
 
@@ -964,9 +969,9 @@ function VersionB({ onStart }: { onStart: (url: string) => void }) {
             <div className="mt-12 text-center">
               <p className="text-gray-500 font-dm" >
                 Need more credits or custom solutions?{' '}
-                <a href={`mailto:${SUPPORT_EMAIL}`} className="text-[#3531B7] hover:underline font-medium">
+                <Link to="/contact" className="text-[#3531B7] hover:underline font-medium">
                   Contact us
-                </a>
+                </Link>
               </p>
             </div>
           </div>

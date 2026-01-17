@@ -55,11 +55,20 @@ export async function getAuthHeaders(): Promise<{ Authorization: string; 'Conten
   };
 }
 
+// Common TLD typos to reject
+const INVALID_TLDS = new Set([
+  'coma', 'comm', 'con', 'cm', 'vom', 'comp', 'come', 'cim', 'xom', 'ocm', // .com typos
+  'nt', 'ney', 'nte', 'nat', // .net typos
+  'og', 'ogr', 'orgg', 'rog', // .org typos
+  'oi', 'iao', 'iio', // .io typos
+  'oc', 'coo', // .co typos
+]);
+
 // Validate domain format
 export function isValidDomain(input: string): boolean {
   const trimmed = input.trim();
   if (!trimmed) return false;
-  
+
   // Remove protocol if present
   let domain = trimmed.replace(/^https?:\/\//i, '');
   // Remove www. if present
@@ -68,12 +77,29 @@ export function isValidDomain(input: string): boolean {
   domain = domain.replace(/\/$/, '');
   // Remove path if present (for validation purposes)
   domain = domain.split('/')[0];
-  
+
   // Domain regex: must have at least one dot and a valid TLD
   // Matches: example.com, subdomain.example.com, example.co.uk, etc.
   const domainRegex = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/i;
-  
-  return domainRegex.test(domain);
+
+  if (!domainRegex.test(domain)) return false;
+
+  // Check for common TLD typos
+  const tld = domain.split('.').pop()?.toLowerCase();
+  if (tld && INVALID_TLDS.has(tld)) return false;
+
+  return true;
+}
+
+// Blocked domains - these domains are not allowed to use the service
+const BLOCKED_DOMAINS = new Set([
+  "sonapen.com",
+]);
+
+// Check if a domain is blocked from using the service
+export function isBlockedDomain(input: string): boolean {
+  const normalized = normalizeDomain(input);
+  return BLOCKED_DOMAINS.has(normalized);
 }
 
 // Normalize domain input (remove protocol, www, trailing slash, path)

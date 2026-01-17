@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider, useToast } from './components/Toast';
 import { Navbar } from './components/Navbar';
 import { BrandConfirmation } from './components/BrandConfirmation';
-import { supabase, Brand, generateSlug, isValidDomain, normalizeDomain, getAuthHeaders } from './lib/supabase';
+import { supabase, Brand, generateSlug, isValidDomain, isBlockedDomain, normalizeDomain, getAuthHeaders } from './lib/supabase';
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
 import { isAdminUser } from './lib/admin';
@@ -363,6 +363,12 @@ function BrandsListWrapper() {
         return;
       }
 
+      // Check if domain is blocked
+      if (isBlockedDomain(input)) {
+        toast.error('Domain Blocked', 'This domain is blocked due to service abuse');
+        return;
+      }
+
       let url: string;
 
       if (input.includes('://')) {
@@ -450,6 +456,12 @@ function LandingV2Wrapper() {
       // Validate domain format
       if (!isValidDomain(input)) {
         toast.error('Invalid Domain', 'Please enter a valid domain name (e.g., example.com)');
+        return;
+      }
+
+      // Check if domain is blocked
+      if (isBlockedDomain(input)) {
+        toast.error('Domain Blocked', 'This domain is blocked due to service abuse');
         return;
       }
 

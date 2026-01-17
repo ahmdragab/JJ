@@ -12,6 +12,78 @@ const CONVERTAPI_SECRET = Deno.env.get("CONVERTAPI_SECRET");
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
+// Blocked domains - these domains are not allowed to use the service
+const BLOCKED_DOMAINS = new Set([
+  "sonapen.com",
+]);
+
+/**
+ * Check if a domain is blocked from using the service
+ */
+function isDomainBlocked(domain: string): boolean {
+  const normalizedDomain = domain.toLowerCase().replace(/^www\./, "");
+  return BLOCKED_DOMAINS.has(normalizedDomain);
+}
+
+/**
+ * Verify that a domain is reachable by making a HEAD request
+ * Returns an error message if unreachable, null if reachable
+ */
+async function verifyDomainReachable(domain: string): Promise<{ reachable: boolean; error?: string }> {
+  const url = `https://${domain}`;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
+  try {
+    const response = await fetch(url, {
+      method: "HEAD",
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    clearTimeout(timeoutId);
+
+    // Consider 2xx, 3xx, and even some 4xx as "reachable" (the domain exists)
+    // Only 5xx or network errors indicate the domain might not exist
+    if (response.status >= 200 && response.status < 500) {
+      return { reachable: true };
+    }
+
+    // Try GET as fallback (some servers don't support HEAD)
+    const getResponse = await fetch(url, {
+      method: "GET",
+      signal: controller.signal,
+      redirect: "follow",
+    });
+
+    if (getResponse.status >= 200 && getResponse.status < 500) {
+      return { reachable: true };
+    }
+
+    return { reachable: false, error: `Website returned error status: ${response.status}` };
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+
+    if (error.name === "AbortError") {
+      return { reachable: false, error: "Website took too long to respond. Please check the domain and try again." };
+    }
+
+    // Check for common DNS/network errors
+    const errorMessage = error.message?.toLowerCase() || "";
+    if (errorMessage.includes("getaddrinfo") || errorMessage.includes("dns") || errorMessage.includes("enotfound")) {
+      return { reachable: false, error: "Domain not found. Please check the spelling and try again." };
+    }
+    if (errorMessage.includes("econnrefused") || errorMessage.includes("connection refused")) {
+      return { reachable: false, error: "Could not connect to website. The site may be down." };
+    }
+    if (errorMessage.includes("certificate") || errorMessage.includes("ssl") || errorMessage.includes("tls")) {
+      // SSL errors mean the domain exists but has cert issues - still try to extract
+      return { reachable: true };
+    }
+
+    return { reachable: false, error: "Could not reach website. Please check the domain and try again." };
+  }
+}
+
 /**
  * Check if a URL points to an animated or unsupported image format
  * GIFs are considered animated by default since we can't easily check animation in Edge Functions
@@ -560,6 +632,40 @@ Deno.serve(async (req: Request) => {
     }
 
     const domain = new URL(url).hostname.replace("www.", "");
+
+    // Check if domain is blocked
+    if (isDomainBlocked(domain)) {
+      logger.warn("Blocked domain attempted extraction", {
+        request_id: requestId,
+        domain,
+      });
+      return new Response(
+        JSON.stringify({ error: "This domain is blocked due to service abuse" }),
+        {
+          status: 403,
+          headers: { ...getCors(req), "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Verify domain is reachable before calling Brand.dev API
+    console.log(`[Preflight] Checking if domain is reachable: ${domain}`);
+    const reachabilityCheck = await verifyDomainReachable(domain);
+    if (!reachabilityCheck.reachable) {
+      logger.warn("Domain not reachable", {
+        request_id: requestId,
+        domain,
+        error: reachabilityCheck.error,
+      });
+      return new Response(
+        JSON.stringify({ error: reachabilityCheck.error || "Could not reach website" }),
+        {
+          status: 400,
+          headers: { ...getCors(req), "Content-Type": "application/json" },
+        }
+      );
+    }
+    console.log(`[Preflight] Domain is reachable: ${domain}`);
 
     // Use Brand.dev SDK to retrieve brand data, fonts, and styleguide
     let brandDevData: BrandDevResponse | null = null;
